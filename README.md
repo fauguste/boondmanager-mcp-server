@@ -44,7 +44,7 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant à Clau
 
 ## 📋 Prérequis
 
-- Node.js >= 18
+- Node.js >= 20
 - Un compte BoondManager avec accès API activé
 - L'option "Allow API Rest calls using BasicAuth authentication" activée dans la configuration BoondManager (si BasicAuth)
 

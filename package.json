@@ -9,7 +9,7 @@
     "boondmanager-mcp-server": "dist/index.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "files": [
     "dist",
@@ -36,7 +36,14 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "boondmanager", "esn", "crm", "candidates", "resources"],
+  "keywords": [
+    "mcp",
+    "boondmanager",
+    "esn",
+    "crm",
+    "candidates",
+    "resources"
+  ],
   "author": "Silamir",
   "license": "MIT",
   "dependencies": {
@@ -46,10 +53,10 @@
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^25.3.0",
-    "@vitest/coverage-v8": "^3.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.18"
   }
 }
