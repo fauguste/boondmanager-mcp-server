@@ -246,6 +246,7 @@ export const InvoiceSearchSchema = z.object({
   projectId: z.string().optional().describe("Filtrer par ID projet"),
   startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
+  period: z.string().optional().describe("Type de période (created, updated, expectedPayment, performedPayment, period)"),
   page: z.number().int().min(1).default(1).describe("Numéro de page"),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();

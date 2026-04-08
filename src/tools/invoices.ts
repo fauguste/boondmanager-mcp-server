@@ -28,6 +28,9 @@ Returns: Liste des factures correspondantes.`,
     },
     async (params) => {
       const query = buildSearchQuery(params);
+      if (params.startDate) query["startDate"] = params.startDate;
+      if (params.endDate) query["endDate"] = params.endDate;
+      query["period"] = params.period || "period";
       const response = await apiRequest("/invoices", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "facture") }],
