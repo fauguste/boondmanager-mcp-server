@@ -6,7 +6,7 @@ MCP (Model Context Protocol) server for the BoondManager API. Exposes 158 tools 
 
 - **Language**: TypeScript (strict mode), ES2022, Node16 module resolution
 - **Runtime**: Node.js >= 20
-- **Transport**: stdio (no network port)
+- **Transports**: stdio (default, no network port) and Streamable HTTP (MCP 2025-03-26, for gateways/remote)
 - **API format**: JSON:API (BoondManager REST API)
 
 ## Commands
@@ -31,9 +31,12 @@ npx vitest run src/tools/candidates.test.ts
 
 ```
 src/
-├── index.ts              # Entry point: creates McpServer, registers all tools, starts stdio transport
+├── index.ts              # Entry point: initClient(), selects transport (stdio or http) via MCP_TRANSPORT
+├── server.ts             # createMcpServer() factory — instantiates McpServer + registers all tools
 ├── constants.ts          # DEFAULT_BASE_URL, pagination limits, API_PATHS, ENTITY_TABS
 ├── types.ts              # JsonApiResource, JsonApiResponse, BoondConfig, SearchParams
+├── transports/
+│   └── http.ts           # startHttpTransport() + resolveHttpOptions() — MCP Streamable HTTP server
 ├── services/
 │   └── boond-client.ts   # HTTP client: apiRequest(), buildSearchQuery(), formatListResponse(), formatDetailResponse()
 ├── schemas/
@@ -128,6 +131,26 @@ Every tool must declare annotations:
 - `destructiveHint: true` for delete operations
 - `idempotentHint: true` for search/get/update operations
 - `openWorldHint: true` for search operations (paginated, keyword-filtered)
+
+## Transports
+
+The server selects its transport from `MCP_TRANSPORT`:
+
+- **`stdio`** (default): wraps `StdioServerTransport`, used by Claude Desktop / Claude Code locally.
+- **`http`** (alias: `streamable-http`): starts a Node HTTP server using `StreamableHTTPServerTransport` from the MCP SDK. Intended for MCP gateways and remote deployments.
+
+HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `MCP_HTTP_HOST` | `127.0.0.1` | Listen interface |
+| `MCP_HTTP_PORT` | `3000` | TCP port |
+| `MCP_HTTP_PATH` | `/mcp` | Endpoint path |
+| `MCP_HTTP_STATEFUL` | `false` | `true` to enable session mode (`Mcp-Session-Id`) |
+| `MCP_HTTP_BEARER_TOKEN` | — | Require `Authorization: Bearer <token>` on every request |
+| `MCP_HTTP_JSON_RESPONSE` | `false` | `true` to return JSON instead of SSE streams |
+
+Stateless mode spins up a fresh `McpServer`+`StreamableHTTPServerTransport` per POST. Stateful mode keeps a `sessionId → transport` map and expects the client to echo `Mcp-Session-Id`.
 
 ## Authentication
 

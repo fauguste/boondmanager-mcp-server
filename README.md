@@ -268,6 +268,105 @@ export BOOND_BASE_URL="https://votre-instance.boondmanager.com/api"
 
 Par defaut, l'URL est `https://ui.boondmanager.com/api`.
 
+## Transports
+
+Le serveur supporte deux transports MCP, selectionnables via la variable d'environnement `MCP_TRANSPORT`.
+
+| Transport | Valeur | Cas d'usage |
+|-----------|--------|-------------|
+| **stdio** (defaut) | `stdio` ou non defini | Claude Desktop, Claude Code, integration locale |
+| **Streamable HTTP** | `http` (alias : `streamable-http`) | Gateway MCP, deploiement distant, conteneurs |
+
+### Streamable HTTP (pour les gateways MCP)
+
+Depuis la v1.4.0, le serveur peut etre expose en HTTP (specification MCP Streamable HTTP 2025-03-26) afin d'etre branche derriere une passerelle MCP ou deploye comme service.
+
+```bash
+export MCP_TRANSPORT=http
+export MCP_HTTP_HOST=0.0.0.0        # defaut: 127.0.0.1
+export MCP_HTTP_PORT=3000           # defaut: 3000
+export MCP_HTTP_PATH=/mcp           # defaut: /mcp
+export MCP_HTTP_BEARER_TOKEN=xxx    # optionnel: protege l'endpoint
+export BOOND_API_TOKEN=...          # (credentials BoondManager, comme en stdio)
+
+npx boondmanager-mcp-server
+# 🚀 BoondManager MCP Server running (streamable HTTP transport)
+# 📡 Endpoint: http://0.0.0.0:3000/mcp
+# 🔑 Mode: stateless
+```
+
+**Variables d'environnement HTTP**
+
+| Variable | Defaut | Description |
+|----------|--------|-------------|
+| `MCP_TRANSPORT` | `stdio` | `http` pour activer le transport HTTP |
+| `MCP_HTTP_HOST` | `127.0.0.1` | Interface d'ecoute (`0.0.0.0` pour exposer) |
+| `MCP_HTTP_PORT` | `3000` | Port TCP |
+| `MCP_HTTP_PATH` | `/mcp` | Chemin HTTP de l'endpoint MCP |
+| `MCP_HTTP_STATEFUL` | `false` | `true` pour activer le mode stateful (session `Mcp-Session-Id`) |
+| `MCP_HTTP_BEARER_TOKEN` | _(vide)_ | Si defini, le serveur exige `Authorization: Bearer <token>` |
+| `MCP_HTTP_JSON_RESPONSE` | `false` | `true` pour forcer des reponses JSON (sans SSE) |
+
+**Stateless (defaut)** : chaque requete HTTP POST est independante, idealement adapte a un gateway qui multiplexe plusieurs serveurs MCP. Aucune session n'est conservee cote serveur.
+
+**Stateful** : le serveur genere un `Mcp-Session-Id` a l'initialisation que le client doit renvoyer dans chaque requete suivante. Utile pour les clients MCP natifs qui beneficient du streaming SSE et des notifications serveur.
+
+#### Exemple : verifier l'endpoint
+
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-06-18",
+      "capabilities": {},
+      "clientInfo": { "name": "curl", "version": "1.0" }
+    }
+  }'
+```
+
+#### Exemple : Claude Code via HTTP
+
+```bash
+claude mcp add --transport http \
+  --header "Authorization: Bearer votre_token_local" \
+  boondmanager https://mcp.votre-domaine.com/mcp
+```
+
+#### Exemple : configuration `.mcp.json` HTTP
+
+```json
+{
+  "mcpServers": {
+    "boondmanager": {
+      "type": "http",
+      "url": "https://mcp.votre-domaine.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_HTTP_BEARER_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+#### Exemple : Docker
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e MCP_TRANSPORT=http \
+  -e MCP_HTTP_HOST=0.0.0.0 \
+  -e MCP_HTTP_BEARER_TOKEN=$(openssl rand -hex 32) \
+  -e BOOND_API_TOKEN=$BOOND_API_TOKEN \
+  node:20-alpine \
+  npx -y boondmanager-mcp-server
+```
+
+> **Securite** : en HTTP, les credentials BoondManager restent cote serveur (variables d'environnement du conteneur). Seul le token MCP (`MCP_HTTP_BEARER_TOKEN`) circule entre le client et le serveur. Derriere un reverse proxy, ajoutez TLS (HTTPS) et limitez l'acces reseau au gateway.
+
 ## Exemples d'utilisation
 
 Une fois configure, vous pouvez demander a Claude :
@@ -315,9 +414,12 @@ Une fois configure, vous pouvez demander a Claude :
 ```
 boondmanager-mcp-server/
 ├── src/
-│   ├── index.ts              # Point d'entree MCP (stdio)
+│   ├── index.ts              # Point d'entree MCP (selection du transport)
+│   ├── server.ts             # Factory createMcpServer() + liste des domaines
 │   ├── constants.ts          # Configuration, API paths, onglets
 │   ├── types.ts              # Types TypeScript (JSON:API)
+│   ├── transports/
+│   │   └── http.ts           # Transport Streamable HTTP (gateway/remote)
 │   ├── services/
 │   │   └── boond-client.ts   # Client HTTP API BoondManager
 │   ├── schemas/
@@ -372,11 +474,12 @@ boondmanager-mcp-server/
 
 ## Securite
 
-- Les credentials ne transitent jamais via le reseau MCP -- ils sont configures en variables d'environnement locales
-- Le serveur tourne en local (stdio), pas de port reseau expose
+- Les credentials BoondManager (JWT ou BasicAuth) ne transitent jamais via le protocole MCP -- ils sont configures en variables d'environnement cote serveur uniquement
+- En mode **stdio**, le serveur tourne en local, aucun port reseau n'est expose
+- En mode **streamable HTTP**, protegez l'endpoint avec `MCP_HTTP_BEARER_TOKEN` + TLS (HTTPS via reverse proxy) et restreignez l'acces reseau a votre gateway
 - Compatible avec les exigences ISO 27001
 - L'API BoondManager est hebergee en France et conforme RGPD
-- Authentification par BasicAuth (base64) ou JWT Bearer token
+- Authentification BoondManager : JWT (recommande), BasicAuth, ou JWT construit automatiquement a partir des composants
 
 ## Developpement
 
@@ -407,7 +510,7 @@ npm run typecheck
 - **Validation** : Zod 4
 - **Tests** : Vitest 4 + couverture V8
 - **Lint** : ESLint 10 + typescript-eslint
-- **Transport** : stdio (pas de port reseau)
+- **Transports** : stdio (defaut) + Streamable HTTP (MCP 2025-03-26)
 
 ## Ressources
 
