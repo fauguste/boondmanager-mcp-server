@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ContactCreateSchema, ContactUpdateSchema, IdSchema } from "../schemas/index.js";
+import { ContactCreateSchema, ContactUpdateSchema, ContactSearchSchema, IdSchema } from "../schemas/index.js";
 import type { IdInput } from "../schemas/index.js";
 import {
   registerSearchTool,
@@ -101,8 +101,26 @@ Returns: Liste des factures du contact.`,
   },
 ];
 
+const CONTACT_SEARCH_DESCRIPTION = `Recherche des contacts (interlocuteurs clients / prospects) dans BoondManager avec filtres avancés.
+
+⚠️ Privilégier les filtres structurés plutôt que de paginer toute la base.
+
+Filtres utiles :
+• \`mainManagers\` : ID(s) des commerciaux responsables (utile pour "mes contacts" → passer votre userId via \`boond_application_current_user\`).
+• \`company\` : tous les contacts d'une société donnée (ID unique).
+• \`states\` : états de contact.
+• \`typeOf\` : types de contact.
+• \`origins\` : sources / origines.
+• \`agencies\`, \`poles\`, \`businessUnits\` : périmètre organisationnel.
+• \`keywords\` : recherche plein texte, en complément.
+
+Returns : liste paginée des contacts. Utiliser \`boond_contacts_get\` ou les outils d'onglets pour le détail.`;
+
 export function registerContactTools(server: McpServer): void {
-  registerSearchTool(server, OPTS);
+  registerSearchTool(server, OPTS, {
+    schema: ContactSearchSchema,
+    description: CONTACT_SEARCH_DESCRIPTION,
+  });
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, ContactCreateSchema, (params) => {

@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CompanyCreateSchema, CompanyUpdateSchema, IdSchema } from "../schemas/index.js";
+import { CompanyCreateSchema, CompanyUpdateSchema, CompanySearchSchema, IdSchema } from "../schemas/index.js";
 import type { IdInput } from "../schemas/index.js";
 import {
   registerSearchTool,
@@ -134,8 +134,26 @@ Returns: Liste des factures fournisseur de la société.`,
   },
 ];
 
+const COMPANY_SEARCH_DESCRIPTION = `Recherche des sociétés (clients, prospects, fournisseurs...) dans BoondManager avec filtres avancés.
+
+⚠️ Privilégier les filtres structurés plutôt que de paginer toute la base.
+
+Filtres utiles :
+• \`mainManagers\` : ID(s) des commerciaux responsables (utile pour "mes comptes" → passer votre userId via \`boond_application_current_user\`).
+• \`states\` : états de société.
+• \`typeOf\` : types de société (client, prospect, fournisseur...).
+• \`activityAreas\` : secteurs d'activité.
+• \`origins\` : sources / origines.
+• \`agencies\`, \`poles\`, \`businessUnits\` : périmètre organisationnel.
+• \`keywords\` : recherche plein texte (nom, SIRET, email), en complément.
+
+Returns : liste paginée des sociétés. Utiliser \`boond_companies_get\` ou les outils d'onglets pour le détail.`;
+
 export function registerCompanyTools(server: McpServer): void {
-  registerSearchTool(server, OPTS);
+  registerSearchTool(server, OPTS, {
+    schema: CompanySearchSchema,
+    description: COMPANY_SEARCH_DESCRIPTION,
+  });
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, CompanyCreateSchema, (params) => {

@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ResourceCreateSchema, ResourceUpdateSchema, IdSchema } from "../schemas/index.js";
+import { ResourceCreateSchema, ResourceUpdateSchema, ResourceSearchSchema, IdSchema } from "../schemas/index.js";
 import type { IdInput } from "../schemas/index.js";
 import {
   registerSearchTool,
@@ -145,8 +145,28 @@ Returns: Liste des demandes d'absences de la ressource.`,
   },
 ];
 
+const RESOURCE_SEARCH_DESCRIPTION = `Recherche des ressources (collaborateurs internes) dans BoondManager avec filtres avancés côté serveur.
+
+⚠️ IMPORTANT — utilisez les filtres ci-dessous plutôt que de paginer toute la base. Le filtre \`mainManagers\` est la clé pour toute question hiérarchique (N-1, N-2, équipe d'un manager).
+
+Cas d'usage courants :
+• Mes N-1 (équipe directe) : appeler d'abord \`boond_application_current_user\` pour obtenir votre userId, puis \`mainManagers: ["<monUserId>"]\`.
+• Mes N-2 et au-delà : pour chaque N-1 obtenu, rappeler cet outil avec \`mainManagers: ["<idDuN-1>"]\`. Répéter récursivement pour la hiérarchie descendante.
+• Équipe d'un autre manager : \`mainManagers: ["<idDuManager>"]\`.
+• Collaborateurs actifs uniquement : \`states: [1]\` (consulter \`boond_application_dictionary\` avec \`states/resources\` pour les valeurs exactes).
+• Recherche par compétence : \`skills: ["Java", "AWS"]\`, \`tools: ["Kubernetes"]\`.
+• Périmètre organisationnel : \`agencies\`, \`poles\`, \`businessUnits\`.
+• \`keywords\` reste utile pour une recherche plein texte (nom, email) mais ne remplace pas les filtres structurés ci-dessus.
+
+Les filtres multivalués (\`mainManagers\`, \`states\`, \`skills\`…) acceptent un tableau ; passer un seul ID dans un tableau d'un élément fonctionne également.
+
+Returns : liste paginée des ressources (id, nom, email, ville, état, titre). Utiliser \`boond_resources_get\` ou les outils d'onglets pour le détail.`;
+
 export function registerResourceTools(server: McpServer): void {
-  registerSearchTool(server, OPTS);
+  registerSearchTool(server, OPTS, {
+    schema: ResourceSearchSchema,
+    description: RESOURCE_SEARCH_DESCRIPTION,
+  });
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, ResourceCreateSchema, (params) => {

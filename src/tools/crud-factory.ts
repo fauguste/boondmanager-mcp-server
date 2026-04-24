@@ -11,20 +11,34 @@ interface CrudToolOptions {
   prefix: string;             // ex: "boond_candidates"
 }
 
-export function registerSearchTool(server: McpServer, opts: CrudToolOptions): void {
-  server.registerTool(
-    `${opts.prefix}_search`,
-    {
-      title: `Rechercher des ${opts.entityNamePlural}`,
-      description: `Recherche des ${opts.entityNamePlural} dans BoondManager par mots-clés avec pagination.
+interface SearchToolOverrides {
+  schema?: z.ZodType;
+  title?: string;
+  description?: string;
+}
+
+export function registerSearchTool(
+  server: McpServer,
+  opts: CrudToolOptions,
+  overrides: SearchToolOverrides = {}
+): void {
+  const schema = overrides.schema ?? SearchSchema;
+  const title = overrides.title ?? `Rechercher des ${opts.entityNamePlural}`;
+  const description = overrides.description ?? `Recherche des ${opts.entityNamePlural} dans BoondManager par mots-clés avec pagination.
 
 Args:
   - keywords (string, optional): Termes de recherche (nom, email, compétences...)
   - page (number): Numéro de page (défaut: 1)
   - pageSize (number): Résultats par page (défaut: 20, max: 100)
 
-Returns: Liste des ${opts.entityNamePlural} correspondants avec leur ID, nom et détails principaux.`,
-      inputSchema: SearchSchema,
+Returns: Liste des ${opts.entityNamePlural} correspondants avec leur ID, nom et détails principaux.`;
+
+  server.registerTool(
+    `${opts.prefix}_search`,
+    {
+      title,
+      description,
+      inputSchema: schema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -32,8 +46,8 @@ Returns: Liste des ${opts.entityNamePlural} correspondants avec leur ID, nom et 
         openWorldHint: true,
       },
     },
-    async (params: SearchInput) => {
-      const query = buildSearchQuery(params);
+    async (params: unknown) => {
+      const query = buildSearchQuery(params as SearchInput);
       const response = await apiRequest(opts.apiPath, "GET", undefined, query);
       const text = formatListResponse(response, opts.entityName);
       return {

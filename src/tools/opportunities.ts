@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { OpportunityCreateSchema, OpportunityUpdateSchema, IdSchema } from "../schemas/index.js";
+import { OpportunityCreateSchema, OpportunityUpdateSchema, OpportunitySearchSchema, IdSchema } from "../schemas/index.js";
 import type { IdInput } from "../schemas/index.js";
 import {
   registerSearchTool,
@@ -90,8 +90,25 @@ Returns: Données de simulation financière de l'opportunité.`,
   },
 ];
 
+const OPPORTUNITY_SEARCH_DESCRIPTION = `Recherche des opportunités commerciales dans BoondManager avec filtres avancés.
+
+⚠️ Privilégier les filtres structurés plutôt que de paginer toute la base.
+
+Filtres utiles :
+• \`mainManagers\` : ID(s) des commerciaux en charge (utile pour "mes opportunités" → passer votre userId via \`boond_application_current_user\`).
+• \`states\` : états de l'opportunité (voir \`boond_application_dictionary\` avec \`states/opportunities\`).
+• \`company\` / \`contact\` : filtrer par société cliente ou contact (ID unique chacun).
+• \`period\` + \`startDate\`/\`endDate\` : filtrer sur une période (creation, update, startDate, endDate).
+• \`activityAreas\`, \`origins\` : segmentation métier.
+• \`agencies\`, \`poles\`, \`businessUnits\` : périmètre organisationnel.
+
+Returns : liste paginée des opportunités. Utiliser \`boond_opportunities_get\` ou les outils d'onglets pour le détail.`;
+
 export function registerOpportunityTools(server: McpServer): void {
-  registerSearchTool(server, OPTS);
+  registerSearchTool(server, OPTS, {
+    schema: OpportunitySearchSchema,
+    description: OPPORTUNITY_SEARCH_DESCRIPTION,
+  });
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, OpportunityCreateSchema, (params) => {

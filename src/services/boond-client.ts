@@ -65,11 +65,13 @@ function getConfig(): BoondConfig {
   return config!;
 }
 
+export type QueryValue = string | number | Array<string | number> | undefined;
+
 export async function apiRequest(
   path: string,
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "GET",
   body?: unknown,
-  queryParams?: Record<string, string | number | undefined>
+  queryParams?: Record<string, QueryValue>
 ): Promise<JsonApiResponse> {
   const { baseUrl, authHeader } = getConfig();
 
@@ -77,7 +79,16 @@ export async function apiRequest(
 
   if (queryParams) {
     for (const [key, value] of Object.entries(queryParams)) {
-      if (value !== undefined && value !== null) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        // BoondManager expects repeated bracket notation: key[]=v1&key[]=v2
+        const bracketKey = key.endsWith("[]") ? key : `${key}[]`;
+        for (const v of value) {
+          if (v !== undefined && v !== null && v !== "") {
+            url.searchParams.append(bracketKey, String(v));
+          }
+        }
+      } else {
         url.searchParams.set(key, String(value));
       }
     }
@@ -113,16 +124,23 @@ export async function apiRequest(
   return (await response.json()) as JsonApiResponse;
 }
 
-export function buildSearchQuery(params: SearchParams): Record<string, string | number | undefined> {
-  const query: Record<string, string | number | undefined> = {};
+export function buildSearchQuery(params: SearchParams): Record<string, QueryValue> {
+  const query: Record<string, QueryValue> = {};
 
   if (params.keywords) query["keywords"] = params.keywords;
   if (params.page !== undefined) query["page"] = params.page;
   if (params.pageSize !== undefined) query["maxResults"] = params.pageSize;
 
-  // Forward any additional filter params
+  // Forward any additional filter params (strings, numbers, or arrays)
   for (const [key, value] of Object.entries(params)) {
-    if (!["keywords", "page", "pageSize"].includes(key) && value !== undefined) {
+    if (["keywords", "page", "pageSize"].includes(key)) continue;
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      // Pass arrays through so apiRequest emits repeated bracket notation
+      query[key] = value as Array<string | number>;
+    } else if (typeof value === "string" || typeof value === "number") {
+      query[key] = value;
+    } else {
       query[key] = String(value);
     }
   }

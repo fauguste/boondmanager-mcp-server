@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ProjectCreateSchema, ProjectUpdateSchema, IdSchema } from "../schemas/index.js";
+import { ProjectCreateSchema, ProjectUpdateSchema, ProjectSearchSchema, IdSchema } from "../schemas/index.js";
 import type { IdInput } from "../schemas/index.js";
 import {
   registerSearchTool,
@@ -112,8 +112,25 @@ Returns: Données de productivité du projet.`,
   },
 ];
 
+const PROJECT_SEARCH_DESCRIPTION = `Recherche des projets / missions dans BoondManager avec filtres avancés.
+
+⚠️ Privilégier les filtres structurés plutôt que de paginer toute la base.
+
+Filtres utiles :
+• \`mainManagers\` : ID(s) des responsables du projet (utile pour "mes projets" → passer votre userId via \`boond_application_current_user\`).
+• \`states\` : états du projet (voir \`boond_application_dictionary\` avec \`states/projects\`).
+• \`company\` / \`contact\` : filtrer par société cliente ou contact (ID unique).
+• \`typeOf\` : types de projet (régie, forfait, produit...).
+• \`period\` + \`startDate\`/\`endDate\` : filtrer sur une période.
+• \`agencies\`, \`poles\`, \`businessUnits\` : périmètre organisationnel.
+
+Returns : liste paginée des projets. Utiliser \`boond_projects_get\` ou les outils d'onglets pour le détail.`;
+
 export function registerProjectTools(server: McpServer): void {
-  registerSearchTool(server, OPTS);
+  registerSearchTool(server, OPTS, {
+    schema: ProjectSearchSchema,
+    description: PROJECT_SEARCH_DESCRIPTION,
+  });
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, ProjectCreateSchema, (params) => {

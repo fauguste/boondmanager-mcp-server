@@ -9,6 +9,144 @@ export const SearchSchema = z.object({
     .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
 }).strict();
 
+// ---- Reusable filter field helpers ----
+// Keep descriptions short here; the tool description guides the LLM on usage.
+const pageField = z.number().int().min(1).default(1).describe("Numéro de page (défaut: 1)");
+const pageSizeField = z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE)
+  .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`);
+const sortField = z.string().optional().describe("Champ de tri (ex: lastName, createdAt)");
+const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri : 'asc' ou 'desc'");
+const idArray = (doc: string) => z.array(z.string()).optional().describe(doc);
+const intArray = (doc: string) => z.array(z.number().int()).optional().describe(doc);
+const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
+
+// ---- Resource search schema ----
+// Filtres les plus utiles de /resources. Inclut mainManagers (clé pour hiérarchie N-1/N-2).
+export const ResourceSearchSchema = z.object({
+  keywords: z.string().optional().describe("Mots-clés (nom, prénom, email, compétences libres)"),
+  mainManagers: idArray("ID(s) du/des managers principaux. Les ressources retournées ont ce(s) manager(s) comme N+1. CLÉ pour les requêtes hiérarchiques (mes N-1, N-2...)."),
+  states: intArray("États de ressource à inclure (voir dictionnaire 'states/resources')"),
+  agencies: idArray("IDs d'agences"),
+  poles: idArray("IDs de pôles"),
+  businessUnits: idArray("IDs de business units"),
+  skills: strArray("Compétences techniques (ex: ['Java', 'React'])"),
+  tools: strArray("Outils / technologies"),
+  activityAreas: strArray("Secteurs d'activité"),
+  languages: strArray("Langues"),
+  typeOf: strArray("Types de ressource (interne, sous-traitant...)"),
+  saved: z.string().optional().describe("ID d'une recherche enregistrée (remplace les autres filtres)"),
+  sort: sortField,
+  order: orderField,
+  page: pageField,
+  pageSize: pageSizeField,
+}).strict();
+
+// ---- Candidate search schema ----
+export const CandidateSearchSchema = z.object({
+  keywords: z.string().optional().describe("Mots-clés (nom, prénom, email, compétences libres)"),
+  mainManagers: idArray("ID(s) du/des managers principaux (responsables des candidats)"),
+  states: intArray("États de candidat (voir dictionnaire 'states/candidates')"),
+  agencies: idArray("IDs d'agences"),
+  poles: idArray("IDs de pôles"),
+  businessUnits: idArray("IDs de business units"),
+  skills: strArray("Compétences techniques"),
+  tools: strArray("Outils / technologies"),
+  activityAreas: strArray("Secteurs d'activité"),
+  languages: strArray("Langues"),
+  qualifications: strArray("Qualifications / diplômes"),
+  mobilityAreas: strArray("Zones de mobilité"),
+  typeOf: strArray("Types de candidat"),
+  origins: idArray("IDs d'origines (source de recrutement)"),
+  saved: z.string().optional().describe("ID d'une recherche enregistrée"),
+  sort: sortField,
+  order: orderField,
+  page: pageField,
+  pageSize: pageSizeField,
+}).strict();
+
+// ---- Contact search schema ----
+export const ContactSearchSchema = z.object({
+  keywords: z.string().optional().describe("Mots-clés (nom, email, société...)"),
+  mainManagers: idArray("ID(s) du/des managers principaux (responsables commerciaux des contacts)"),
+  states: intArray("États de contact"),
+  agencies: idArray("IDs d'agences"),
+  poles: idArray("IDs de pôles"),
+  businessUnits: idArray("IDs de business units"),
+  company: z.string().optional().describe("ID d'une société : filtre les contacts rattachés à cette société"),
+  typeOf: strArray("Types de contact"),
+  origins: idArray("IDs d'origines"),
+  activityAreas: strArray("Secteurs d'activité"),
+  saved: z.string().optional().describe("ID d'une recherche enregistrée"),
+  sort: sortField,
+  order: orderField,
+  page: pageField,
+  pageSize: pageSizeField,
+}).strict();
+
+// ---- Company search schema ----
+export const CompanySearchSchema = z.object({
+  keywords: z.string().optional().describe("Mots-clés (nom, SIRET, email...)"),
+  mainManagers: idArray("ID(s) du/des managers principaux (responsables commerciaux)"),
+  states: intArray("États de société"),
+  agencies: idArray("IDs d'agences"),
+  poles: idArray("IDs de pôles"),
+  businessUnits: idArray("IDs de business units"),
+  typeOf: strArray("Types de société (client, prospect, fournisseur...)"),
+  activityAreas: strArray("Secteurs d'activité"),
+  origins: idArray("IDs d'origines"),
+  saved: z.string().optional().describe("ID d'une recherche enregistrée"),
+  sort: sortField,
+  order: orderField,
+  page: pageField,
+  pageSize: pageSizeField,
+}).strict();
+
+// ---- Opportunity search schema ----
+export const OpportunitySearchSchema = z.object({
+  keywords: z.string().optional().describe("Mots-clés (titre, société, contact...)"),
+  mainManagers: idArray("ID(s) du/des managers principaux (commerciaux en charge)"),
+  states: intArray("États d'opportunité (voir dictionnaire 'states/opportunities')"),
+  agencies: idArray("IDs d'agences"),
+  poles: idArray("IDs de pôles"),
+  businessUnits: idArray("IDs de business units"),
+  company: z.string().optional().describe("ID d'une société cliente"),
+  contact: z.string().optional().describe("ID d'un contact"),
+  activityAreas: strArray("Secteurs d'activité"),
+  origins: idArray("IDs d'origines"),
+  period: z.enum(["creation", "update", "startDate", "endDate"]).optional()
+    .describe("Champ date sur lequel appliquer startDate/endDate"),
+  startDate: z.string().optional().describe("Début de période (YYYY-MM-DD), à utiliser avec `period`"),
+  endDate: z.string().optional().describe("Fin de période (YYYY-MM-DD), à utiliser avec `period`"),
+  saved: z.string().optional().describe("ID d'une recherche enregistrée"),
+  sort: sortField,
+  order: orderField,
+  page: pageField,
+  pageSize: pageSizeField,
+}).strict();
+
+// ---- Project search schema ----
+export const ProjectSearchSchema = z.object({
+  keywords: z.string().optional().describe("Mots-clés (nom du projet, société, contact...)"),
+  mainManagers: idArray("ID(s) du/des managers principaux (responsables du projet)"),
+  states: intArray("États de projet (voir dictionnaire 'states/projects')"),
+  agencies: idArray("IDs d'agences"),
+  poles: idArray("IDs de pôles"),
+  businessUnits: idArray("IDs de business units"),
+  company: z.string().optional().describe("ID d'une société cliente"),
+  contact: z.string().optional().describe("ID d'un contact"),
+  typeOf: strArray("Types de projet (régie, forfait, produit...)"),
+  activityAreas: strArray("Secteurs d'activité"),
+  period: z.enum(["creation", "update", "startDate", "endDate"]).optional()
+    .describe("Champ date sur lequel appliquer startDate/endDate"),
+  startDate: z.string().optional().describe("Début de période (YYYY-MM-DD)"),
+  endDate: z.string().optional().describe("Fin de période (YYYY-MM-DD)"),
+  saved: z.string().optional().describe("ID d'une recherche enregistrée"),
+  sort: sortField,
+  order: orderField,
+  page: pageField,
+  pageSize: pageSizeField,
+}).strict();
+
 // ID param schema
 export const IdSchema = z.object({
   id: z.string().min(1).describe("Identifiant unique de l'entité BoondManager"),
@@ -422,6 +560,12 @@ export const DictionaryGetSchema = z.object({
 }).strict();
 
 export type SearchInput = z.infer<typeof SearchSchema>;
+export type ResourceSearchInput = z.infer<typeof ResourceSearchSchema>;
+export type CandidateSearchInput = z.infer<typeof CandidateSearchSchema>;
+export type ContactSearchInput = z.infer<typeof ContactSearchSchema>;
+export type CompanySearchInput = z.infer<typeof CompanySearchSchema>;
+export type OpportunitySearchInput = z.infer<typeof OpportunitySearchSchema>;
+export type ProjectSearchInput = z.infer<typeof ProjectSearchSchema>;
 export type IdInput = z.infer<typeof IdSchema>;
 export type IdTabInput = z.infer<typeof IdTabSchema>;
 export type ResourceTimesheetInput = z.infer<typeof ResourceTimesheetSchema>;

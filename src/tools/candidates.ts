@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CandidateCreateSchema, CandidateUpdateSchema, IdSchema } from "../schemas/index.js";
+import { CandidateCreateSchema, CandidateUpdateSchema, CandidateSearchSchema, IdSchema } from "../schemas/index.js";
 import type { IdInput } from "../schemas/index.js";
 import {
   registerSearchTool,
@@ -90,8 +90,27 @@ Returns: Liste des positionnements du candidat.`,
   },
 ];
 
+const CANDIDATE_SEARCH_DESCRIPTION = `Recherche des candidats dans BoondManager avec filtres avancés.
+
+⚠️ Privilégier les filtres structurés plutôt que de paginer toute la base.
+
+Filtres utiles :
+• \`mainManagers\` : ID(s) des responsables des candidats (utile pour "mes candidats" → passer votre userId obtenu via \`boond_application_current_user\`).
+• \`states\` : états de candidat (voir \`boond_application_dictionary\` avec \`states/candidates\`).
+• \`skills\` / \`tools\` / \`languages\` / \`qualifications\` : filtrer par profil technique.
+• \`activityAreas\` : secteurs d'activité visés.
+• \`agencies\`, \`poles\`, \`businessUnits\` : périmètre organisationnel.
+• \`keywords\` : recherche plein texte (nom, email) — en complément, pas en remplacement.
+
+Les filtres multivalués acceptent un tableau (un seul ID entre crochets est valide).
+
+Returns : liste paginée des candidats. Utiliser \`boond_candidates_get\` ou les outils d'onglets pour le détail.`;
+
 export function registerCandidateTools(server: McpServer): void {
-  registerSearchTool(server, OPTS);
+  registerSearchTool(server, OPTS, {
+    schema: CandidateSearchSchema,
+    description: CANDIDATE_SEARCH_DESCRIPTION,
+  });
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, CandidateCreateSchema, (params) => {
