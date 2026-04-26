@@ -119,6 +119,14 @@ state/typeOf integers to labels via a resource read instead of a tool
 call. Arbitrary dictionary types still go through the
 `boond_application_dictionary` tool.
 
+## Search Pagination Limits
+
+All search tools enforce a **maximum page number of 100** (configurable via `MAX_SEARCH_PAGE` in `src/constants.ts`). At 500 results/page, page 100 = 50,000 records — well beyond typical interactive exploration.
+
+**Rationale:** MCP search tools are flagged `openWorldHint: true`, meaning the model can iterate indefinitely. Without a ceiling, a vague query can spiral into hundreds of pages before the model realizes the result set is too broad. The cap forces refinement (add filters, narrow perimeter) rather than brute-force pagination.
+
+**Enforcement:** Zod schemas reject `page > MAX_SEARCH_PAGE` at input validation (before the API call). The model sees a clear schema error mentioning the limit, not a silent clamp or a cryptic API 400.
+
 ## Tool Naming Convention
 
 All tool names follow: `boond_{domain}_{operation}`

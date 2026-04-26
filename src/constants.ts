@@ -4,6 +4,11 @@ export const CHARACTER_LIMIT = 50000;
 export const DEFAULT_PAGE_SIZE = 30;
 export const MAX_PAGE_SIZE = 500;
 
+// Cap the page number on search tools (openWorldHint) to prevent runaway
+// iterations. At 500 results/page, page 100 = 50k records — well beyond
+// typical interactive exploration. The model can refine filters instead.
+export const MAX_SEARCH_PAGE = 100;
+
 // HTTP client defaults
 // Timeout applied to every BoondManager API request. Overridable via
 // BOOND_HTTP_TIMEOUT_MS to handle slow tenants or long reporting queries.

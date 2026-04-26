@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "../constants.js";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
 
 // Common search schema
 export const SearchSchema = z.object({
   keywords: z.string().optional().describe("Mots-clés de recherche (nom, email, compétences...)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page (défaut: 1)"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (défaut: 1, max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE)
     .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
 }).strict();
@@ -13,7 +13,7 @@ export const SearchSchema = z.object({
 // IMPORTANT: input field names below MUST match the BoondManager API query parameter names
 // exactly (e.g., perimeterManagers, resourceStates, opportunityStates). buildSearchQuery
 // passes them through as `key[]=value` for arrays. See https://doc.boondmanager.com/api-externe/
-const pageField = z.number().int().min(1).default(1).describe("Numéro de page (défaut: 1)");
+const pageField = z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (défaut: 1, max: ${MAX_SEARCH_PAGE})`);
 const pageSizeField = z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE)
   .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`);
 const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
@@ -476,7 +476,7 @@ export const ActionSearchSchema = z.object({
   resourceId: z.string().optional().describe("Filtrer par ID ressource"),
   contactId: z.string().optional().describe("Filtrer par ID contact"),
   companyId: z.string().optional().describe("Filtrer par ID société"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -503,7 +503,7 @@ export const ResourceTimesheetSchema = z.object({
 export const TimesheetSearchSchema = z.object({
   startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page (défaut: 1)"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE)
     .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
 }).strict();
@@ -566,7 +566,7 @@ export const InvoiceSearchSchema = z.object({
   startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
   period: z.string().optional().describe("Type de période (created, updated, expectedPayment, performedPayment, period)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -595,7 +595,7 @@ export const OrderSearchSchema = z.object({
   keywords: z.string().optional().describe("Mots-clés de recherche"),
   companyId: z.string().optional().describe("Filtrer par ID société"),
   projectId: z.string().optional().describe("Filtrer par ID projet"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -607,7 +607,7 @@ export const DeliverySearchSchema = z.object({
   companyId: z.string().optional().describe("Filtrer par ID société"),
   startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -635,7 +635,7 @@ export const AbsenceSearchSchema = z.object({
   resourceId: z.string().optional().describe("Filtrer par ID ressource"),
   startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -665,7 +665,7 @@ export const ExpenseSearchSchema = z.object({
   projectId: z.string().optional().describe("Filtrer par ID projet"),
   startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -709,7 +709,7 @@ export const PositioningSearchSchema = z.object({
   resourceId: z.string().optional().describe("Filtrer par ID ressource"),
   projectId: z.string().optional().describe("Filtrer par ID projet"),
   opportunityId: z.string().optional().describe("Filtrer par ID opportunité"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -721,7 +721,7 @@ export const PaymentSearchSchema = z.object({
   companyId: z.string().optional().describe("Filtrer par ID société"),
   startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
   endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
@@ -730,7 +730,7 @@ export const PaymentSearchSchema = z.object({
 export const AdvantageSearchSchema = z.object({
   keywords: z.string().optional().describe("Mots-clés de recherche"),
   resourceId: z.string().optional().describe("Filtrer par ID ressource"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 

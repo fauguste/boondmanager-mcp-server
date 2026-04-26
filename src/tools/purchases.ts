@@ -3,13 +3,13 @@ import { IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "../constants.js";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
 
 const PurchaseSearchSchema = z.object({
   keywords: z.string().optional().describe("Mots-clés de recherche"),
   companyId: z.string().optional().describe("Filtrer par ID société"),
   projectId: z.string().optional().describe("Filtrer par ID projet"),
-  page: z.number().int().min(1).default(1).describe("Numéro de page"),
+  page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
 }).strict();
 
