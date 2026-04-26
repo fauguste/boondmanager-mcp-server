@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   registerCandidateTools,
@@ -41,7 +44,30 @@ import { registerAllPrompts } from "./prompts/index.js";
 import { registerAllResources } from "./resources/index.js";
 
 export const SERVER_NAME = "boondmanager-mcp-server";
-export const SERVER_VERSION = "1.0.0";
+
+/**
+ * Read the package version from `package.json` so the value advertised over
+ * MCP `initialize` always matches the published artefact. CI already enforces
+ * version parity between `package.json`, `manifest.json`, and `server.json`,
+ * so resolving from `package.json` is sufficient.
+ *
+ * The compiled file lives at `dist/server.js`, mirroring `src/server.ts`,
+ * so `../package.json` is correct in both layouts.
+ */
+function readPackageVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const pkgPath = resolve(here, "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: unknown };
+    if (typeof pkg.version === "string" && pkg.version.length > 0) return pkg.version;
+  } catch {
+    // Fall through to the placeholder — surface a recognisable value rather
+    // than crashing the server on a missing package.json.
+  }
+  return "0.0.0-unknown";
+}
+
+export const SERVER_VERSION = readPackageVersion();
 
 export const REGISTERED_DOMAINS = [
   "candidates", "resources", "contacts", "companies", "opportunities", "actions",
