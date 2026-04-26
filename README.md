@@ -103,6 +103,21 @@ Les entites principales disposent d'outils dedies par onglet pour un acces cible
 | Opportunites | information, actions, positionings, projects, simulation |
 | Projets | information, actions, simulation, deliveries-groupments, orders, purchases, productivity |
 
+## Ressources MCP (dictionnaires)
+
+Le serveur expose les dictionnaires de reference Boond comme **ressources MCP** (clients qui en supportent l'affichage : Claude Desktop, MCP Inspector, etc.). Permet au modele de traduire un `state` ou `typeOf` entier en libelle sans appel d'outil supplementaire.
+
+| URI | Contenu |
+|-----|---------|
+| `boond://application/current-user` | Profil de l'utilisateur courant (id, agence, permissions) |
+| `boond://dictionary/states/{entity}` | Etats par entite : `resources`, `candidates`, `contacts`, `companies`, `opportunities`, `projects`, `invoices`, `orders`, `positionings`, `absences` |
+| `boond://dictionary/typeOf/{entity}` | Types par entite : `resources`, `candidates`, `contacts`, `projects`, `actions`, `absences` |
+| `boond://dictionary/countries` | Liste des pays |
+| `boond://dictionary/currencies` | Liste des devises |
+| `boond://dictionary/languages` | Liste des langues |
+
+Pour les dictionnaires hors de cette liste curee, l'outil `boond_application_dictionary` reste disponible.
+
 ## Prompts pre-orchestres
 
 En plus des outils, le serveur expose des **prompts MCP** (templates pre-cables) qui orchestrent les bons appels d'outils dans le bon ordre pour les workflows recurrents. Visibles dans les clients qui supportent les prompts (slash command ou menu).

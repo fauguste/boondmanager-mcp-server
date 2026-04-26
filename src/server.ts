@@ -38,6 +38,7 @@ import {
   registerPlanningAbsenceTools,
 } from "./tools/index.js";
 import { registerAllPrompts } from "./prompts/index.js";
+import { registerAllResources } from "./resources/index.js";
 
 export const SERVER_NAME = "boondmanager-mcp-server";
 export const SERVER_VERSION = "1.0.0";
@@ -96,6 +97,7 @@ export function createMcpServer(): McpServer {
   registerPlanningAbsenceTools(server);
 
   registerAllPrompts(server);
+  registerAllResources(server);
 
   return server;
 }
