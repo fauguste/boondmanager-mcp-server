@@ -103,6 +103,19 @@ Les entites principales disposent d'outils dedies par onglet pour un acces cible
 | Opportunites | information, actions, positionings, projects, simulation |
 | Projets | information, actions, simulation, deliveries-groupments, orders, purchases, productivity |
 
+## Prompts pre-orchestres
+
+En plus des outils, le serveur expose des **prompts MCP** (templates pre-cables) qui orchestrent les bons appels d'outils dans le bon ordre pour les workflows recurrents. Visibles dans les clients qui supportent les prompts (slash command ou menu).
+
+| Prompt | Usage |
+|--------|-------|
+| `synthese_equipe` | Etat d'une equipe : qui fait quoi, qui est absent, qui est dispo (par defaut : mon equipe). |
+| `pipeline_commercial` | Opportunites avec closing dans une periode : repartition par etat, CA pondere, top 10. |
+| `factures_a_relancer` | Factures impayees dont l'echeance est depassee, regroupees par societe. |
+| `candidats_pour_opportunite` | A partir d'une opportunite, propose les candidats actifs qui matchent (outils, expertise, mobilite, dispo). |
+| `fiche_consultant` | Vue 360 d'une ressource : info + technique + positionnements + absences + CRA recents. |
+| `recap_hebdo` | Recap hebdomadaire : pipeline qui a bouge, equipe absente, projets actifs, actions a mener. |
+
 ## Prerequis
 
 - Node.js >= 20
