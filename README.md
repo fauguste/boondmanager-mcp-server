@@ -329,6 +329,20 @@ export BOOND_HTTP_TIMEOUT_MS=60000   # 60 s
 
 Si une requete depasse le delai, le serveur renvoie une erreur explicite mentionnant `BOOND_HTTP_TIMEOUT_MS` plutot que de rester bloque indefiniment.
 
+### Tentatives en cas d'echec transitoire
+
+Le client HTTP retente automatiquement les erreurs **transitoires** avec un backoff exponentiel + jitter :
+
+- **GET** : retry sur `5xx`, `429`, erreurs reseau (`ECONNRESET`, etc.) et timeouts (GET etant idempotent).
+- **POST / PUT / PATCH / DELETE** : retry **uniquement sur `429`** afin d'eviter de dupliquer une ecriture cote serveur. Les `5xx` et erreurs reseau remontent immediatement.
+- L'en-tete `Retry-After` (en secondes ou en HTTP-date) est honore et plafonne a `BOOND_HTTP_RETRY_MAX_MS`.
+
+| Variable | Defaut | Description |
+|----------|--------|-------------|
+| `BOOND_HTTP_MAX_RETRIES` | `2` | Nombre maximal de tentatives supplementaires (3 essais au total). `0` desactive entierement les retries. |
+| `BOOND_HTTP_RETRY_BASE_MS` | `200` | Delai de base utilise pour le backoff exponentiel (`base * 2^attempt`, avec jitter). |
+| `BOOND_HTTP_RETRY_MAX_MS` | `5000` | Plafond du delai entre deux tentatives. |
+
 ## Transports
 
 Le serveur supporte deux transports MCP, selectionnables via la variable d'environnement `MCP_TRANSPORT`.

@@ -302,6 +302,8 @@ Configured via environment variables (never hardcoded), in priority order:
 3. **BasicAuth**: `BOOND_USER` + `BOOND_PASSWORD` (base64-encoded)
 - `BOOND_BASE_URL` (optional, defaults to `https://ui.boondmanager.com/api`)
 - `BOOND_HTTP_TIMEOUT_MS` (optional, defaults to `30000`) — per-request timeout for the BoondManager HTTP client. Non-numeric / non-positive values fall back to the default. A timeout surfaces as an `Error` whose message includes the configured value and the failing endpoint.
+- `BOOND_HTTP_MAX_RETRIES` (optional, defaults to `2`) — number of additional attempts after the first failure. Set to `0` to disable retries. Retry policy: GET retries on 5xx / 429 / network / timeout; non-GET retries only on 429 (idempotency safety). `Retry-After` is honoured.
+- `BOOND_HTTP_RETRY_BASE_MS` / `BOOND_HTTP_RETRY_MAX_MS` (optional, defaults `200` / `5000`) — full-jitter exponential backoff: `random(0, min(maxMs, baseMs * 2^attempt))`.
 
 ## CI/CD
 

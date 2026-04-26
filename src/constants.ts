@@ -9,6 +9,13 @@ export const MAX_PAGE_SIZE = 500;
 // BOOND_HTTP_TIMEOUT_MS to handle slow tenants or long reporting queries.
 export const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
 
+// Retry policy for transient failures. Override via BOOND_HTTP_MAX_RETRIES,
+// BOOND_HTTP_RETRY_BASE_MS, BOOND_HTTP_RETRY_MAX_MS. Set MAX_RETRIES to 0 to
+// disable retries entirely.
+export const DEFAULT_HTTP_MAX_RETRIES = 2;
+export const DEFAULT_HTTP_RETRY_BASE_MS = 200;
+export const DEFAULT_HTTP_RETRY_MAX_MS = 5_000;
+
 // API paths
 export const API_PATHS = {
   candidates: "/candidates",

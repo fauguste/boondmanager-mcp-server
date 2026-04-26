@@ -1,5 +1,12 @@
 import { createHmac } from "crypto";
-import { DEFAULT_BASE_URL, CHARACTER_LIMIT, DEFAULT_HTTP_TIMEOUT_MS } from "../constants.js";
+import {
+  DEFAULT_BASE_URL,
+  CHARACTER_LIMIT,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_HTTP_MAX_RETRIES,
+  DEFAULT_HTTP_RETRY_BASE_MS,
+  DEFAULT_HTTP_RETRY_MAX_MS,
+} from "../constants.js";
 import type { BoondConfig, JsonApiResponse, SearchParams } from "../types.js";
 
 let config: BoondConfig | null = null;
@@ -126,6 +133,104 @@ function isAbortError(err: unknown): boolean {
   return err.name === "TimeoutError" || err.name === "AbortError";
 }
 
+export interface RetryConfig {
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+function readPositiveInt(name: string, fallback: number, allowZero = false): number {
+  const raw = envOrUndefined(name);
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed < 0) return fallback;
+  if (parsed === 0 && !allowZero) return fallback;
+  return Math.floor(parsed);
+}
+
+/** Resolve retry configuration from env, with safe fallbacks. Exported for tests. */
+export function resolveRetryConfig(): RetryConfig {
+  return {
+    maxRetries: readPositiveInt("BOOND_HTTP_MAX_RETRIES", DEFAULT_HTTP_MAX_RETRIES, true),
+    baseDelayMs: readPositiveInt("BOOND_HTTP_RETRY_BASE_MS", DEFAULT_HTTP_RETRY_BASE_MS),
+    maxDelayMs: readPositiveInt("BOOND_HTTP_RETRY_MAX_MS", DEFAULT_HTTP_RETRY_MAX_MS),
+  };
+}
+
+/**
+ * Decide whether a failed attempt is worth retrying.
+ *
+ * Retry policy is intentionally conservative for non-idempotent verbs to avoid
+ * silently duplicating writes when the server's response was lost or delayed:
+ *   - 429 (Too Many Requests) is always retried — the server explicitly
+ *     rejected the request before processing it, so it is safe regardless of
+ *     verb.
+ *   - For GET only, 5xx responses, network failures, and timeouts are retried
+ *     because GET is idempotent.
+ *   - 4xx responses (other than 429) are never retried — the client must change
+ *     the request before another attempt makes sense.
+ *
+ * Exported for unit testing.
+ */
+export function isRetryable(
+  method: string,
+  status: number | undefined,
+  isNetworkOrTimeout: boolean
+): boolean {
+  if (status === 429) return true;
+  if (method !== "GET") return false;
+  if (isNetworkOrTimeout) return true;
+  if (status !== undefined && status >= 500 && status < 600) return true;
+  return false;
+}
+
+/**
+ * Parse a `Retry-After` header value into milliseconds.
+ *
+ * Accepts either a non-negative number of seconds or an HTTP-date. Returns
+ * null when the value is absent or unparseable. Negative computed delays are
+ * clamped to 0. Exported for unit testing.
+ */
+export function parseRetryAfter(value: string | null, now: number = Date.now()): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds)) {
+    // Numeric form is authoritative once we recognise it as a number — falling
+    // through to Date.parse on a negative/odd numeric would silently produce
+    // weird timestamps (e.g. Date.parse("-1") → year -1).
+    return seconds >= 0 ? Math.floor(seconds * 1000) : null;
+  }
+  const date = Date.parse(trimmed);
+  if (!Number.isNaN(date)) return Math.max(0, date - now);
+  return null;
+}
+
+/**
+ * Compute the next backoff delay using full jitter:
+ *   delay = random(0, min(maxMs, baseMs * 2^attempt))
+ *
+ * Full jitter (vs. exponential-only) reduces thundering-herd risk when many
+ * clients retry in lockstep. Exported for unit testing.
+ */
+export function computeBackoffMs(
+  attempt: number,
+  baseMs: number,
+  maxMs: number,
+  random: () => number = Math.random
+): number {
+  const exp = baseMs * 2 ** attempt;
+  const capped = Math.min(maxMs, exp);
+  return Math.floor(random() * capped);
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Status-specific hint to help the LLM (or human) recover from common failures. */
 function hintForStatus(status: number): string {
   switch (status) {
@@ -204,43 +309,95 @@ export async function apiRequest(
   };
 
   const timeoutMs = resolveTimeoutMs();
-  const fetchOptions: RequestInit = {
-    method,
-    headers,
-    signal: AbortSignal.timeout(timeoutMs),
-  };
-  if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
-    fetchOptions.body = JSON.stringify(body);
-  }
+  const retry = resolveRetryConfig();
+  const totalAttempts = retry.maxRetries + 1;
 
-  let response: Response;
-  try {
-    response = await fetch(url.toString(), fetchOptions);
-  } catch (err) {
-    if (isAbortError(err)) {
-      throw new Error(
-        [
-          `BoondManager API request timed out after ${timeoutMs}ms`,
-          `Endpoint: ${method} ${path}`,
-          "Hint: Increase BOOND_HTTP_TIMEOUT_MS or check connectivity to the BoondManager API.",
-        ].join("\n"),
-        { cause: err }
-      );
+  const buildBody = (): string | undefined =>
+    body && (method === "POST" || method === "PUT" || method === "PATCH")
+      ? JSON.stringify(body)
+      : undefined;
+  const serializedBody = buildBody();
+
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt < totalAttempts; attempt++) {
+    const fetchOptions: RequestInit = {
+      method,
+      headers,
+      // Each attempt gets its own abort signal — once a signal has fired it
+      // can't be reused for the next try.
+      signal: AbortSignal.timeout(timeoutMs),
+    };
+    if (serializedBody !== undefined) {
+      fetchOptions.body = serializedBody;
     }
-    throw err;
+
+    let response: Response | undefined;
+    let networkError: Error | undefined;
+
+    try {
+      response = await fetch(url.toString(), fetchOptions);
+    } catch (err) {
+      if (isAbortError(err)) {
+        networkError = new Error(
+          [
+            `BoondManager API request timed out after ${timeoutMs}ms`,
+            `Endpoint: ${method} ${path}`,
+            "Hint: Increase BOOND_HTTP_TIMEOUT_MS or check connectivity to the BoondManager API.",
+          ].join("\n"),
+          { cause: err }
+        );
+      } else {
+        networkError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+
+    if (response && response.ok) {
+      // DELETE may return empty body
+      if (response.status === 204 || response.headers.get("content-length") === "0") {
+        return { data: [] };
+      }
+      return (await response.json()) as JsonApiResponse;
+    }
+
+    let attemptError: Error;
+    let retryAfterMs: number | null = null;
+    let isNetworkOrTimeout = false;
+
+    if (response) {
+      const errorText = await response.text().catch(() => "");
+      attemptError = new Error(
+        formatApiError(response.status, response.statusText, method, path, errorText)
+      );
+    } else {
+      attemptError = networkError!;
+      isNetworkOrTimeout = true;
+    }
+
+    const hasMoreAttempts = attempt < totalAttempts - 1;
+    const retryable = isRetryable(method, response?.status, isNetworkOrTimeout);
+
+    if (!hasMoreAttempts || !retryable) {
+      throw attemptError;
+    }
+
+    // Only inspect Retry-After when we've actually decided to retry — keeps
+    // the fast path off the headers object and matches existing tests that
+    // build minimal Response stubs.
+    if (response) {
+      retryAfterMs = parseRetryAfter(response.headers?.get("retry-after") ?? null);
+    }
+
+    const backoff =
+      retryAfterMs !== null
+        ? Math.min(retry.maxDelayMs, retryAfterMs)
+        : computeBackoffMs(attempt, retry.baseDelayMs, retry.maxDelayMs);
+    await sleep(backoff);
+    lastError = attemptError;
   }
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(formatApiError(response.status, response.statusText, method, path, errorText));
-  }
-
-  // DELETE may return empty body
-  if (response.status === 204 || response.headers.get("content-length") === "0") {
-    return { data: [] };
-  }
-
-  return (await response.json()) as JsonApiResponse;
+  // Defensive — the loop always returns or throws. If somehow exhausted:
+  throw lastError ?? new Error("BoondManager API request exhausted retries with no recorded error.");
 }
 
 export function buildSearchQuery(params: SearchParams): Record<string, QueryValue> {
