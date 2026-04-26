@@ -45,6 +45,12 @@ jobs:
         if: matrix.node-version == 22
         run: npx @anthropic-ai/mcpb validate .
 
+      - name: Check tool catalogue is up to date
+        # If a tool/prompt/resource was added or renamed, TOOLS.md must be
+        # regenerated and committed. This step fails if it drifts.
+        if: matrix.node-version == 22
+        run: node scripts/generate-tools-catalog.mjs --check
+
       - name: Verify version consistency
         if: matrix.node-version == 22
         run: |

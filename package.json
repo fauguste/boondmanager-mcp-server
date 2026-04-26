@@ -36,6 +36,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "docs:tools": "npm run build && node scripts/generate-tools-catalog.mjs",
+    "docs:tools:check": "npm run build && node scripts/generate-tools-catalog.mjs --check",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
