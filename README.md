@@ -584,6 +584,8 @@ npm run typecheck
 - [Collection Postman BoondManager](https://www.postman.com/boondmanager)
 - [Specification MCP](https://modelcontextprotocol.io/)
 - [pyboondmanager (reference Python)](https://github.com/tominardi/pyboondmanager)
+- [Catalogue d'outils auto-genere (TOOLS.md)](./TOOLS.md)
+- [Distribution & marketplaces (docs/distribution.md)](./docs/distribution.md)
 
 ## Licence
 
