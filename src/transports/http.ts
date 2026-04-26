@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { logger, generateCorrelationId } from "../services/logger.js";
 
 export interface HttpTransportOptions {
   host: string;
@@ -145,6 +146,9 @@ export async function startHttpTransport(
   }
 
   const httpServer = createServer(async (req, res) => {
+    const corrId = generateCorrelationId();
+    const reqLogger = logger.child({ corrId, method: req.method, path: req.url });
+
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
@@ -211,12 +215,14 @@ export async function startHttpTransport(
         enableJsonResponse: options.enableJsonResponse,
         onsessioninitialized: (id) => {
           sessions.set(id, { transport, server, lastActivityAt: Date.now() });
+          reqLogger.info({ sessionId: id, sessionCount: sessions.size }, "MCP session initialized");
         },
         onsessionclosed: (id) => {
           const entry = sessions.get(id);
           if (entry) {
             sessions.delete(id);
             void destroySession(entry);
+            reqLogger.info({ sessionId: id, sessionCount: sessions.size }, "MCP session closed");
           }
         },
       });
@@ -236,7 +242,7 @@ export async function startHttpTransport(
       await server.connect(transport);
       await transport.handleRequest(req, res, body);
     } catch (error) {
-      console.error("HTTP transport error:", error);
+      reqLogger.error({ err: error }, "HTTP transport error");
       if (!res.headersSent) {
         writeJsonRpcError(res, 500, "Internal server error");
       } else {

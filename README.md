@@ -298,6 +298,17 @@ Ou utiliser le transport HTTP (voir section [Transports](#transports)) pour un d
 
 ## Configuration
 
+### Logs
+
+Le serveur utilise [pino](https://getpino.io/) pour des logs structures JSON (agrégateurs, observabilité).
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `LOG_LEVEL` | `info` | Niveau de log : `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| `LOG_FORMAT` | (auto) | `json` pour JSON pur, sinon pino-pretty en dev |
+
+En production (`NODE_ENV=production`), les logs sont en JSON par défaut. En dev, le format pretty (colorisé) est actif sauf si `LOG_FORMAT=json`. Chaque requête HTTP reçoit un `corrId` (8 hex) pour tracer la requête dans les logs.
+
 ### Authentification
 
 **Option 1 : Token API JWT (recommande)**

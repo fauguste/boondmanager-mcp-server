@@ -44,7 +44,9 @@ src/
 ├── transports/
 │   └── http.ts           # startHttpTransport() + resolveHttpOptions() — MCP Streamable HTTP server
 ├── services/
-│   └── boond-client.ts   # HTTP client: apiRequest(), buildSearchQuery(), formatListResponse(), formatDetailResponse(), parseBoondErrorBody(), formatApiError()
+│   ├── boond-client.ts   # HTTP client: apiRequest(), buildSearchQuery(), formatListResponse(), formatDetailResponse(), parseBoondErrorBody(), formatApiError()
+│   ├── rate-limiter.ts   # Token-bucket rate limiter for BoondManager API
+│   └── logger.ts         # Structured logger (pino) + generateCorrelationId()
 ├── schemas/
 │   └── index.ts          # Zod schemas: SearchSchema, IdSchema, IdTabSchema, plus per-domain search/create/update schemas
 ├── prompts/
@@ -102,6 +104,14 @@ are surfaced through `formatApiError()` which uses
 JSON:API error envelope and adds a status-specific `Hint:` line. The raw
 body is only included as a fallback when the response isn't structured
 JSON. Both helpers are exported for unit testing.
+
+**Structured logging** (`src/services/logger.ts`): Pino-based logger
+with level control via `LOG_LEVEL` (trace/debug/info/warn/error/fatal)
+and format via `LOG_FORMAT` (json vs pretty). Every HTTP request gets a
+`corrId` (8 hex chars) for tracing through the stack. Use `logger.child()`
+to attach context and `logger.info({ key: value }, "message")` for
+structured output. In production (`NODE_ENV=production`), JSON is default;
+in dev, pino-pretty (colorized) is active unless `LOG_FORMAT=json`.
 
 **Prompts** (`src/prompts/index.ts`): pre-orchestrated workflows that
 resolve to a `user` message guiding the model through a fixed tool
