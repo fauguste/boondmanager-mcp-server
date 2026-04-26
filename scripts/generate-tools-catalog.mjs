@@ -125,9 +125,15 @@ function describeArgs(argsSchema) {
     .join(" ");
 }
 
-/** Escape pipe characters so a value is safe inside a Markdown table cell. */
+/** Escape characters that have special meaning inside a Markdown table cell.
+ *  We escape `\` BEFORE `|` — otherwise an input like `a\|b` would become
+ *  `a\\|b` which renders as `a\|b` (the `\` was meant literally). Doing the
+ *  backslash pass first guarantees `a\|b` -> `a\\\|b`, rendered as `a\|b`. */
 function md(s) {
-  return String(s ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  return String(s ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r?\n/g, " ");
 }
 
 // ---- Build the catalog -------------------------------------------------
