@@ -266,6 +266,16 @@ describe("registerXxxTools", () => {
 5. Add tests to `src/resources/index.test.ts`
 6. `npm run docs:tools` to refresh TOOLS.md
 
+## Description Length Limits
+
+To keep the MCP tools[] list digestible by the LLM and within the ~50KB total message limit, the codebase enforces maximum description lengths at test time (`src/tools/descriptions.test.ts`):
+
+- **Tools**: 2000 chars — enough for a concise summary + key filters. Anything longer dilutes focus and wastes context.
+- **Prompts**: 3000 chars — can be more verbose (they're user-facing templates), but still shouldn't become essays.
+- **Resources**: 1000 chars — metadata for the list, not the content itself.
+
+These are tested on every CI run. If a description exceeds the limit, the test fails with the exact tool name and length, forcing either a trim or a justification bump to the constant.
+
 ## MCP Annotations
 
 Every tool must declare annotations:
