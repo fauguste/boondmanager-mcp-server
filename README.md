@@ -389,7 +389,22 @@ claude mcp add --transport http \
 }
 ```
 
-#### Exemple : Docker
+#### Exemple : Docker (image officielle GHCR)
+
+Une image Docker prete a l'emploi est publiee a chaque release sur GitHub Container Registry, multi-arch (`linux/amd64` + `linux/arm64`). Elle demarre par defaut en transport HTTP, sur le port 3000, sur l'interface `0.0.0.0`.
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e MCP_HTTP_BEARER_TOKEN=$(openssl rand -hex 32) \
+  -e BOOND_API_TOKEN=$BOOND_API_TOKEN \
+  ghcr.io/fauguste/boondmanager-mcp-server:latest
+```
+
+Tags disponibles : `:latest`, `:1`, `:1.5`, `:1.5.1` (la version exacte est recommandee pour la prod). Variables d'environnement supportees : voir [Configuration](#configuration) et [Transports](#transports).
+
+#### Exemple : Docker (image ad-hoc via npx)
+
+Si vous preferez ne pas utiliser l'image GHCR, le serveur peut tourner dans une image Node generique :
 
 ```bash
 docker run --rm -p 3000:3000 \
@@ -397,7 +412,7 @@ docker run --rm -p 3000:3000 \
   -e MCP_HTTP_HOST=0.0.0.0 \
   -e MCP_HTTP_BEARER_TOKEN=$(openssl rand -hex 32) \
   -e BOOND_API_TOKEN=$BOOND_API_TOKEN \
-  node:20-alpine \
+  node:22-alpine \
   npx -y boondmanager-mcp-server
 ```
 

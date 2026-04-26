@@ -1,0 +1,41 @@
+# Docker build context filter — keep the build small and avoid leaking
+# anything sensitive (.env) or unrelated to the runtime image.
+
+# Build outputs and dev artefacts (rebuilt inside the image)
+node_modules
+dist
+coverage
+*.log
+*.mcpb
+
+# VCS / editor / OS noise
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests, examples, docs that aren't needed at runtime
+**/*.test.ts
+**/*.spec.ts
+test-*.mjs
+
+# Local secrets — must never enter the image
+.env
+.env.*
+!.env.example
+
+# Other tool configs not needed in the image
+eslint.config.*
+.prettierrc*
+vitest.config.*
+.editorconfig
+CHANGELOG.md
+SECURITY.md
+CONTRIBUTING.md
+NOTICE
+LICENSE
+*.md
+!README.md
