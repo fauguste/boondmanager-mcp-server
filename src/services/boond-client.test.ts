@@ -7,6 +7,8 @@ import {
   initClient,
   buildJwt,
   apiRequest,
+  parseBoondErrorBody,
+  formatApiError,
 } from "./boond-client.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 
@@ -360,7 +362,23 @@ describe("apiRequest", () => {
       })
     );
 
-    await expect(apiRequest("/candidates/999")).rejects.toThrow("BoondManager API error 404");
+    await expect(apiRequest("/candidates/999")).rejects.toThrow("BoondManager API 404");
+  });
+
+  it("should surface Boond errors[].detail when present", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        statusText: "Unprocessable Entity",
+        text: () => Promise.resolve(JSON.stringify({
+          errors: [{ status: "422", code: "422", detail: "422 - password mismatch" }],
+        })),
+      })
+    );
+
+    await expect(apiRequest("/resources")).rejects.toThrow("422 - password mismatch");
   });
 
   it("should include query params in URL", async () => {
@@ -396,5 +414,76 @@ describe("apiRequest", () => {
     const fetchCall = vi.mocked(fetch).mock.calls[0];
     const url = fetchCall[0] as string;
     expect(url).not.toContain("empty");
+  });
+});
+
+describe("parseBoondErrorBody", () => {
+  it("returns the detail of a single error", () => {
+    expect(parseBoondErrorBody(JSON.stringify({
+      errors: [{ status: "422", detail: "422 - password mismatch" }],
+    }))).toBe("422 - password mismatch");
+  });
+
+  it("joins multiple errors with a separator", () => {
+    expect(parseBoondErrorBody(JSON.stringify({
+      errors: [
+        { detail: "first thing wrong" },
+        { detail: "second thing wrong" },
+      ],
+    }))).toBe("first thing wrong | second thing wrong");
+  });
+
+  it("includes title when distinct from detail", () => {
+    expect(parseBoondErrorBody(JSON.stringify({
+      errors: [{ title: "Forbidden", detail: "user cannot access this scope" }],
+    }))).toBe("Forbidden: user cannot access this scope");
+  });
+
+  it("falls back to code when detail is missing", () => {
+    expect(parseBoondErrorBody(JSON.stringify({
+      errors: [{ code: "503" }],
+    }))).toBe("code 503");
+  });
+
+  it("returns null on non-JSON body", () => {
+    expect(parseBoondErrorBody("Internal Server Error")).toBeNull();
+  });
+
+  it("returns null when there are no errors[]", () => {
+    expect(parseBoondErrorBody(JSON.stringify({ meta: {} }))).toBeNull();
+  });
+
+  it("returns null on empty input", () => {
+    expect(parseBoondErrorBody("")).toBeNull();
+  });
+});
+
+describe("formatApiError", () => {
+  it("uses the parsed Boond detail in the headline and skips the raw body", () => {
+    const body = JSON.stringify({ errors: [{ detail: "422 - password mismatch" }] });
+    const msg = formatApiError(422, "Unprocessable Entity", "GET", "/resources", body);
+    expect(msg).toContain("BoondManager API 422 Unprocessable Entity: 422 - password mismatch");
+    expect(msg).toContain("Endpoint: GET /resources");
+    expect(msg).toContain("Hint:");
+    // raw body must not be repeated when we have a structured detail
+    expect(msg).not.toContain(body);
+  });
+
+  it("falls back to a (truncated) raw body when JSON parsing fails", () => {
+    const body = "x".repeat(800);
+    const msg = formatApiError(500, "Server Error", "GET", "/resources", body);
+    expect(msg).toContain("BoondManager API 500 Server Error");
+    expect(msg).toContain("Body: " + "x".repeat(500) + "…");
+    expect(msg).toContain("Hint:");
+  });
+
+  it("emits a 401-specific hint", () => {
+    const msg = formatApiError(401, "Unauthorized", "GET", "/resources", "");
+    expect(msg).toContain("Authentication failed");
+  });
+
+  it("emits a 5xx-specific hint", () => {
+    const msg = formatApiError(503, "Service Unavailable", "GET", "/resources", "");
+    expect(msg).toContain("BoondManager-side error");
   });
 });

@@ -67,6 +67,83 @@ function getConfig(): BoondConfig {
 
 export type QueryValue = string | number | Array<string | number> | undefined;
 
+/**
+ * Pull the human-readable bits out of a BoondManager error body.
+ *
+ * Boond returns JSON:API errors of the form:
+ *   { "errors": [ { "status": "422", "code": "422", "detail": "...", "title": "..." } ] }
+ *
+ * Surfacing `detail` (and `title` when present) gives the model a focused
+ * message like `422 - password mismatch` instead of the full ~500-char body
+ * dump that previously made it hard for the LLM to reason about the failure.
+ *
+ * Exported for unit testing.
+ */
+export function parseBoondErrorBody(body: string): string | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as { errors?: Array<{ detail?: string; title?: string; code?: string }> };
+    const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
+    const messages = errors
+      .map((e) => {
+        const parts: string[] = [];
+        if (e.title && e.title !== e.detail) parts.push(e.title);
+        if (e.detail) parts.push(e.detail);
+        else if (e.code) parts.push(`code ${e.code}`);
+        return parts.join(": ").trim();
+      })
+      .filter((m) => m.length > 0);
+    if (messages.length === 0) return null;
+    return messages.join(" | ");
+  } catch {
+    return null;
+  }
+}
+
+/** Status-specific hint to help the LLM (or human) recover from common failures. */
+function hintForStatus(status: number): string {
+  switch (status) {
+    case 400:
+      return "Check the request body or query parameters — likely a malformed field.";
+    case 401:
+      return "Authentication failed. Verify BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY (or BOOND_API_TOKEN, or BOOND_USER + BOOND_PASSWORD).";
+    case 403:
+      return "Authenticated, but the user lacks permission for this endpoint or scope.";
+    case 404:
+      return "Endpoint or entity not found. Double-check the id and the API path.";
+    case 422:
+      return "Unprocessable: typically wrong credentials (the API returns 422 for password mismatch) or a query parameter the API rejects.";
+    case 429:
+      return "Rate-limited. Back off and retry after a few seconds.";
+    default:
+      if (status >= 500) return "BoondManager-side error. Retrying after a short delay usually helps.";
+      return "Check your credentials and permissions for this endpoint.";
+  }
+}
+
+/** Build the Error message for a non-2xx HTTP response. Exported for testing. */
+export function formatApiError(
+  status: number,
+  statusText: string,
+  method: string,
+  path: string,
+  body: string
+): string {
+  const detail = parseBoondErrorBody(body);
+  const headline = detail
+    ? `BoondManager API ${status} ${statusText}: ${detail}`
+    : `BoondManager API ${status} ${statusText}`;
+  const lines = [headline, `Endpoint: ${method} ${path}`];
+  // Only attach the raw body when we couldn't extract a structured detail —
+  // otherwise it's noise that buries the useful message.
+  if (!detail && body) {
+    const trimmed = body.length > 500 ? body.slice(0, 500) + "…" : body;
+    lines.push(`Body: ${trimmed}`);
+  }
+  lines.push(`Hint: ${hintForStatus(status)}`);
+  return lines.join("\n");
+}
+
 export async function apiRequest(
   path: string,
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "GET",
@@ -108,12 +185,8 @@ export async function apiRequest(
   const response = await fetch(url.toString(), fetchOptions);
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "Unknown error");
-    throw new Error(
-      `BoondManager API error ${response.status} ${response.statusText}: ${errorText}\n` +
-      `Endpoint: ${method} ${path}\n` +
-      `Suggestion: Check your credentials and permissions for this endpoint.`
-    );
+    const errorText = await response.text().catch(() => "");
+    throw new Error(formatApiError(response.status, response.statusText, method, path, errorText));
   }
 
   // DELETE may return empty body
