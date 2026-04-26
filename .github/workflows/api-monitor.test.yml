@@ -3,6 +3,9 @@ name: Test API Monitor Workflow
 on:
   workflow_dispatch: # Manual trigger only for testing
 
+permissions:
+  contents: read
+
 jobs:
   test-api-monitor:
     runs-on: ubuntu-latest
