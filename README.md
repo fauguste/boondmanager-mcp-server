@@ -343,6 +343,15 @@ Le client HTTP retente automatiquement les erreurs **transitoires** avec un back
 | `BOOND_HTTP_RETRY_BASE_MS` | `200` | Delai de base utilise pour le backoff exponentiel (`base * 2^attempt`, avec jitter). |
 | `BOOND_HTTP_RETRY_MAX_MS` | `5000` | Plafond du delai entre deux tentatives. |
 
+### Limitation de debit (rate limiting)
+
+Pour eviter qu'une boucle d'outils emballee n'inonde l'API (et n'enchaine les `429`), le client applique un **token bucket** local. Defauts : **10 req/s** soutenu, **rafale 20** — invisible en usage interactif normal. Les retentatives consomment aussi un jeton.
+
+| Variable | Defaut | Description |
+|----------|--------|-------------|
+| `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Debit soutenu (requetes/seconde). `0` desactive completement. |
+| `BOOND_HTTP_RATE_LIMIT_BURST` | `20` | Capacite du bucket = taille maximale de rafale immediate. |
+
 ## Transports
 
 Le serveur supporte deux transports MCP, selectionnables via la variable d'environnement `MCP_TRANSPORT`.

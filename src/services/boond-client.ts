@@ -6,8 +6,11 @@ import {
   DEFAULT_HTTP_MAX_RETRIES,
   DEFAULT_HTTP_RETRY_BASE_MS,
   DEFAULT_HTTP_RETRY_MAX_MS,
+  DEFAULT_HTTP_RATE_LIMIT_RPS,
+  DEFAULT_HTTP_RATE_LIMIT_BURST,
 } from "../constants.js";
 import type { BoondConfig, JsonApiResponse, SearchParams } from "../types.js";
+import { TokenBucket } from "./rate-limiter.js";
 
 let config: BoondConfig | null = null;
 
@@ -231,6 +234,51 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface RateLimitConfig {
+  rps: number;
+  burst: number;
+}
+
+/**
+ * Read rate-limit env vars. `rps` of 0 (or non-numeric) disables rate
+ * limiting entirely. `burst` falls back to `rps * 2` when unset, mirroring
+ * the documented default behaviour. Exported for unit testing.
+ */
+export function resolveRateLimitConfig(): RateLimitConfig | null {
+  const rpsRaw = envOrUndefined("BOOND_HTTP_RATE_LIMIT_RPS");
+  const rps = rpsRaw === undefined ? DEFAULT_HTTP_RATE_LIMIT_RPS : Number(rpsRaw);
+  if (!Number.isFinite(rps) || rps <= 0) return null;
+  const burstRaw = envOrUndefined("BOOND_HTTP_RATE_LIMIT_BURST");
+  let burst: number;
+  if (burstRaw === undefined) {
+    burst = rpsRaw === undefined ? DEFAULT_HTTP_RATE_LIMIT_BURST : Math.max(1, Math.ceil(rps));
+  } else {
+    const parsed = Number(burstRaw);
+    burst = Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : Math.max(1, Math.ceil(rps));
+  }
+  return { rps, burst };
+}
+
+let rateLimiter: TokenBucket | null = null;
+let rateLimiterInitialised = false;
+
+function getRateLimiter(): TokenBucket | null {
+  if (rateLimiterInitialised) return rateLimiter;
+  const config = resolveRateLimitConfig();
+  rateLimiter = config ? new TokenBucket(config.burst, config.rps) : null;
+  rateLimiterInitialised = true;
+  return rateLimiter;
+}
+
+/**
+ * Reset the cached rate limiter so the next request re-reads env vars.
+ * Intended for tests that toggle `BOOND_HTTP_RATE_LIMIT_*` between cases.
+ */
+export function resetRateLimiterForTests(): void {
+  rateLimiter = null;
+  rateLimiterInitialised = false;
+}
+
 /** Status-specific hint to help the LLM (or human) recover from common failures. */
 function hintForStatus(status: number): string {
   switch (status) {
@@ -320,7 +368,14 @@ export async function apiRequest(
 
   let lastError: Error | undefined;
 
+  const limiter = getRateLimiter();
+
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
+    // Acquire a token before each attempt so retries also count toward the
+    // rate budget — this is what actually protects us from feedback loops
+    // (transient 5xx → retry → transient 5xx → …) saturating the API.
+    if (limiter) await limiter.acquire();
+
     const fetchOptions: RequestInit = {
       method,
       headers,

@@ -16,6 +16,13 @@ export const DEFAULT_HTTP_MAX_RETRIES = 2;
 export const DEFAULT_HTTP_RETRY_BASE_MS = 200;
 export const DEFAULT_HTTP_RETRY_MAX_MS = 5_000;
 
+// Client-side rate limit (token bucket). Modest defaults: invisible during
+// interactive use, but cap pathological loops before BoondManager 429s us.
+// Override via BOOND_HTTP_RATE_LIMIT_RPS / BOOND_HTTP_RATE_LIMIT_BURST.
+// Set RPS to 0 to disable rate limiting entirely.
+export const DEFAULT_HTTP_RATE_LIMIT_RPS = 10;
+export const DEFAULT_HTTP_RATE_LIMIT_BURST = 20;
+
 // API paths
 export const API_PATHS = {
   candidates: "/candidates",

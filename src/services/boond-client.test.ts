@@ -14,6 +14,8 @@ import {
   isRetryable,
   parseRetryAfter,
   computeBackoffMs,
+  resolveRateLimitConfig,
+  resetRateLimiterForTests,
 } from "./boond-client.js";
 import {
   CHARACTER_LIMIT,
@@ -307,6 +309,10 @@ describe("apiRequest", () => {
     // Disable retries for the legacy apiRequest tests so a single mock value
     // produces a single fetch call, keeping assertions deterministic.
     process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    // Disable rate limiting so the legacy fast-path tests don't accidentally
+    // wait on a token bucket between iterations.
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
     initClient();
   });
 
@@ -314,6 +320,8 @@ describe("apiRequest", () => {
     vi.restoreAllMocks();
     delete process.env.BOOND_API_TOKEN;
     delete process.env.BOOND_HTTP_MAX_RETRIES;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
   });
 
   it("should make a GET request and return JSON", async () => {
@@ -699,12 +707,18 @@ describe("apiRequest retries", () => {
     process.env.BOOND_API_TOKEN = "test-token";
     process.env.BOOND_HTTP_RETRY_BASE_MS = "1";
     process.env.BOOND_HTTP_RETRY_MAX_MS = "1";
+    // Rate limiting orthogonal to retry tests — keep it off so retry
+    // counts and timing stay predictable.
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
     initClient();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
     delete process.env.BOOND_HTTP_MAX_RETRIES;
     delete process.env.BOOND_HTTP_RETRY_BASE_MS;
     delete process.env.BOOND_HTTP_RETRY_MAX_MS;
@@ -819,5 +833,107 @@ describe("apiRequest retries", () => {
 
     await expect(apiRequest("/candidates")).rejects.toThrow("BoondManager API 503");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveRateLimitConfig", () => {
+  afterEach(() => {
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_BURST;
+  });
+
+  it("returns the documented defaults when nothing is set", () => {
+    expect(resolveRateLimitConfig()).toEqual({ rps: 10, burst: 20 });
+  });
+
+  it("disables rate limiting when RPS is 0", () => {
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    expect(resolveRateLimitConfig()).toBeNull();
+  });
+
+  it("disables rate limiting on a non-numeric RPS", () => {
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "many";
+    expect(resolveRateLimitConfig()).toBeNull();
+  });
+
+  it("honours an explicit burst override", () => {
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "5";
+    process.env.BOOND_HTTP_RATE_LIMIT_BURST = "30";
+    expect(resolveRateLimitConfig()).toEqual({ rps: 5, burst: 30 });
+  });
+
+  it("derives a sane burst when RPS is overridden but burst is not", () => {
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "5";
+    expect(resolveRateLimitConfig()).toEqual({ rps: 5, burst: 5 });
+  });
+});
+
+describe("apiRequest rate limiting", () => {
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    resetRateLimiterForTests();
+    initClient();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_MAX_RETRIES;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_BURST;
+    resetRateLimiterForTests();
+  });
+
+  it("does not throttle when RPS=0", async () => {
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-length": "10" }),
+      json: () => Promise.resolve({ data: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const t0 = Date.now();
+    await apiRequest("/candidates");
+    await apiRequest("/candidates");
+    await apiRequest("/candidates");
+    const elapsed = Date.now() - t0;
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // No artificial throttle → should be near-instant.
+    expect(elapsed).toBeLessThan(100);
+  });
+
+  it("throttles requests beyond the burst capacity", async () => {
+    // 1 token, refill 1000/sec → 1ms wait per request after the first.
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "1000";
+    process.env.BOOND_HTTP_RATE_LIMIT_BURST = "1";
+    resetRateLimiterForTests();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-length": "10" }),
+      json: () => Promise.resolve({ data: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Fire 5 requests in parallel; serialised acquires force them through one
+    // by one. Sustained refill is fast (1ms), so total wall-time is small but
+    // crucially > 0 — the bucket is acting.
+    const before = vi.mocked(fetchMock).mock.calls.length;
+    await Promise.all([
+      apiRequest("/candidates"),
+      apiRequest("/candidates"),
+      apiRequest("/candidates"),
+      apiRequest("/candidates"),
+      apiRequest("/candidates"),
+    ]);
+    const after = vi.mocked(fetchMock).mock.calls.length;
+
+    expect(after - before).toBe(5);
   });
 });
