@@ -11,17 +11,38 @@ export interface HttpTransportOptions {
   stateless: boolean;
   bearerToken?: string;
   enableJsonResponse: boolean;
+  /** Idle timeout for stateful sessions, in ms. Defaults to 30 min. */
+  sessionTtlMs?: number;
+  /** How often to sweep idle sessions, in ms. Defaults to 5 min. */
+  sessionSweepIntervalMs?: number;
 }
 
 export interface HttpServerHandle {
   close: () => Promise<void>;
   address: { host: string; port: number; path: string };
+  /** Current count of live stateful sessions (always 0 in stateless mode). */
+  sessionCount: () => number;
+  /** Manually trigger an idle sweep; returns the number of sessions reaped. */
+  sweepIdleSessions: () => Promise<number>;
 }
+
+// Defaults: a half-hour idle window matches typical MCP gateway behaviour, and
+// a 5-minute sweep keeps memory bounded without hammering the event loop.
+const DEFAULT_SESSION_TTL_MS = 30 * 60_000;
+const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 5 * 60_000;
 
 function readEnv(key: string): string | undefined {
   const v = process.env[key];
   if (!v || v.startsWith("${")) return undefined;
   return v;
+}
+
+function readPositiveInt(key: string, fallback: number): number {
+  const raw = readEnv(key);
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
 }
 
 export function resolveHttpOptions(): HttpTransportOptions {
@@ -41,6 +62,11 @@ export function resolveHttpOptions(): HttpTransportOptions {
     stateless,
     bearerToken: readEnv("MCP_HTTP_BEARER_TOKEN"),
     enableJsonResponse,
+    sessionTtlMs: readPositiveInt("MCP_HTTP_SESSION_TTL_MS", DEFAULT_SESSION_TTL_MS),
+    sessionSweepIntervalMs: readPositiveInt(
+      "MCP_HTTP_SESSION_SWEEP_INTERVAL_MS",
+      DEFAULT_SESSION_SWEEP_INTERVAL_MS
+    ),
   };
 }
 
@@ -70,11 +96,53 @@ function writeJsonRpcError(res: ServerResponse, status: number, message: string)
   );
 }
 
+interface SessionEntry {
+  transport: StreamableHTTPServerTransport;
+  server: McpServer;
+  lastActivityAt: number;
+}
+
+async function destroySession(entry: SessionEntry): Promise<void> {
+  // Close transport and server independently so a failure in one still lets
+  // the other release its resources. We swallow errors because the caller
+  // already lost interest in this session.
+  await Promise.allSettled([
+    Promise.resolve().then(() => entry.transport.close()),
+    Promise.resolve().then(() => entry.server.close()),
+  ]);
+}
+
 export async function startHttpTransport(
   createServerFactory: () => McpServer,
   options: HttpTransportOptions
 ): Promise<HttpServerHandle> {
-  const sessions = new Map<string, StreamableHTTPServerTransport>();
+  const sessions = new Map<string, SessionEntry>();
+  const sessionTtlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+  const sessionSweepIntervalMs =
+    options.sessionSweepIntervalMs ?? DEFAULT_SESSION_SWEEP_INTERVAL_MS;
+
+  const sweepIdleSessions = async (): Promise<number> => {
+    const cutoff = Date.now() - sessionTtlMs;
+    const expired: Array<[string, SessionEntry]> = [];
+    for (const [id, entry] of sessions) {
+      if (entry.lastActivityAt < cutoff) {
+        expired.push([id, entry]);
+      }
+    }
+    for (const [id] of expired) sessions.delete(id);
+    await Promise.all(expired.map(([, entry]) => destroySession(entry)));
+    return expired.length;
+  };
+
+  // Periodic sweep — only meaningful in stateful mode. `unref()` lets the
+  // process exit naturally even when the timer is pending.
+  let sweepTimer: NodeJS.Timeout | undefined;
+  if (!options.stateless) {
+    sweepTimer = setInterval(() => {
+      void sweepIdleSessions();
+    }, sessionSweepIntervalMs);
+    sweepTimer.unref?.();
+  }
 
   const httpServer = createServer(async (req, res) => {
     try {
@@ -120,7 +188,9 @@ export async function startHttpTransport(
       const sessionId = Array.isArray(sessionIdHeader) ? sessionIdHeader[0] : sessionIdHeader;
 
       if (sessionId && sessions.has(sessionId)) {
-        await sessions.get(sessionId)!.handleRequest(req, res);
+        const entry = sessions.get(sessionId)!;
+        entry.lastActivityAt = Date.now();
+        await entry.transport.handleRequest(req, res);
         return;
       }
 
@@ -140,14 +210,26 @@ export async function startHttpTransport(
         sessionIdGenerator: () => randomUUID(),
         enableJsonResponse: options.enableJsonResponse,
         onsessioninitialized: (id) => {
-          sessions.set(id, transport);
+          sessions.set(id, { transport, server, lastActivityAt: Date.now() });
         },
         onsessionclosed: (id) => {
-          sessions.delete(id);
+          const entry = sessions.get(id);
+          if (entry) {
+            sessions.delete(id);
+            void destroySession(entry);
+          }
         },
       });
       transport.onclose = () => {
-        if (transport.sessionId) sessions.delete(transport.sessionId);
+        const id = transport.sessionId;
+        if (!id) return;
+        const entry = sessions.get(id);
+        if (entry) {
+          sessions.delete(id);
+          // Server is closed by destroySession — but if the transport's own
+          // close path already disposed it, the second call is a no-op.
+          void entry.server.close().catch(() => undefined);
+        }
       };
 
       const server = createServerFactory();
@@ -173,9 +255,13 @@ export async function startHttpTransport(
 
   return {
     address: { host: options.host, port: options.port, path: options.path },
+    sessionCount: () => sessions.size,
+    sweepIdleSessions,
     close: async () => {
-      await Promise.all(Array.from(sessions.values()).map((t) => t.close()));
+      if (sweepTimer) clearInterval(sweepTimer);
+      const entries = Array.from(sessions.values());
       sessions.clear();
+      await Promise.all(entries.map((e) => destroySession(e)));
       await new Promise<void>((resolve, reject) => {
         httpServer.close((err) => (err ? reject(err) : resolve()));
       });

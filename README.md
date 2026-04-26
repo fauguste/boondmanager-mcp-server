@@ -390,6 +390,8 @@ npx boondmanager-mcp-server
 | `MCP_HTTP_STATEFUL` | `false` | `true` pour activer le mode stateful (session `Mcp-Session-Id`) |
 | `MCP_HTTP_BEARER_TOKEN` | _(vide)_ | Si defini, le serveur exige `Authorization: Bearer <token>` |
 | `MCP_HTTP_JSON_RESPONSE` | `false` | `true` pour forcer des reponses JSON (sans SSE) |
+| `MCP_HTTP_SESSION_TTL_MS` | `1800000` (30 min) | En mode stateful, duree d'inactivite au-dela de laquelle une session est fermee. |
+| `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Frequence de balayage des sessions inactives. |
 
 **Stateless (defaut)** : chaque requete HTTP POST est independante, idealement adapte a un gateway qui multiplexe plusieurs serveurs MCP. Aucune session n'est conservee cote serveur.
 
