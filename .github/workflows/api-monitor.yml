@@ -1,0 +1,297 @@
+name: Monitor BoondManager API Changes
+
+on:
+  schedule:
+    # Tous les lundis à 9h00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Permet de déclencher manuellement
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check-api-changes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install -g @apidevtools/json-schema-ref-parser
+          npm install axios cheerio diff
+
+      - name: Fetch BoondManager API documentation
+        id: fetch-api
+        run: |
+          node << 'EOF'
+          const axios = require('axios');
+          const cheerio = require('cheerio');
+          const fs = require('fs');
+          const { createTwoFilesPatch } = require('diff');
+
+          const API_DOC_URL = 'https://doc.boondmanager.com/api-externe/raml-build/';
+          const SNAPSHOT_FILE = '.github/api-snapshot.json';
+
+          async function fetchApiEndpoints() {
+            try {
+              // Récupère la page principale de documentation
+              const response = await axios.get(API_DOC_URL);
+              const $ = cheerio.load(response.data);
+
+              const endpoints = [];
+
+              // Parse tous les endpoints listés
+              $('a[href*="raml"]').each((i, elem) => {
+                const href = $(elem).attr('href');
+                const text = $(elem).text().trim();
+                if (href && text) {
+                  endpoints.push({
+                    name: text,
+                    path: href,
+                    fullUrl: new URL(href, API_DOC_URL).href
+                  });
+                }
+              });
+
+              // Récupère également les sections/resources principales
+              $('.resource, .method').each((i, elem) => {
+                const name = $(elem).find('.method-name, .resource-name').text().trim();
+                const description = $(elem).find('.description').text().trim();
+                const method = $(elem).find('.method-type').text().trim();
+
+                if (name) {
+                  endpoints.push({
+                    type: 'endpoint',
+                    method: method || 'GET',
+                    name,
+                    description: description.substring(0, 200)
+                  });
+                }
+              });
+
+              return {
+                timestamp: new Date().toISOString(),
+                url: API_DOC_URL,
+                endpointsCount: endpoints.length,
+                endpoints: endpoints
+              };
+            } catch (error) {
+              console.error('Error fetching API documentation:', error.message);
+              throw error;
+            }
+          }
+
+          async function compareSnapshots(current, previous) {
+            const changes = {
+              added: [],
+              removed: [],
+              modified: []
+            };
+
+            if (!previous) {
+              return { isFirstRun: true, changes };
+            }
+
+            const prevMap = new Map(previous.endpoints.map(e => [e.name || e.path, e]));
+            const currMap = new Map(current.endpoints.map(e => [e.name || e.path, e]));
+
+            // Détecte les ajouts
+            for (const [key, endpoint] of currMap) {
+              if (!prevMap.has(key)) {
+                changes.added.push(endpoint);
+              }
+            }
+
+            // Détecte les suppressions
+            for (const [key, endpoint] of prevMap) {
+              if (!currMap.has(key)) {
+                changes.removed.push(endpoint);
+              }
+            }
+
+            // Détecte les modifications (basique : changement de description)
+            for (const [key, curr] of currMap) {
+              const prev = prevMap.get(key);
+              if (prev && JSON.stringify(prev) !== JSON.stringify(curr)) {
+                changes.modified.push({ old: prev, new: curr });
+              }
+            }
+
+            return {
+              isFirstRun: false,
+              changes,
+              hasChanges: changes.added.length > 0 || changes.removed.length > 0 || changes.modified.length > 0
+            };
+          }
+
+          async function main() {
+            console.log('📡 Fetching BoondManager API documentation...');
+            const currentSnapshot = await fetchApiEndpoints();
+
+            console.log(`✅ Found ${currentSnapshot.endpointsCount} endpoints`);
+
+            // Charge le snapshot précédent
+            let previousSnapshot = null;
+            if (fs.existsSync(SNAPSHOT_FILE)) {
+              previousSnapshot = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, 'utf8'));
+              console.log(`📂 Previous snapshot from ${previousSnapshot.timestamp}`);
+            }
+
+            // Compare les snapshots
+            const comparison = await compareSnapshots(currentSnapshot, previousSnapshot);
+
+            // Sauvegarde le snapshot actuel
+            fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(currentSnapshot, null, 2));
+            console.log(`💾 Snapshot saved to ${SNAPSHOT_FILE}`);
+
+            // Output pour GitHub Actions
+            if (comparison.isFirstRun) {
+              console.log('::notice::First run - baseline snapshot created');
+              fs.writeFileSync('changes.json', JSON.stringify({ isFirstRun: true }, null, 2));
+            } else if (comparison.hasChanges) {
+              console.log('::warning::Changes detected in BoondManager API!');
+              console.log(`  - Added: ${comparison.changes.added.length}`);
+              console.log(`  - Removed: ${comparison.changes.removed.length}`);
+              console.log(`  - Modified: ${comparison.changes.modified.length}`);
+
+              fs.writeFileSync('changes.json', JSON.stringify(comparison, null, 2));
+            } else {
+              console.log('::notice::No changes detected');
+              fs.writeFileSync('changes.json', JSON.stringify({ hasChanges: false }, null, 2));
+            }
+          }
+
+          main().catch(error => {
+            console.error('::error::Script failed:', error);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Commit snapshot changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [[ -f .github/api-snapshot.json ]]; then
+            git add .github/api-snapshot.json
+            if git diff --staged --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "chore: update BoondManager API snapshot [skip ci]"
+              git push
+            fi
+          fi
+
+      - name: Create GitHub issue for changes
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -f changes.json ]]; then
+            echo "No changes file found"
+            exit 0
+          fi
+
+          node << 'EOF'
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+
+          const changes = JSON.parse(fs.readFileSync('changes.json', 'utf8'));
+
+          if (changes.isFirstRun) {
+            console.log('First run - no issue created');
+            process.exit(0);
+          }
+
+          if (!changes.hasChanges) {
+            console.log('No changes detected - no issue created');
+            process.exit(0);
+          }
+
+          // Construit le corps de l'issue
+          let body = `## 🔔 Changements détectés dans l'API BoondManager\n\n`;
+          body += `**Date de détection**: ${new Date().toISOString().split('T')[0]}\n`;
+          body += `**Source**: [Documentation officielle BoondManager](https://doc.boondmanager.com/api-externe/raml-build/)\n\n`;
+
+          if (changes.changes.added.length > 0) {
+            body += `### ➕ Nouveaux endpoints (${changes.changes.added.length})\n\n`;
+            changes.changes.added.slice(0, 10).forEach(ep => {
+              body += `- **${ep.method || 'GET'}** \`${ep.name || ep.path}\`\n`;
+              if (ep.description) {
+                body += `  > ${ep.description}\n`;
+              }
+            });
+            if (changes.changes.added.length > 10) {
+              body += `\n_... et ${changes.changes.added.length - 10} autres_\n`;
+            }
+            body += '\n';
+          }
+
+          if (changes.changes.removed.length > 0) {
+            body += `### ➖ Endpoints supprimés (${changes.changes.removed.length})\n\n`;
+            changes.changes.removed.slice(0, 10).forEach(ep => {
+              body += `- **${ep.method || 'GET'}** \`${ep.name || ep.path}\`\n`;
+            });
+            if (changes.changes.removed.length > 10) {
+              body += `\n_... et ${changes.changes.removed.length - 10} autres_\n`;
+            }
+            body += '\n';
+          }
+
+          if (changes.changes.modified.length > 0) {
+            body += `### 🔄 Endpoints modifiés (${changes.changes.modified.length})\n\n`;
+            changes.changes.modified.slice(0, 5).forEach(({ old, new: curr }) => {
+              body += `- \`${curr.name || curr.path}\`\n`;
+            });
+            if (changes.changes.modified.length > 5) {
+              body += `\n_... et ${changes.changes.modified.length - 5} autres_\n`;
+            }
+            body += '\n';
+          }
+
+          body += `---\n\n`;
+          body += `### 📋 Actions recommandées\n\n`;
+          body += `- [ ] Examiner les changements dans la [documentation officielle](https://doc.boondmanager.com/api-externe/raml-build/)\n`;
+          body += `- [ ] Mettre à jour les schémas Zod dans \`src/schemas/\` si nécessaire\n`;
+          body += `- [ ] Ajouter/modifier les outils dans \`src/tools/\`\n`;
+          body += `- [ ] Mettre à jour les tests correspondants\n`;
+          body += `- [ ] Regénérer \`TOOLS.md\` via \`npm run docs:tools\`\n`;
+          body += `- [ ] Mettre à jour le \`CHANGELOG.md\`\n`;
+          body += `\n_Issue créée automatiquement par le workflow \`api-monitor.yml\`_`;
+
+          // Sauvegarde le corps de l'issue
+          fs.writeFileSync('issue-body.md', body);
+
+          // Crée l'issue via gh CLI
+          const title = `[API] Nouveautés détectées dans BoondManager API (${new Date().toISOString().split('T')[0]})`;
+
+          try {
+            execSync(`gh issue create --title "${title}" --body-file issue-body.md --label enhancement,api-update`, {
+              stdio: 'inherit'
+            });
+            console.log('✅ Issue created successfully');
+          } catch (error) {
+            console.error('❌ Failed to create issue:', error.message);
+            process.exit(1);
+          }
+          EOF
+
+      - name: Upload changes artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-changes-${{ github.run_number }}
+          path: |
+            changes.json
+            .github/api-snapshot.json
+          retention-days: 90

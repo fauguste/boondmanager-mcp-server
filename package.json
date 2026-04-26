@@ -40,6 +40,8 @@
     "typecheck": "tsc --noEmit",
     "docs:tools": "npm run build && node scripts/generate-tools-catalog.mjs",
     "docs:tools:check": "npm run build && node scripts/generate-tools-catalog.mjs --check",
+    "api:monitor:test": "node scripts/test-api-monitor.cjs",
+    "api:monitor:save": "node scripts/test-api-monitor.cjs --save",
     "prepare": "husky",
     "prepublishOnly": "npm run build"
   },

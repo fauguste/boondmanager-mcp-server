@@ -14,3 +14,7 @@ coverage/
 
 .DS_Store
 Thumbs.db
+
+# API monitoring workflow artifacts
+changes.json
+issue-body.md

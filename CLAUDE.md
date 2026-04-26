@@ -345,6 +345,7 @@ Configured via environment variables (never hardcoded), in priority order:
   - **MCP Registry** via `mcp-publisher` with GitHub OIDC
   - **GHCR** (`ghcr.io/fauguste/boondmanager-mcp-server`) — multi-arch (`linux/amd64`+`linux/arm64`) with provenance + SBOM, tags `:X.Y.Z` `:X.Y` `:X` `:latest`
 - **CodeQL** (`.github/workflows/codeql.yml`): static analysis for JS/TS and GitHub Actions.
+- **API Monitor** (`.github/workflows/api-monitor.yml`): Hebdomadaire (lundis 9h UTC), surveille la documentation officielle BoondManager (`https://doc.boondmanager.com/api-externe/raml-build/`), compare avec le snapshot précédent (`.github/api-snapshot.json`), crée une issue GitHub si nouveautés détectées. Documentation complète: `.github/API_MONITORING.md`.
 - **Dependabot**: configured for npm and GitHub Actions.
 - **Distribution**: `docs/distribution.md` is the single source of truth for what ships where and the few manual one-time actions still outstanding (GitHub topics, awesome-mcp-servers PR, Glama/PulseMCP/mcp.so submissions).
 

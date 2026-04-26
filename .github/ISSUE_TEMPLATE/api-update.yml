@@ -1,0 +1,111 @@
+name: 🔔 Mise à jour API BoondManager
+description: Issue créée automatiquement lors de la détection de changements dans l'API BoondManager
+title: "[API] Nouveautés détectées dans BoondManager API"
+labels: ["enhancement", "api-update", "automated"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🤖 Issue créée automatiquement
+
+        Cette issue a été générée par le workflow `api-monitor.yml` suite à la détection de changements dans la documentation officielle de l'API BoondManager.
+
+        **Documentation source**: https://doc.boondmanager.com/api-externe/raml-build/
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Résumé des changements
+      description: Description automatique des modifications détectées
+      placeholder: |
+        ### ➕ Nouveaux endpoints (X)
+        - **GET** `/resources/export`
+        - **POST** `/projects/batch-update`
+
+        ### ➖ Endpoints supprimés (Y)
+        - **DELETE** `/legacy/cleanup`
+
+        ### 🔄 Endpoints modifiés (Z)
+        - `/contacts/search` — Nouveaux paramètres de filtre
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: actions
+    attributes:
+      label: Actions recommandées
+      description: Checklist des étapes à suivre pour intégrer ces changements
+      options:
+        - label: Examiner les changements dans la [documentation officielle](https://doc.boondmanager.com/api-externe/raml-build/)
+        - label: Mettre à jour les schémas Zod dans `src/schemas/` si nécessaire
+        - label: Ajouter/modifier les outils dans `src/tools/`
+        - label: Mettre à jour les tests correspondants
+        - label: Regénérer `TOOLS.md` via `npm run docs:tools`
+        - label: Mettre à jour le `CHANGELOG.md`
+        - label: Créer une PR avec les modifications
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Détails techniques
+      description: Informations supplémentaires sur les changements détectés
+      placeholder: |
+        **Date de détection**: 2026-04-26
+        **Snapshot précédent**: 2026-04-19
+        **Endpoints totaux**: 156 → 158
+
+        Voir l'artifact `api-changes-{run_number}` pour le diff complet.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      description: Niveau de priorité pour intégrer ces changements
+      options:
+        - 🔴 Haute - Breaking changes ou fonctionnalités critiques
+        - 🟠 Moyenne - Nouvelles fonctionnalités utiles
+        - 🟢 Basse - Améliorations mineures ou clarifications
+    validations:
+      required: false
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact estimé
+      description: Complexité d'intégration des changements
+      options:
+        - 🔥 Majeur - Refonte d'architecture nécessaire
+        - ⚙️ Modéré - Plusieurs fichiers à modifier
+        - ✅ Mineur - Changements localisés
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes additionnelles
+      description: Contexte, observations, ou questions
+      placeholder: |
+        - Ces changements semblent liés à la nouvelle version X.Y de BoondManager
+        - Certains endpoints obsolètes ont été retirés
+        - Nécessite coordination avec l'équipe BoondManager ?
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        ## 📚 Ressources
+
+        - [Documentation API BoondManager](https://doc.boondmanager.com/api-externe/raml-build/)
+        - [Workflow de surveillance](.github/workflows/api-monitor.yml)
+        - [Documentation du monitoring](.github/API_MONITORING.md)
+        - [Snapshot actuel](.github/api-snapshot.json)
+
+        ---
+
+        _Issue créée automatiquement par `api-monitor.yml` le {{ date }}_
