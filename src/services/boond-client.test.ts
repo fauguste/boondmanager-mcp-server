@@ -9,8 +9,9 @@ import {
   apiRequest,
   parseBoondErrorBody,
   formatApiError,
+  resolveTimeoutMs,
 } from "./boond-client.js";
-import { CHARACTER_LIMIT } from "../constants.js";
+import { CHARACTER_LIMIT, DEFAULT_HTTP_TIMEOUT_MS } from "../constants.js";
 
 describe("buildSearchQuery", () => {
   it("should map keywords, page, and pageSize correctly", () => {
@@ -414,6 +415,74 @@ describe("apiRequest", () => {
     const fetchCall = vi.mocked(fetch).mock.calls[0];
     const url = fetchCall[0] as string;
     expect(url).not.toContain("empty");
+  });
+
+  it("should pass an AbortSignal with a timeout to fetch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-length": "10" }),
+        json: () => Promise.resolve({ data: [] }),
+      })
+    );
+
+    await apiRequest("/candidates");
+    const fetchCall = vi.mocked(fetch).mock.calls[0];
+    const options = fetchCall[1] as RequestInit;
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("should surface a clear timeout error when the request is aborted", async () => {
+    process.env.BOOND_HTTP_TIMEOUT_MS = "1234";
+    const abortErr = new Error("The operation was aborted due to timeout");
+    abortErr.name = "TimeoutError";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abortErr));
+
+    await expect(apiRequest("/candidates")).rejects.toThrow(/timed out after 1234ms/);
+    await expect(apiRequest("/candidates")).rejects.toThrow(/BOOND_HTTP_TIMEOUT_MS/);
+
+    delete process.env.BOOND_HTTP_TIMEOUT_MS;
+  });
+
+  it("should rethrow unrelated fetch errors as-is", async () => {
+    const networkErr = new Error("ECONNREFUSED");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(networkErr));
+
+    await expect(apiRequest("/candidates")).rejects.toThrow("ECONNREFUSED");
+  });
+});
+
+describe("resolveTimeoutMs", () => {
+  afterEach(() => {
+    delete process.env.BOOND_HTTP_TIMEOUT_MS;
+  });
+
+  it("returns the default when the env var is unset", () => {
+    expect(resolveTimeoutMs()).toBe(DEFAULT_HTTP_TIMEOUT_MS);
+  });
+
+  it("honours a positive integer override", () => {
+    process.env.BOOND_HTTP_TIMEOUT_MS = "5000";
+    expect(resolveTimeoutMs()).toBe(5000);
+  });
+
+  it("falls back to the default on non-numeric values", () => {
+    process.env.BOOND_HTTP_TIMEOUT_MS = "not-a-number";
+    expect(resolveTimeoutMs()).toBe(DEFAULT_HTTP_TIMEOUT_MS);
+  });
+
+  it("falls back to the default on zero or negative values", () => {
+    process.env.BOOND_HTTP_TIMEOUT_MS = "0";
+    expect(resolveTimeoutMs()).toBe(DEFAULT_HTTP_TIMEOUT_MS);
+    process.env.BOOND_HTTP_TIMEOUT_MS = "-100";
+    expect(resolveTimeoutMs()).toBe(DEFAULT_HTTP_TIMEOUT_MS);
+  });
+
+  it("ignores unresolved template placeholders", () => {
+    process.env.BOOND_HTTP_TIMEOUT_MS = "${user_config.timeout}";
+    expect(resolveTimeoutMs()).toBe(DEFAULT_HTTP_TIMEOUT_MS);
   });
 });
 

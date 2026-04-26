@@ -4,6 +4,11 @@ export const CHARACTER_LIMIT = 50000;
 export const DEFAULT_PAGE_SIZE = 30;
 export const MAX_PAGE_SIZE = 500;
 
+// HTTP client defaults
+// Timeout applied to every BoondManager API request. Overridable via
+// BOOND_HTTP_TIMEOUT_MS to handle slow tenants or long reporting queries.
+export const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
+
 // API paths
 export const API_PATHS = {
   candidates: "/candidates",

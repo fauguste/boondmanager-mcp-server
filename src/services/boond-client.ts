@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { DEFAULT_BASE_URL, CHARACTER_LIMIT } from "../constants.js";
+import { DEFAULT_BASE_URL, CHARACTER_LIMIT, DEFAULT_HTTP_TIMEOUT_MS } from "../constants.js";
 import type { BoondConfig, JsonApiResponse, SearchParams } from "../types.js";
 
 let config: BoondConfig | null = null;
@@ -100,6 +100,32 @@ export function parseBoondErrorBody(body: string): string | null {
   }
 }
 
+/**
+ * Resolve the per-request HTTP timeout in milliseconds.
+ *
+ * Reads BOOND_HTTP_TIMEOUT_MS at call time so tests / runtime overrides take
+ * effect without restarting the process. Falls back to the default for
+ * unset, non-numeric, or non-positive values.
+ *
+ * Exported for unit testing.
+ */
+export function resolveTimeoutMs(): number {
+  const raw = envOrUndefined("BOOND_HTTP_TIMEOUT_MS");
+  if (!raw) return DEFAULT_HTTP_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_HTTP_TIMEOUT_MS;
+  return Math.floor(parsed);
+}
+
+/** True when an error from fetch() came from an AbortSignal firing. */
+function isAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // AbortSignal.timeout() rejects with a DOMException whose name is "TimeoutError";
+  // generic aborts surface as "AbortError". Both indicate the request never
+  // completed end-to-end and should be reported as a timeout.
+  return err.name === "TimeoutError" || err.name === "AbortError";
+}
+
 /** Status-specific hint to help the LLM (or human) recover from common failures. */
 function hintForStatus(status: number): string {
   switch (status) {
@@ -177,12 +203,32 @@ export async function apiRequest(
     "Content-Type": "application/json",
   };
 
-  const fetchOptions: RequestInit = { method, headers };
+  const timeoutMs = resolveTimeoutMs();
+  const fetchOptions: RequestInit = {
+    method,
+    headers,
+    signal: AbortSignal.timeout(timeoutMs),
+  };
   if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
     fetchOptions.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url.toString(), fetchOptions);
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), fetchOptions);
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new Error(
+        [
+          `BoondManager API request timed out after ${timeoutMs}ms`,
+          `Endpoint: ${method} ${path}`,
+          "Hint: Increase BOOND_HTTP_TIMEOUT_MS or check connectivity to the BoondManager API.",
+        ].join("\n"),
+        { cause: err }
+      );
+    }
+    throw err;
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");

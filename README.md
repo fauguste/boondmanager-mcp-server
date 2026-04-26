@@ -319,6 +319,16 @@ export BOOND_BASE_URL="https://votre-instance.boondmanager.com/api"
 
 Par defaut, l'URL est `https://ui.boondmanager.com/api`.
 
+### Delai d'expiration HTTP
+
+Chaque requete vers l'API BoondManager expire au bout de **30 secondes** par defaut. Pour les tenants lents ou des rapports volumineux, augmenter via :
+
+```bash
+export BOOND_HTTP_TIMEOUT_MS=60000   # 60 s
+```
+
+Si une requete depasse le delai, le serveur renvoie une erreur explicite mentionnant `BOOND_HTTP_TIMEOUT_MS` plutot que de rester bloque indefiniment.
+
 ## Transports
 
 Le serveur supporte deux transports MCP, selectionnables via la variable d'environnement `MCP_TRANSPORT`.
