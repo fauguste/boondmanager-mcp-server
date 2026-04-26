@@ -1,0 +1,60 @@
+# Smithery configuration — https://smithery.ai/docs/build/project-config
+# Lets smithery.ai (and aggregators that mirror it) install this MCP server
+# with one click and surface the BoondManager auth knobs in their UI.
+startCommand:
+  type: stdio
+  # JSON Schema describing the user-supplied config. Three auth options are
+  # offered (in priority order, matching src/services/boond-client.ts):
+  #   1. JWT auto: BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY
+  #   2. Pre-built JWT: BOOND_API_TOKEN
+  #   3. BasicAuth: BOOND_USER + BOOND_PASSWORD
+  # All fields are optional in the schema so the user can pick one path; the
+  # server will refuse to start if no complete auth combo is provided.
+  configSchema:
+    type: object
+    properties:
+      boondBaseUrl:
+        type: string
+        title: BoondManager base URL
+        description: API base URL. Leave blank for the default (https://ui.boondmanager.com/api).
+        default: https://ui.boondmanager.com/api
+      boondUserToken:
+        type: string
+        title: User Token (JWT auto, option 1)
+        description: BoondManager user token. Mon compte > Informations de connexion > Clé d'API.
+      boondClientToken:
+        type: string
+        title: Client Token (JWT auto, option 1)
+        description: BoondManager client token. Administration > Espace Développeur > API / Sandbox.
+      boondClientKey:
+        type: string
+        title: Client Key (JWT auto, option 1)
+        description: BoondManager client secret key. Administration > Espace Développeur > API / Sandbox.
+      boondApiToken:
+        type: string
+        title: Pre-built JWT (option 2)
+        description: A BoondManager JWT already constructed elsewhere. Alternative to option 1.
+      boondUser:
+        type: string
+        title: BasicAuth user (option 3)
+        description: BoondManager username for HTTP BasicAuth.
+      boondPassword:
+        type: string
+        title: BasicAuth password (option 3)
+        description: BoondManager password for HTTP BasicAuth.
+  # Smithery invokes commandFunction(config) to build the launch command.
+  # We forward the form fields to the env vars the server reads at startup.
+  commandFunction: |-
+    config => ({
+      command: 'npx',
+      args: ['-y', 'boondmanager-mcp-server'],
+      env: {
+        ...(config.boondBaseUrl ? { BOOND_BASE_URL: config.boondBaseUrl } : {}),
+        ...(config.boondUserToken ? { BOOND_USER_TOKEN: config.boondUserToken } : {}),
+        ...(config.boondClientToken ? { BOOND_CLIENT_TOKEN: config.boondClientToken } : {}),
+        ...(config.boondClientKey ? { BOOND_CLIENT_KEY: config.boondClientKey } : {}),
+        ...(config.boondApiToken ? { BOOND_API_TOKEN: config.boondApiToken } : {}),
+        ...(config.boondUser ? { BOOND_USER: config.boondUser } : {}),
+        ...(config.boondPassword ? { BOOND_PASSWORD: config.boondPassword } : {}),
+      },
+    })

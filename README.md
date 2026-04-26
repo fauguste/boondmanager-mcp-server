@@ -245,6 +245,10 @@ npm install
 npm run build
 ```
 
+### Smithery
+
+Le serveur est aussi disponible sur [Smithery](https://smithery.ai/server/@fauguste/boondmanager-mcp-server). La configuration est dans `smithery.yaml` à la racine du repo : Smithery propose une UI avec les champs d'authentification (JWT auto / JWT pré-construit / BasicAuth) et installe le serveur via `npx`.
+
 ### LobeChat / LobeHub
 
 Le serveur est listé sur le [marketplace MCP de LobeHub](https://lobehub.com/mcp/fauguste-boondmanager-mcp-server). Dans LobeChat (auto-hebergé ou cloud), ajouter le MCP via **Reglages > Plugins > MCP > Ajouter** avec :
