@@ -29,6 +29,63 @@ interface PromptDefinition {
   build: (args: Record<string, string | undefined>) => string;
 }
 
+/**
+ * Pour chaque prompt, l'utilisateur peut passer soit un ID numérique (rapide,
+ * sans ambiguïté), soit un libellé textuel (« Jean Dupont », « ACME »,
+ * « Refonte SI »…). Le runbook renvoyé au modèle contient alors une étape
+ * préalable qui résout le libellé via le `*_search` adéquat avant de l'utiliser
+ * comme filtre. Cela évite à l'utilisateur de chercher l'ID en amont — la
+ * majorité des appels passent en une seule formulation naturelle.
+ */
+type EntityKind = "resource" | "society" | "opportunity" | "agency";
+
+const SEARCH_TOOL_BY_KIND: Record<EntityKind, string> = {
+  resource: "boond_resources_search",
+  society: "boond_companies_search",
+  opportunity: "boond_opportunities_search",
+  agency: "boond_agencies_search",
+};
+
+const LABEL_BY_KIND: Record<EntityKind, string> = {
+  resource: "ressource",
+  society: "société",
+  opportunity: "opportunité",
+  agency: "agence",
+};
+
+interface Resolved {
+  /** Texte à inliner là où l'ID apparaît dans les filtres : soit un ID numérique, soit un placeholder. */
+  idForFilter: string;
+  /** Bloc d'instructions à prépender avant les étapes (vide si l'input est déjà un ID numérique). */
+  preamble: string;
+}
+
+const resolveEntity = (input: string, kind: EntityKind, placeholder: string): Resolved => {
+  const trimmed = input.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return { idForFilter: trimmed, preamble: "" };
+  }
+  const tool = SEARCH_TOOL_BY_KIND[kind];
+  const label = LABEL_BY_KIND[kind];
+  const preamble = [
+    `**Préalable — résolution de la ${label} :** « ${trimmed} » n'est pas un ID numérique.`,
+    `- Appeler \`${tool}\` avec \`keywords: "${trimmed}"\` et \`pageSize: 5\`.`,
+    `- Retenir l'\`id\` du résultat le plus pertinent → ce sera la valeur \`${placeholder}\` à utiliser dans toutes les étapes ci-dessous.`,
+    `- Si plusieurs candidats matchent, demander confirmation à l'utilisateur avant de poursuivre.`,
+    "",
+  ].join("\n");
+  return { idForFilter: placeholder, preamble };
+};
+
+const ID_OR_NAME_HINT_RESOURCE =
+  "Accepte soit l'ID numérique, soit « Prénom Nom » (le serveur résoudra automatiquement via `boond_resources_search`).";
+const ID_OR_NAME_HINT_SOCIETY =
+  "Accepte soit l'ID numérique, soit le nom de la société (résolution auto via `boond_companies_search`).";
+const ID_OR_NAME_HINT_OPPORTUNITY =
+  "Accepte soit l'ID numérique, soit l'intitulé de l'opportunité (résolution auto via `boond_opportunities_search`).";
+const ID_OR_NAME_HINT_AGENCY =
+  "Accepte soit l'ID numérique, soit le nom de l'agence (résolution auto via `boond_agencies_search`).";
+
 const PROMPTS: PromptDefinition[] = [
   {
     name: "synthese_equipe",
@@ -41,7 +98,9 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID du manager (ressource Boond). Si absent, l'outil `boond_application_current_user` doit être appelé pour le récupérer."
+          "Manager ciblé. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, l'outil `boond_application_current_user` est appelé pour le récupérer."
         ),
       periode: z
         .string()
@@ -50,23 +109,34 @@ const PROMPTS: PromptDefinition[] = [
     },
     build: ({ manager_id, periode }) => {
       const periodeText = periode || "le mois en cours";
-      const managerStep = manager_id
-        ? `Le manager ciblé est l'ID ${manager_id}.`
-        : "Commence par appeler `boond_application_current_user` pour obtenir mon ID utilisateur, puis utilise-le comme `manager_id`.";
-      return [
-        `Produis une synthèse de l'équipe pour ${periodeText}.`,
-        "",
+      let preamble = "";
+      let managerStep: string;
+      let managerIdLit: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        managerIdLit = r.idForFilter;
+        managerStep = `Le manager ciblé a pour ID \`${managerIdLit}\`.`;
+      } else {
+        managerIdLit = "<MANAGER_ID>";
+        managerStep =
+          "Commence par appeler `boond_application_current_user` pour obtenir mon ID utilisateur, puis utilise-le comme `<MANAGER_ID>`.";
+      }
+      const lines: string[] = [`Produis une synthèse de l'équipe pour ${periodeText}.`, ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
         managerStep,
         "",
         "Étapes :",
-        "1. Lister les membres de l'équipe : `boond_resources_search` avec `perimeterManagers: [<manager_id>]` et `resourceStates` pour ne garder que les actifs (récupère les états valides via `boond_application_dictionary` avec `setting.state.resource` si besoin).",
+        `1. Lister les membres de l'équipe : \`boond_resources_search\` avec \`perimeterManagers: [${managerIdLit}]\` et \`resourceStates\` pour ne garder que les actifs (récupère les états valides via \`boond_application_dictionary\` avec \`setting.state.resource\` si besoin).`,
         "2. Pour chaque ressource retournée, récupérer en parallèle :",
         "   - `boond_resources_positionings` (qui est sur quel projet)",
         "   - `boond_resources_absences_reports` (absences validées/à venir)",
         "   - `boond_resources_times_reports` (CRA récent, pour confirmer l'occupation)",
         "3. Synthétiser un tableau par personne : nom, projet courant, % occupation, absences sur la période, disponibilité.",
-        "4. Conclure par les signaux faibles (sur-/sous-charge, absences non couvertes, ressources sans positionnement).",
-      ].join("\n");
+        "4. Conclure par les signaux faibles (sur-/sous-charge, absences non couvertes, ressources sans positionnement)."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -83,16 +153,24 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID du commercial. Si absent, scope = équipe de l'utilisateur courant via `perimeterDynamic: ['data']`."
+          "Commercial ciblé. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, scope = équipe de l'utilisateur courant via `perimeterDynamic: ['data']`."
         ),
     },
     build: ({ date_debut, date_fin, manager_id }) => {
-      const scopeFilter = manager_id
-        ? `\`perimeterManagers: [${manager_id}]\``
-        : "`perimeterDynamic: ['data']` (mes opportunités)";
-      return [
-        `Analyse mon pipeline commercial avec closing entre ${date_debut} et ${date_fin}.`,
-        "",
+      let preamble = "";
+      let scopeFilter: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scopeFilter = `\`perimeterManagers: [${r.idForFilter}]\``;
+      } else {
+        scopeFilter = "`perimeterDynamic: ['data']` (mes opportunités)";
+      }
+      const lines: string[] = [`Analyse mon pipeline commercial avec closing entre ${date_debut} et ${date_fin}.`, ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
         `Périmètre : ${scopeFilter}.`,
         "",
         "Étapes :",
@@ -107,8 +185,9 @@ const PROMPTS: PromptDefinition[] = [
         "   - Nombre total d'opportunités, par état",
         "   - CA pondéré total (somme de `turnoverWeightedExcludingTax`)",
         "   - Top 10 par montant pondéré, avec société/contact/closingDate",
-        "   - Risques : opportunités dont la closingDate est passée mais qui ne sont pas encore en état Gagnée/Perdue.",
-      ].join("\n");
+        "   - Risques : opportunités dont la closingDate est passée mais qui ne sont pas encore en état Gagnée/Perdue."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -119,24 +198,35 @@ const PROMPTS: PromptDefinition[] = [
       "Liste les factures impayées avec date d'échéance dépassée, regroupées par société. " +
       "Optionnellement filtrable sur une société spécifique.",
     argsSchema: {
-      society_id: z.string().optional().describe("ID d'une société pour cibler la relance."),
+      society_id: z
+        .string()
+        .optional()
+        .describe("Société ciblée pour la relance. " + ID_OR_NAME_HINT_SOCIETY),
     },
     build: ({ society_id }) => {
-      return [
-        "Identifie les factures à relancer (impayées dont l'échéance est dépassée).",
-        "",
+      let preamble = "";
+      let filterLine: string;
+      if (society_id) {
+        const r = resolveEntity(society_id, "society", "<SOCIETE_ID>");
+        preamble = r.preamble;
+        filterLine = `   - \`companyId: "${r.idForFilter}"\``;
+      } else {
+        filterLine = "   - sans filtre société (toutes les factures du périmètre courant)";
+      }
+      const lines: string[] = ["Identifie les factures à relancer (impayées dont l'échéance est dépassée).", ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
         "Étapes :",
         "1. Appeler `boond_invoices_search` :",
-        society_id
-          ? `   - \`companyId: "${society_id}"\``
-          : "   - sans filtre société (toutes les factures du périmètre courant)",
+        filterLine,
         "   - `pageSize: 100`",
         "2. Récupérer le dictionnaire `setting.state.invoice` via `boond_application_dictionary` pour identifier les états « payée » / « partiellement payée » / etc.",
         "3. Filtrer côté agent : ne conserver que les factures dont l'état n'est PAS « payée » ET dont la `dueDate` est strictement antérieure à aujourd'hui.",
         "4. Pour chaque facture retenue, récupérer le détail via `boond_invoices_get` si nécessaire pour obtenir le contact/email de relance.",
         "5. Restituer un tableau groupé par société : société | nombre de factures impayées | total HT impayé | facture la plus ancienne (référence + jours de retard) | contact à relancer.",
-        "6. Ajouter une ligne « Total » en bas.",
-      ].join("\n");
+        "6. Ajouter une ligne « Total » en bas."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -146,14 +236,16 @@ const PROMPTS: PromptDefinition[] = [
     description:
       "À partir d'une opportunité (ses outils, expertise, mobilité), trouve les candidats actifs qui matchent.",
     argsSchema: {
-      opportunity_id: z.string().describe("ID de l'opportunité à pourvoir."),
+      opportunity_id: z.string().describe("Opportunité à pourvoir. " + ID_OR_NAME_HINT_OPPORTUNITY),
     },
     build: ({ opportunity_id }) => {
-      return [
-        `Identifie les candidats qui matchent l'opportunité ${opportunity_id}.`,
-        "",
+      const r = resolveEntity(opportunity_id ?? "", "opportunity", "<OPPORTUNITY_ID>");
+      const oppLit = r.idForFilter;
+      const lines: string[] = [`Identifie les candidats qui matchent l'opportunité ${oppLit}.`, ""];
+      if (r.preamble) lines.push(r.preamble);
+      lines.push(
         "Étapes :",
-        `1. Récupérer le détail de l'opportunité : \`boond_opportunities_get(id="${opportunity_id}")\` puis l'onglet \`information\` pour les attributs détaillés.`,
+        `1. Récupérer le détail de l'opportunité : \`boond_opportunities_get(id="${oppLit}")\` puis l'onglet \`information\` pour les attributs détaillés.`,
         "2. Extraire les critères : `tools`, `expertiseAreas`, `activityAreas`, `places` (mobilité), `durations`, `startDate`/`endDate`.",
         "3. Appeler `boond_candidates_search` avec :",
         '   - les `tools` extraits (logique OU par défaut ; si l\'opportunité est très exigeante, repasser avec `["#AND#", ...]` pour exiger toutes les compétences)',
@@ -163,8 +255,9 @@ const PROMPTS: PromptDefinition[] = [
         '   - `period: "available"` + `startDate`/`endDate` calés sur la mission, pour ne garder que les candidats disponibles',
         "   - `pageSize: 50`",
         "4. Pour les top 20 candidats retournés, récupérer `boond_candidates_technical_data` pour vérifier l'adéquation fine.",
-        "5. Restituer un classement : nom | titre | dispo | note d'adéquation (sur 10) avec justification 1 ligne.",
-      ].join("\n");
+        "5. Restituer un classement : nom | titre | dispo | note d'adéquation (sur 10) avec justification 1 ligne."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -173,23 +266,26 @@ const PROMPTS: PromptDefinition[] = [
     title: "Fiche complète d'un collaborateur",
     description: "Vue 360° d'une ressource : info, profil technique, positionnements, absences, CRA récents.",
     argsSchema: {
-      resource_id: z.string().describe("ID de la ressource."),
+      resource_id: z.string().describe("Ressource ciblée. " + ID_OR_NAME_HINT_RESOURCE),
     },
     build: ({ resource_id }) => {
-      return [
-        `Produis la fiche complète de la ressource ${resource_id}.`,
-        "",
+      const r = resolveEntity(resource_id ?? "", "resource", "<RESOURCE_ID>");
+      const idLit = r.idForFilter;
+      const lines: string[] = [`Produis la fiche complète de la ressource ${idLit}.`, ""];
+      if (r.preamble) lines.push(r.preamble);
+      lines.push(
         "Étapes (à exécuter en parallèle quand possible) :",
-        `1. \`boond_resources_information(id="${resource_id}")\` — coordonnées et état civil`,
-        `2. \`boond_resources_technical_data(id="${resource_id}")\` — compétences, formations, langues, CV`,
-        `3. \`boond_resources_administrative(id="${resource_id}")\` — données RH (TJM, salaire, contrat) si autorisé`,
-        `4. \`boond_resources_positionings(id="${resource_id}")\` — positionnements actifs et historiques`,
-        `5. \`boond_resources_projects(id="${resource_id}")\` — projets passés/en cours`,
-        `6. \`boond_resources_absences_reports(id="${resource_id}")\` — absences à venir et passées récentes`,
-        `7. \`boond_resources_times_reports(id="${resource_id}")\` — CRA des 3 derniers mois`,
+        `1. \`boond_resources_information(id="${idLit}")\` — coordonnées et état civil`,
+        `2. \`boond_resources_technical_data(id="${idLit}")\` — compétences, formations, langues, CV`,
+        `3. \`boond_resources_administrative(id="${idLit}")\` — données RH (TJM, salaire, contrat) si autorisé`,
+        `4. \`boond_resources_positionings(id="${idLit}")\` — positionnements actifs et historiques`,
+        `5. \`boond_resources_projects(id="${idLit}")\` — projets passés/en cours`,
+        `6. \`boond_resources_absences_reports(id="${idLit}")\` — absences à venir et passées récentes`,
+        `7. \`boond_resources_times_reports(id="${idLit}")\` — CRA des 3 derniers mois`,
         "",
-        "Restitution : un document structuré en sections (Identité / Profil technique / Mission actuelle / Historique projets / Disponibilité / RH si pertinent). Mettre en évidence : projet courant, prochaine date de fin de mission, prochaine absence, taux d'occupation moyen sur 3 mois.",
-      ].join("\n");
+        "Restitution : un document structuré en sections (Identité / Profil technique / Mission actuelle / Historique projets / Disponibilité / RH si pertinent). Mettre en évidence : projet courant, prochaine date de fin de mission, prochaine absence, taux d'occupation moyen sur 3 mois."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -213,22 +309,33 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID d'un manager pour restreindre à son équipe. Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
+          "Manager pour restreindre à son équipe. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
     },
     build: ({ start_date, end_date, competences, manager_id }) => {
-      const scope = manager_id
-        ? `\`perimeterManagers: [${manager_id}]\``
-        : "`perimeterDynamic: ['managers']` (mon équipe / mes N-1)";
+      let preamble = "";
+      let scope: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scope = `\`perimeterManagers: [${r.idForFilter}]\``;
+      } else {
+        scope = "`perimeterDynamic: ['managers']` (mon équipe / mes N-1)";
+      }
       const skillsStep = competences
         ? `1. Mapper les compétences « ${competences} » vers leurs IDs : \`boond_application_dictionary\` avec \`setting.tool\` (et éventuellement \`setting.expertiseArea\`).`
         : "1. Pas de filtre compétences fourni — passer directement à l'étape 2.";
       const toolsLine = competences
         ? "   - `tools: [...]` issus de l'étape 1 (logique OU ; pour exiger toutes les compétences, mettre `'#AND#'` en 1er élément)"
         : "";
-      return [
+      const lines: string[] = [
         `Identifie les ressources internes disponibles pour un staffing entre ${start_date} et ${end_date}.`,
         "",
+      ];
+      if (preamble) lines.push(preamble);
+      lines.push(
         `Périmètre : ${scope}.`,
         "",
         "Étapes :",
@@ -243,10 +350,9 @@ const PROMPTS: PromptDefinition[] = [
         "   - `boond_resources_positionings` — vérifier qu'aucun positionnement actif ne couvre déjà la fenêtre",
         "   - `boond_resources_technical_data` — confirmer compétences clés et niveau d'expérience",
         "4. Restituer un tableau trié par date de disponibilité : ressource | titre | dispo le | compétences matchées | mobilité | manager | TJM cible.",
-        "5. Conclure par les 3 profils prioritaires à activer + un signal si la pénurie est forte (< 5 résultats — suggérer d'élargir la fenêtre ou les compétences).",
-      ]
-        .filter(Boolean)
-        .join("\n");
+        "5. Conclure par les 3 profils prioritaires à activer + un signal si la pénurie est forte (< 5 résultats — suggérer d'élargir la fenêtre ou les compétences)."
+      );
+      return lines.filter(Boolean).join("\n");
     },
   },
 
@@ -265,15 +371,28 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID d'un manager pour restreindre à son équipe. Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
+          "Manager pour restreindre à son équipe. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
     },
     build: ({ horizon_jours, manager_id }) => {
       const horizon = horizon_jours || "60";
-      const scope = manager_id ? `\`perimeterManagers: [${manager_id}]\`` : "`perimeterDynamic: ['managers']`";
-      return [
+      let preamble = "";
+      let scope: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scope = `\`perimeterManagers: [${r.idForFilter}]\``;
+      } else {
+        scope = "`perimeterDynamic: ['managers']`";
+      }
+      const lines: string[] = [
         `Liste les ressources dont la mission se termine dans les ${horizon} prochains jours.`,
         "",
+      ];
+      if (preamble) lines.push(preamble);
+      lines.push(
         `Périmètre : ${scope}.`,
         "",
         "Étapes :",
@@ -291,8 +410,9 @@ const PROMPTS: PromptDefinition[] = [
         "5. Mettre en évidence en haut du tableau :",
         "   - **Urgent** : fin dans <= 15 jours sans relais identifié",
         "   - **À surveiller** : fin entre 15 et 30 jours sans relais",
-        "6. Conclure par 3-5 actions concrètes : relances commerciales, repositionnements internes, etc.",
-      ].join("\n");
+        "6. Conclure par 3-5 actions concrètes : relances commerciales, repositionnements internes, etc."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -307,24 +427,34 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID d'un manager pour cibler son équipe. Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
+          "Manager pour cibler son équipe. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
       agency_id: z
         .string()
         .optional()
-        .describe("ID d'agence pour cartographier toute une agence (alternatif à `manager_id`)."),
+        .describe("Agence pour cartographier toute une agence (alternatif à `manager_id`). " + ID_OR_NAME_HINT_AGENCY),
       top_n: z.string().optional().describe("Nombre de compétences à mettre en avant dans le top (défaut: 20)."),
     },
     build: ({ manager_id, agency_id, top_n }) => {
       const top = top_n || "20";
-      const scope = agency_id
-        ? `\`perimeterAgencies: [${agency_id}]\``
-        : manager_id
-          ? `\`perimeterManagers: [${manager_id}]\``
-          : "`perimeterDynamic: ['managers']`";
-      return [
-        "Cartographie les compétences techniques du périmètre.",
-        "",
+      let preamble = "";
+      let scope: string;
+      if (agency_id) {
+        const r = resolveEntity(agency_id, "agency", "<AGENCY_ID>");
+        preamble = r.preamble;
+        scope = `\`perimeterAgencies: [${r.idForFilter}]\``;
+      } else if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scope = `\`perimeterManagers: [${r.idForFilter}]\``;
+      } else {
+        scope = "`perimeterDynamic: ['managers']`";
+      }
+      const lines: string[] = ["Cartographie les compétences techniques du périmètre.", ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
         `Périmètre : ${scope}.`,
         "",
         "Étapes :",
@@ -344,8 +474,9 @@ const PROMPTS: PromptDefinition[] = [
         `   - Top ${top} compétences (tableau : compétence | nb ressources | exemples de noms)`,
         "   - Compétences rares (avec porteurs nominatifs et nombre d'opportunités demandant cette compétence)",
         "   - Compétences saturées",
-        "   - Compétences manquantes vs opportunités (recommandations recrutement / formation)",
-      ].join("\n");
+        "   - Compétences manquantes vs opportunités (recommandations recrutement / formation)"
+      );
+      return lines.join("\n");
     },
   },
 
@@ -364,15 +495,28 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID d'un manager pour cibler son équipe. Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
+          "Manager pour cibler son équipe. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
     },
     build: ({ seuil_mois, manager_id }) => {
       const seuil = seuil_mois || "12";
-      const scope = manager_id ? `\`perimeterManagers: [${manager_id}]\`` : "`perimeterDynamic: ['managers']`";
-      return [
+      let preamble = "";
+      let scope: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scope = `\`perimeterManagers: [${r.idForFilter}]\``;
+      } else {
+        scope = "`perimeterDynamic: ['managers']`";
+      }
+      const lines: string[] = [
         `Identifie les CV / dossiers techniques à rafraîchir (seuil d'obsolescence : ${seuil} mois).`,
         "",
+      ];
+      if (preamble) lines.push(preamble);
+      lines.push(
         `Périmètre : ${scope}.`,
         "",
         "Étapes :",
@@ -392,8 +536,9 @@ const PROMPTS: PromptDefinition[] = [
         "   - aucune expérience renseignée.",
         '4. Croiser avec la disponibilité pour prioriser : `boond_resources_search` avec `period: "available"` + fenêtre des 3 prochains mois, et marquer les ressources concernées comme **prioritaires**.',
         "5. Restituer un tableau de relance trié par priorité décroissante : ressource | manager | dernière maj DT | jours d'ancienneté | trous (CV manquant / 0 compétences / 0 expérience) | bientôt dispo (oui/non).",
-        "6. Conclure par les 5 ressources à relancer en premier (avec template de message court à envoyer au manager).",
-      ].join("\n");
+        "6. Conclure par les 5 ressources à relancer en premier (avec template de message court à envoyer au manager)."
+      );
+      return lines.join("\n");
     },
   },
 
@@ -429,23 +574,34 @@ const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe(
-          "ID d'un manager pour restreindre le scope ressources internes. Sinon scope ouvert (toute l'organisation accessible)."
+          "Manager pour restreindre le scope ressources internes. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Sinon scope ouvert (toute l'organisation accessible)."
         ),
     },
     build: ({ competences, experience_min, dispo_avant, inclure_candidats, manager_id }) => {
       const includeCandidates = (inclure_candidats || "oui").toLowerCase() !== "non";
-      const scope = manager_id
-        ? `\`perimeterManagers: [${manager_id}]\``
-        : "(pas de filtre périmètre — recherche sur l'ensemble accessible à l'utilisateur)";
+      let preamble = "";
+      let scope: string;
+      let scopeFilter: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scopeFilter = `\`perimeterManagers: [${r.idForFilter}]\``;
+        scope = scopeFilter;
+      } else {
+        scope = "(pas de filtre périmètre — recherche sur l'ensemble accessible à l'utilisateur)";
+        scopeFilter = "";
+      }
       const dispoLine = dispo_avant
         ? `   - \`period: "available"\`, \`endDate: "${dispo_avant}"\` (disponible au plus tard à cette date)`
         : "";
       const expStep = experience_min
         ? `2bis. Mapper l'expérience minimum « ${experience_min} » vers les IDs \`experiences\` via \`boond_application_dictionary\` avec \`setting.experience\`.`
         : "";
-      return [
-        `Recherche un profil correspondant aux compétences : « ${competences} ».`,
-        "",
+      const lines: string[] = [`Recherche un profil correspondant aux compétences : « ${competences} ».`, ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
         `Scope ressources internes : ${scope}.`,
         `Inclure les candidats actifs : ${includeCandidates ? "oui" : "non"}.`,
         "",
@@ -460,7 +616,7 @@ const PROMPTS: PromptDefinition[] = [
         "   - `expertiseAreas: [...]` éventuellement",
         experience_min ? "   - `experiences: [...]` issus de l'étape 2bis" : "",
         dispoLine,
-        manager_id ? `   - ${scope}` : "",
+        scopeFilter ? `   - ${scopeFilter}` : "",
         "   - `resourceStates` actifs uniquement (consulter `setting.state.resource`)",
         "   - `pageSize: 30`",
         includeCandidates
@@ -468,10 +624,9 @@ const PROMPTS: PromptDefinition[] = [
           : "4. (Skip — recherche limitée aux ressources internes.)",
         "5. Pour les top 10 résultats combinés, récupérer `technical_data` (`boond_resources_technical_data` ou `boond_candidates_technical_data`) pour vérifier l'adéquation fine.",
         "6. Restituer un classement unique : type (Ressource interne / Candidat) | nom | titre | compétences matchées | expérience | dispo | localisation/mobilité | note d'adéquation /10 (1 ligne de justification).",
-        "7. Si moins de 5 résultats : suggérer un assouplissement (retirer une compétence secondaire, élargir le périmètre géographique, accepter un junior, sous-traitance).",
-      ]
-        .filter(Boolean)
-        .join("\n");
+        "7. Si moins de 5 résultats : suggérer un assouplissement (retirer une compétence secondaire, élargir le périmètre géographique, accepter un junior, sous-traitance)."
+      );
+      return lines.filter(Boolean).join("\n");
     },
   },
 

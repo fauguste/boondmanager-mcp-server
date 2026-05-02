@@ -222,4 +222,122 @@ describe("registerAllPrompts", () => {
     expect(text).toContain('period: "available"');
     expect(text).toContain("2026-06-30");
   });
+
+  describe("ID-or-name polymorphism", () => {
+    /**
+     * For each prompt that takes an entity reference (manager / society /
+     * opportunity / resource / agency), passing a non-numeric value must
+     * inject a "résolution préalable" block instructing the model to
+     * resolve the name via the matching search tool before using it as a
+     * filter. Numeric inputs continue to bypass resolution and inline the
+     * ID directly (covered by other tests).
+     */
+    const promptsAndArgs: Array<{
+      name: string;
+      args: Record<string, string>;
+      expectTool: string;
+      expectQuoted: string;
+      expectPlaceholder: string;
+    }> = [
+      {
+        name: "synthese_equipe",
+        args: { manager_id: "Jean Dupont" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Jean Dupont",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "pipeline_commercial",
+        args: { date_debut: "2026-01-01", date_fin: "2026-12-31", manager_id: "Marie Martin" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Marie Martin",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "factures_a_relancer",
+        args: { society_id: "ACME Corp" },
+        expectTool: "boond_companies_search",
+        expectQuoted: "ACME Corp",
+        expectPlaceholder: "<SOCIETE_ID>",
+      },
+      {
+        name: "candidats_pour_opportunite",
+        args: { opportunity_id: "Refonte SI" },
+        expectTool: "boond_opportunities_search",
+        expectQuoted: "Refonte SI",
+        expectPlaceholder: "<OPPORTUNITY_ID>",
+      },
+      {
+        name: "fiche_consultant",
+        args: { resource_id: "Alice Durand" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Alice Durand",
+        expectPlaceholder: "<RESOURCE_ID>",
+      },
+      {
+        name: "staffing_disponible",
+        args: { start_date: "2026-05-01", end_date: "2026-08-01", manager_id: "Bob Leroy" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Bob Leroy",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "fin_de_mission",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "cartographie_competences",
+        args: { agency_id: "Agence Lyon" },
+        expectTool: "boond_agencies_search",
+        expectQuoted: "Agence Lyon",
+        expectPlaceholder: "<AGENCY_ID>",
+      },
+      {
+        name: "cvs_a_mettre_a_jour",
+        args: { manager_id: "David Bernard" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "David Bernard",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "recherche_profil_competences",
+        args: { competences: "Python", manager_id: "Eve Moreau" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Eve Moreau",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+    ];
+
+    it.each(promptsAndArgs)(
+      "$name injects a resolution preamble when the entity arg is a name (not numeric)",
+      async ({ name, args, expectTool, expectQuoted, expectPlaceholder }) => {
+        registerAllPrompts(server);
+        const call = vi.mocked(server.registerPrompt).mock.calls.find((c) => c[0] === name);
+        expect(call).toBeDefined();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cb = call![2] as any;
+        const result = await cb(args);
+        const text = result.messages[0].content.text as string;
+        expect(text).toContain("Préalable");
+        expect(text).toContain(expectTool);
+        expect(text).toContain(`keywords: "${expectQuoted}"`);
+        expect(text).toContain(expectPlaceholder);
+      }
+    );
+
+    it("does NOT emit a resolution preamble when the entity arg is a numeric ID", async () => {
+      registerAllPrompts(server);
+      const call = vi.mocked(server.registerPrompt).mock.calls.find((c) => c[0] === "fiche_consultant");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cb = call![2] as any;
+      const result = await cb({ resource_id: "18081" });
+      const text = result.messages[0].content.text as string;
+      expect(text).not.toContain("Préalable");
+      expect(text).not.toContain("<RESOURCE_ID>");
+      expect(text).toContain("18081");
+    });
+  });
 });
