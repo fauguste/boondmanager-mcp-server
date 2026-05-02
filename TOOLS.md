@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**156 tools** across **36 domains** · **6 prompts** · **20 resources**.
+**156 tools** across **36 domains** · **11 prompts** · **20 resources**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -345,17 +345,22 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_webhooks_get` | Détails d'un webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
-## Prompts (6)
+## Prompts (11)
 
 Pre-orchestrated workflows surfaced via the MCP prompts API.
 
 | Prompt | Title | Args |
 |---|---|---|
 | `candidats_pour_opportunite` | Candidats correspondant à une opportunité | `opportunity_id` |
+| `cartographie_competences` | Cartographie des compétences d'un périmètre | `manager_id?` `agency_id?` `top_n?` |
+| `cvs_a_mettre_a_jour` | Audit fraîcheur des CV / dossiers techniques | `seuil_mois?` `manager_id?` |
 | `factures_a_relancer` | Factures impayées à relancer | `society_id?` |
 | `fiche_consultant` | Fiche complète d'un collaborateur | `resource_id` |
+| `fin_de_mission` | Anticipation des fins de mission | `horizon_jours?` `manager_id?` |
 | `pipeline_commercial` | Pipeline commercial sur une période | `date_debut` `date_fin` `manager_id?` |
 | `recap_hebdo` | Récap hebdomadaire (moi + mon équipe) | `semaine?` |
+| `recherche_profil_competences` | Recherche multi-source d'un profil par compétences | `competences` `experience_min?` `dispo_avant?` `inclure_candidats?` `manager_id?` |
+| `staffing_disponible` | Consultants disponibles pour un staffing | `start_date` `end_date` `competences?` `manager_id?` |
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |
 
 ## Resources (20)

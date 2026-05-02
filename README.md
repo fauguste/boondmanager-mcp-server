@@ -120,7 +120,9 @@ Pour les dictionnaires hors de cette liste curee, l'outil `boond_application_dic
 
 ## Prompts pre-orchestres
 
-En plus des outils, le serveur expose des **prompts MCP** (templates pre-cables) qui orchestrent les bons appels d'outils dans le bon ordre pour les workflows recurrents. Visibles dans les clients qui supportent les prompts (slash command ou menu).
+En plus des outils, le serveur expose des **prompts MCP** (templates pre-cables) qui orchestrent les bons appels d'outils dans le bon ordre pour les workflows recurrents. Visibles dans les clients qui supportent les prompts (Claude Desktop, **Cowork**, Claude Code, MCP Inspector...) sous forme de slash-commands ou de menu.
+
+### Workflows transverses
 
 | Prompt | Usage |
 |--------|-------|
@@ -130,6 +132,62 @@ En plus des outils, le serveur expose des **prompts MCP** (templates pre-cables)
 | `candidats_pour_opportunite` | A partir d'une opportunite, propose les candidats actifs qui matchent (outils, expertise, mobilite, dispo). |
 | `fiche_consultant` | Vue 360 d'une ressource : info + technique + positionnements + absences + CRA recents. |
 | `recap_hebdo` | Recap hebdomadaire : pipeline qui a bouge, equipe absente, projets actifs, actions a mener. |
+
+### Ressources, competences & CV
+
+| Prompt | Usage |
+|--------|-------|
+| `staffing_disponible` | Consultants internes disponibles sur une fenetre donnee (filtre optionnel par competences libres et perimetre), tries par dispo croissante avec top 3 prioritaires. |
+| `fin_de_mission` | Anticipation des fins de mission sous N jours (defaut 60). Marque en **urgent** les fins <= 15j sans relais identifie. |
+| `cartographie_competences` | Cartographie des competences d'un perimetre (equipe / agence) : top N, competences rares (bus-factor), saturees, manquantes vs opportunites ouvertes. |
+| `cvs_a_mettre_a_jour` | Audit fraicheur des CV / dossiers techniques (seuil d'obsolescence configurable). Priorise les ressources bientot sur le marche. |
+| `recherche_profil_competences` | Recherche multi-source (ressources internes + candidats) par mix de competences libres, sans opportunite requise. Classe par adequation /10. |
+
+### Comment invoquer un prompt
+
+Les prompts MCP sont des **modeles de message utilisateur** : tu les invoques toi-meme, le LLM execute ensuite le runbook qu'ils contiennent. Aucun filtre BoondManager a connaitre — tout est embarque cote serveur.
+
+**Claude Desktop / Cowork / MCP Inspector** : tape `/` dans la barre de saisie, choisis le prompt dans la liste, remplis les arguments dans le formulaire qui s'affiche, valide.
+
+**Claude Code** : pareil, `/` puis selection ; les arguments sont demandes inline.
+
+**Fallback (clients sans UI dediee aux prompts)** : cite le prompt par son nom dans une demande libre, le client va recuperer la definition via le protocole MCP. Exemple : *"lance le runbook `staffing_disponible` entre le 1er juin et le 1er septembre 2026, competences Java Spring AWS"*.
+
+Exemples d'invocation des prompts ressources / competences / CV :
+
+```
+/staffing_disponible
+  start_date  = 2026-06-01
+  end_date    = 2026-09-01
+  competences = Java Spring AWS Kubernetes
+  manager_id  = (vide -> mon equipe)
+```
+
+```
+/fin_de_mission
+  horizon_jours = 30
+```
+
+```
+/cartographie_competences
+  agency_id = 7
+  top_n     = 15
+```
+
+```
+/cvs_a_mettre_a_jour
+  seuil_mois = 6
+```
+
+```
+/recherche_profil_competences
+  competences        = .NET Azure DevOps
+  experience_min     = 5 ans
+  dispo_avant        = 2026-07-15
+  inclure_candidats  = oui
+```
+
+> Apres modification de la config Claude (`claude_desktop_config.json` etc.), **redemarrer le client** : la liste des prompts MCP n'est pas hot-reloadee.
 
 ## Prerequis
 
