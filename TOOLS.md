@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**156 tools** across **36 domains** · **11 prompts** · **20 resources**.
+**156 tools** across **36 domains** · **11 prompts** · **21 resources**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -363,17 +363,20 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `staffing_disponible` | Consultants disponibles pour un staffing | `start_date` `end_date` `competences?` `manager_id?` |
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |
 
-## Resources (20)
+## Resources (21)
 
 Reference data exposed as MCP resources.
 
 | URI | Title |
 |---|---|
 | `boond://application/current-user` | Utilisateur courant |
+| `boond://dictionary/activityAreas` | Secteurs d'activité |
 | `boond://dictionary/countries` | Pays |
 | `boond://dictionary/currencies` | Devises |
+| `boond://dictionary/experiences` | Niveaux d'expérience |
+| `boond://dictionary/expertiseAreas` | Domaines d'expertise |
 | `boond://dictionary/languages` | Langues |
-| `boond://dictionary/states/absences` | États absences |
+| `boond://dictionary/mobilityAreas` | Mobilités |
 | `boond://dictionary/states/candidates` | États candidats |
 | `boond://dictionary/states/companies` | États sociétés |
 | `boond://dictionary/states/contacts` | États contacts |
@@ -383,9 +386,7 @@ Reference data exposed as MCP resources.
 | `boond://dictionary/states/positionings` | États positionnements |
 | `boond://dictionary/states/projects` | États projets |
 | `boond://dictionary/states/resources` | États ressources |
-| `boond://dictionary/typeOf/absences` | Types absences |
-| `boond://dictionary/typeOf/actions` | Types actions |
-| `boond://dictionary/typeOf/candidates` | Types candidats |
+| `boond://dictionary/tools` | Outils / Technos |
 | `boond://dictionary/typeOf/contacts` | Types contacts |
 | `boond://dictionary/typeOf/projects` | Types projets |
 | `boond://dictionary/typeOf/resources` | Types ressources |
