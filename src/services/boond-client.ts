@@ -314,6 +314,21 @@ function hintForStatus(status: number): string {
  * the upstream service is unreachable and the JSON:API hint above is
  * misleading — the request never reached BoondManager.
  */
+function containsCloudflareChallengeHost(htmlSnippet: string): boolean {
+  const urlMatches = htmlSnippet.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+  for (const rawUrl of urlMatches) {
+    try {
+      const hostname = new URL(rawUrl).hostname.toLowerCase();
+      if (hostname === "challenges.cloudflare.com" || hostname.endsWith(".challenges.cloudflare.com")) {
+        return true;
+      }
+    } catch {
+      // Ignore unparsable URL fragments in HTML.
+    }
+  }
+  return false;
+}
+
 function looksLikeCloudflareBlock(body: string): boolean {
   if (!body) return false;
   const head = body.slice(0, 1000).toLowerCase();
@@ -323,7 +338,7 @@ function looksLikeCloudflareBlock(body: string): boolean {
     head.includes("attention required") ||
     head.includes("just a moment") ||
     head.includes("cf-ray") ||
-    head.includes("challenges.cloudflare.com")
+    containsCloudflareChallengeHost(head)
   );
 }
 
