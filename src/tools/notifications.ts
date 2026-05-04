@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema, SearchSchema } from "../schemas/index.js";
+import { IdSchema, NotificationSearchSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 
 export function registerNotificationTools(server: McpServer): void {
@@ -9,8 +9,15 @@ export function registerNotificationTools(server: McpServer): void {
       title: "Rechercher des notifications",
       description: `Recherche des notifications dans BoondManager.
 
+⚠️ Le paramètre \`category\` est REQUIS par l'API (singulier, pas de tableau).
+
+Args:
+  - category (string, requis): 'activity' | 'thread' | 'corporate'
+  - state (string, optional): 'new' | 'read'
+  - parentType (string[], optional): types de modules parents (ex: 'contract', 'global')
+
 Returns: Liste des notifications correspondantes.`,
-      inputSchema: SearchSchema,
+      inputSchema: NotificationSearchSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

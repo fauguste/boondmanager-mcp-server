@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema, SearchSchema } from "../schemas/index.js";
+import { IdSchema, ValidationSearchSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 
 export function registerValidationTools(server: McpServer): void {
@@ -9,8 +9,18 @@ export function registerValidationTools(server: McpServer): void {
       title: "Rechercher des validations",
       description: `Recherche des validations en attente dans BoondManager (absences, notes de frais, feuilles de temps...).
 
+⚠️ \`startMonth\` et \`endMonth\` (YYYY-MM) sont requis par l'API.
+
+Args:
+  - startMonth (string, requis): YYYY-MM (ex: '2025-01')
+  - endMonth (string, requis): YYYY-MM
+  - documentTypes (string[], optional): 'absencesReport' | 'timesReport' | 'expensesReport'
+  - validationStates (string[], optional): 'waitingForValidation' | 'validated' | 'rejected'
+  - resourceTypes (number[], optional)
+  - keywords (string, optional): préfixes 'TPS', 'EXP', 'ABS', 'COMP'
+
 Returns: Liste des validations correspondantes.`,
-      inputSchema: SearchSchema,
+      inputSchema: ValidationSearchSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

@@ -22,9 +22,7 @@ function base64url(data: string | Buffer): string {
 export function buildJwt(userToken: string, clientToken: string, clientKey: string): string {
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64url(JSON.stringify({ userToken, clientToken }));
-  const signature = base64url(
-    createHmac("sha256", clientKey).update(`${header}.${payload}`).digest()
-  );
+  const signature = base64url(createHmac("sha256", clientKey).update(`${header}.${payload}`).digest());
   return `${header}.${payload}.${signature}`;
 }
 
@@ -92,7 +90,14 @@ export type QueryValue = string | number | Array<string | number> | undefined;
 export function parseBoondErrorBody(body: string): string | null {
   if (!body) return null;
   try {
-    const parsed = JSON.parse(body) as { errors?: Array<{ detail?: string; title?: string; code?: string }> };
+    const parsed = JSON.parse(body) as {
+      errors?: Array<{
+        detail?: string;
+        title?: string;
+        code?: string;
+        source?: { parameter?: string; pointer?: string };
+      }>;
+    };
     const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
     const messages = errors
       .map((e) => {
@@ -100,7 +105,14 @@ export function parseBoondErrorBody(body: string): string | null {
         if (e.title && e.title !== e.detail) parts.push(e.title);
         if (e.detail) parts.push(e.detail);
         else if (e.code) parts.push(`code ${e.code}`);
-        return parts.join(": ").trim();
+        // Boond's JSON:API errors put the offending query/body field in
+        // source.parameter (or source.pointer). Surfacing it turns the
+        // otherwise-opaque "1017 - Missing required attribute" into
+        // "1017 - Missing required attribute (parameter: startMonth)".
+        const ref = e.source?.parameter ?? e.source?.pointer;
+        const head = parts.join(": ").trim();
+        if (!head) return ref ? `parameter: ${ref}` : "";
+        return ref ? `${head} (parameter: ${ref})` : head;
       })
       .filter((m) => m.length > 0);
     if (messages.length === 0) return null;
@@ -176,11 +188,7 @@ export function resolveRetryConfig(): RetryConfig {
  *
  * Exported for unit testing.
  */
-export function isRetryable(
-  method: string,
-  status: number | undefined,
-  isNetworkOrTimeout: boolean
-): boolean {
+export function isRetryable(method: string, status: number | undefined, isNetworkOrTimeout: boolean): boolean {
   if (status === 429) return true;
   if (method !== "GET") return false;
   if (isNetworkOrTimeout) return true;
@@ -300,26 +308,51 @@ function hintForStatus(status: number): string {
   }
 }
 
+/**
+ * Detect whether the response body looks like a Cloudflare WAF challenge or
+ * block page rather than a BoondManager JSON:API response. When this is true,
+ * the upstream service is unreachable and the JSON:API hint above is
+ * misleading — the request never reached BoondManager.
+ */
+function looksLikeCloudflareBlock(body: string): boolean {
+  if (!body) return false;
+  const head = body.slice(0, 1000).toLowerCase();
+  if (!head.includes("<!doctype html") && !head.includes("<html")) return false;
+  return (
+    head.includes("cloudflare") ||
+    head.includes("attention required") ||
+    head.includes("just a moment") ||
+    head.includes("cf-ray") ||
+    head.includes("challenges.cloudflare.com")
+  );
+}
+
 /** Build the Error message for a non-2xx HTTP response. Exported for testing. */
-export function formatApiError(
-  status: number,
-  statusText: string,
-  method: string,
-  path: string,
-  body: string
-): string {
+export function formatApiError(status: number, statusText: string, method: string, path: string, body: string): string {
   const detail = parseBoondErrorBody(body);
-  const headline = detail
-    ? `BoondManager API ${status} ${statusText}: ${detail}`
-    : `BoondManager API ${status} ${statusText}`;
+  const cloudflareBlocked = looksLikeCloudflareBlock(body);
+  const headline = cloudflareBlocked
+    ? `BoondManager API ${status} ${statusText} — request blocked by Cloudflare WAF before reaching the API`
+    : detail
+      ? `BoondManager API ${status} ${statusText}: ${detail}`
+      : `BoondManager API ${status} ${statusText}`;
   const lines = [headline, `Endpoint: ${method} ${path}`];
-  // Only attach the raw body when we couldn't extract a structured detail —
-  // otherwise it's noise that buries the useful message.
-  if (!detail && body) {
+  // Only attach the raw body when we couldn't extract a structured detail
+  // and we don't already know it's a Cloudflare HTML page — in either case
+  // the raw HTML/error chunk just buries the useful message.
+  if (!detail && !cloudflareBlocked && body) {
     const trimmed = body.length > 500 ? body.slice(0, 500) + "…" : body;
     lines.push(`Body: ${trimmed}`);
   }
-  lines.push(`Hint: ${hintForStatus(status)}`);
+  if (cloudflareBlocked) {
+    lines.push(
+      "Hint: The BoondManager edge (Cloudflare) blocked this request. " +
+        "This often means the endpoint is restricted on this tenant, or you've made too many calls in a short window. " +
+        "Wait a few seconds and retry; if it persists, the endpoint is not enabled for this account."
+    );
+  } else {
+    lines.push(`Hint: ${hintForStatus(status)}`);
+  }
   return lines.join("\n");
 }
 
@@ -361,9 +394,7 @@ export async function apiRequest(
   const totalAttempts = retry.maxRetries + 1;
 
   const buildBody = (): string | undefined =>
-    body && (method === "POST" || method === "PUT" || method === "PATCH")
-      ? JSON.stringify(body)
-      : undefined;
+    body && (method === "POST" || method === "PUT" || method === "PATCH") ? JSON.stringify(body) : undefined;
   const serializedBody = buildBody();
 
   let lastError: Error | undefined;
@@ -421,9 +452,7 @@ export async function apiRequest(
 
     if (response) {
       const errorText = await response.text().catch(() => "");
-      attemptError = new Error(
-        formatApiError(response.status, response.statusText, method, path, errorText)
-      );
+      attemptError = new Error(formatApiError(response.status, response.statusText, method, path, errorText));
     } else {
       attemptError = networkError!;
       isNetworkOrTimeout = true;
@@ -479,32 +508,48 @@ export function buildSearchQuery(params: SearchParams): Record<string, QueryValu
   return query;
 }
 
-export function formatEntitySummary(entity: {
-  id: string;
-  type: string;
-  attributes: Record<string, unknown>;
-}): string {
-  const attrs = entity.attributes;
-  const parts: string[] = [`[${entity.type} #${entity.id}]`];
+export function formatEntitySummary(entity: unknown): string {
+  // A few BoondManager endpoints (e.g. `/calendars`, `/application/dictionary`)
+  // return reference items as flat objects without a JSON:API `attributes`
+  // wrapper. Treating the whole entity as the attribute bag in that case
+  // keeps `formatListResponse` from crashing on `attrs.firstName` and yields
+  // a still-useful summary.
+  const e = (entity ?? {}) as Record<string, unknown>;
+  const hasAttrs = e.attributes !== undefined && e.attributes !== null && typeof e.attributes === "object";
+  const attrs: Record<string, unknown> = hasAttrs ? (e.attributes as Record<string, unknown>) : e;
+
+  const id = e.id !== undefined ? String(e.id) : undefined;
+  const type = e.type !== undefined ? String(e.type) : undefined;
+  const header =
+    id !== undefined && type !== undefined
+      ? `[${type} #${id}]`
+      : id !== undefined
+        ? `[#${id}]`
+        : type !== undefined
+          ? `[${type}]`
+          : "[item]";
+  const parts: string[] = [header];
 
   // Common name fields
   if (attrs.firstName || attrs.lastName) {
     parts.push(`${attrs.firstName || ""} ${attrs.lastName || ""}`.trim());
   }
   if (attrs.name) parts.push(String(attrs.name));
+  // `value` covers the `/calendars` and dictionary-style payloads.
+  if (!attrs.firstName && !attrs.lastName && !attrs.name && attrs.value !== undefined) {
+    parts.push(String(attrs.value));
+  }
   if (attrs.email1) parts.push(`Email: ${attrs.email1}`);
   if (attrs.phone1) parts.push(`Tel: ${attrs.phone1}`);
   if (attrs.city) parts.push(`Ville: ${attrs.city}`);
   if (attrs.state !== undefined) parts.push(`Statut: ${attrs.state}`);
   if (attrs.title) parts.push(`Titre: ${attrs.title}`);
+  if (attrs.iso !== undefined && String(attrs.iso) !== id) parts.push(`ISO: ${attrs.iso}`);
 
   return parts.join(" | ");
 }
 
-export function formatListResponse(
-  response: JsonApiResponse,
-  entityType: string
-): string {
+export function formatListResponse(response: JsonApiResponse, entityType: string): string {
   const data = Array.isArray(response.data) ? response.data : [response.data];
   const total = response.meta?.totals?.rows;
 

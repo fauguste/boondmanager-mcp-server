@@ -297,18 +297,30 @@ describe("ResourceTimesheetSchema", () => {
 });
 
 describe("TimesheetSearchSchema", () => {
-  it("should accept empty search with defaults", () => {
-    const result = TimesheetSearchSchema.parse({});
-    expect(result.page).toBe(1);
-    expect(result.pageSize).toBe(30);
+  it("should require startMonth and endMonth", () => {
+    // The /times-reports endpoint returns 422 when these are missing, so the
+    // schema enforces them at the boundary.
+    const result = TimesheetSearchSchema.safeParse({});
+    expect(result.success).toBe(false);
   });
 
-  it("should accept date range", () => {
-    const result = TimesheetSearchSchema.safeParse({
-      startDate: "2025-01-01",
-      endDate: "2025-12-31",
+  it("should accept a YYYY-MM range and apply pagination defaults", () => {
+    const result = TimesheetSearchSchema.parse({
+      startMonth: "2025-01",
+      endMonth: "2025-12",
     });
-    expect(result.success).toBe(true);
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(30);
+    expect(result.startMonth).toBe("2025-01");
+    expect(result.endMonth).toBe("2025-12");
+  });
+
+  it("should reject YYYY-MM-DD form", () => {
+    const result = TimesheetSearchSchema.safeParse({
+      startMonth: "2025-01-01",
+      endMonth: "2025-12-31",
+    });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -484,7 +496,7 @@ describe("ExpenseCreateSchema", () => {
     const result = ExpenseCreateSchema.safeParse({
       resourceId: "123",
       expenseDate: "2025-06-15",
-      amount: 45.50,
+      amount: 45.5,
     });
     expect(result.success).toBe(true);
   });

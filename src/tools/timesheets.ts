@@ -1,14 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  ResourceTimesheetSchema,
-  TimesheetSearchSchema,
-  TimesheetGetSchema,
-} from "../schemas/index.js";
-import type {
-  ResourceTimesheetInput,
-  TimesheetSearchInput,
-  TimesheetGetInput,
-} from "../schemas/index.js";
+import { ResourceTimesheetSchema, TimesheetSearchSchema, TimesheetGetSchema } from "../schemas/index.js";
+import type { ResourceTimesheetInput, TimesheetSearchInput, TimesheetGetInput } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatDetailResponse } from "../services/boond-client.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 import type { JsonApiResponse } from "../types.js";
@@ -74,12 +66,7 @@ Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut
       if (params.month !== undefined) queryParams["month"] = params.month;
       if (params.year !== undefined) queryParams["year"] = params.year;
 
-      const response = await apiRequest(
-        `/resources/${params.resourceId}/times-reports`,
-        "GET",
-        undefined,
-        queryParams
-      );
+      const response = await apiRequest(`/resources/${params.resourceId}/times-reports`, "GET", undefined, queryParams);
       const text = formatTimesheetSummary(response);
       return {
         content: [{ type: "text" as const, text }],
@@ -92,13 +79,16 @@ Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut
     "boond_timesheets_search",
     {
       title: "Rechercher des feuilles de temps",
-      description: `Recherche des feuilles de temps dans BoondManager avec filtres par période.
+      description: `Recherche des feuilles de temps (CRA mensuels) dans BoondManager.
+
+⚠️ \`startMonth\` et \`endMonth\` (format YYYY-MM) sont requis par l'API — passer YYYY-MM-DD ou les omettre renvoie un 422.
 
 Args:
-  - startDate (string, optional): Date de début (YYYY-MM-DD)
-  - endDate (string, optional): Date de fin (YYYY-MM-DD)
+  - startMonth (string, requis): Mois de début YYYY-MM (ex: '2025-01')
+  - endMonth (string, requis): Mois de fin YYYY-MM (ex: '2025-03')
+  - keywords (string, optional): Mots-clés
   - page (number): Numéro de page (défaut: 1)
-  - pageSize (number): Résultats par page (défaut: 20)
+  - pageSize (number): Résultats par page (défaut: 30)
 
 Returns: Liste des feuilles de temps correspondantes.`,
       inputSchema: TimesheetSearchSchema,

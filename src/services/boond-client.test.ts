@@ -106,6 +106,14 @@ describe("formatEntitySummary", () => {
     });
     expect(result).toContain("Jean");
   });
+
+  it("does not crash when the entity lacks a JSON:API attributes wrapper", () => {
+    // /calendars returns flat items shaped like { iso, value, subCalendars }
+    // — no `attributes`. Treat the object itself as the attribute bag.
+    const result = formatEntitySummary({ iso: "FR", value: "France" });
+    expect(result).toContain("France");
+    expect(result).toContain("ISO: FR");
+  });
 });
 
 describe("formatListResponse", () => {
@@ -395,9 +403,12 @@ describe("apiRequest", () => {
         ok: false,
         status: 422,
         statusText: "Unprocessable Entity",
-        text: () => Promise.resolve(JSON.stringify({
-          errors: [{ status: "422", code: "422", detail: "422 - password mismatch" }],
-        })),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              errors: [{ status: "422", code: "422", detail: "422 - password mismatch" }],
+            })
+          ),
       })
     );
 
@@ -510,30 +521,43 @@ describe("resolveTimeoutMs", () => {
 
 describe("parseBoondErrorBody", () => {
   it("returns the detail of a single error", () => {
-    expect(parseBoondErrorBody(JSON.stringify({
-      errors: [{ status: "422", detail: "422 - password mismatch" }],
-    }))).toBe("422 - password mismatch");
+    expect(
+      parseBoondErrorBody(
+        JSON.stringify({
+          errors: [{ status: "422", detail: "422 - password mismatch" }],
+        })
+      )
+    ).toBe("422 - password mismatch");
   });
 
   it("joins multiple errors with a separator", () => {
-    expect(parseBoondErrorBody(JSON.stringify({
-      errors: [
-        { detail: "first thing wrong" },
-        { detail: "second thing wrong" },
-      ],
-    }))).toBe("first thing wrong | second thing wrong");
+    expect(
+      parseBoondErrorBody(
+        JSON.stringify({
+          errors: [{ detail: "first thing wrong" }, { detail: "second thing wrong" }],
+        })
+      )
+    ).toBe("first thing wrong | second thing wrong");
   });
 
   it("includes title when distinct from detail", () => {
-    expect(parseBoondErrorBody(JSON.stringify({
-      errors: [{ title: "Forbidden", detail: "user cannot access this scope" }],
-    }))).toBe("Forbidden: user cannot access this scope");
+    expect(
+      parseBoondErrorBody(
+        JSON.stringify({
+          errors: [{ title: "Forbidden", detail: "user cannot access this scope" }],
+        })
+      )
+    ).toBe("Forbidden: user cannot access this scope");
   });
 
   it("falls back to code when detail is missing", () => {
-    expect(parseBoondErrorBody(JSON.stringify({
-      errors: [{ code: "503" }],
-    }))).toBe("code 503");
+    expect(
+      parseBoondErrorBody(
+        JSON.stringify({
+          errors: [{ code: "503" }],
+        })
+      )
+    ).toBe("code 503");
   });
 
   it("returns null on non-JSON body", () => {
@@ -546,6 +570,29 @@ describe("parseBoondErrorBody", () => {
 
   it("returns null on empty input", () => {
     expect(parseBoondErrorBody("")).toBeNull();
+  });
+
+  it("includes source.parameter so the LLM can see which field triggered the error", () => {
+    // Without surfacing source.parameter, "1017 - Missing required attribute"
+    // is opaque — it's the parameter name (startMonth, category, etc.) that
+    // tells the caller what to add.
+    expect(
+      parseBoondErrorBody(
+        JSON.stringify({
+          errors: [{ detail: "1017 - Missing required attribute", source: { parameter: "startMonth" } }],
+        })
+      )
+    ).toBe("1017 - Missing required attribute (parameter: startMonth)");
+  });
+
+  it("falls back to source.pointer when parameter is absent", () => {
+    expect(
+      parseBoondErrorBody(
+        JSON.stringify({
+          errors: [{ detail: "validation failed", source: { pointer: "/data/attributes/email" } }],
+        })
+      )
+    ).toBe("validation failed (parameter: /data/attributes/email)");
   });
 });
 
@@ -576,6 +623,19 @@ describe("formatApiError", () => {
   it("emits a 5xx-specific hint", () => {
     const msg = formatApiError(503, "Service Unavailable", "GET", "/resources", "");
     expect(msg).toContain("BoondManager-side error");
+  });
+
+  it("recognises a Cloudflare WAF block and replaces the misleading status hint", () => {
+    const cfBody =
+      "<!DOCTYPE html><html><head><title>Attention Required! | Cloudflare</title>" +
+      "<meta http-equiv='cf-ray' content='abc'></head><body>Just a moment...</body></html>";
+    const msg = formatApiError(403, "Forbidden", "GET", "/advantages", cfBody);
+    expect(msg).toContain("blocked by Cloudflare WAF");
+    // Generic 403 hint is replaced because it's misleading (the request
+    // never reached BoondManager — it isn't a permission issue).
+    expect(msg).not.toContain("the user lacks permission");
+    // The HTML body itself isn't echoed.
+    expect(msg).not.toContain("<html>");
   });
 });
 
@@ -786,9 +846,7 @@ describe("apiRequest retries", () => {
     const fetchMock = vi.fn().mockResolvedValue(errResponse(503, "Service Unavailable"));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(apiRequest("/candidates", "POST", { foo: "bar" })).rejects.toThrow(
-      "BoondManager API 503"
-    );
+    await expect(apiRequest("/candidates", "POST", { foo: "bar" })).rejects.toThrow("BoondManager API 503");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
