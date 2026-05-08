@@ -33,6 +33,8 @@ function envOrUndefined(key: string): string | undefined {
   return v;
 }
 
+export const JWT_HEADER_NAME = "X-Jwt-Client-Boondmanager";
+
 export function initClient(): void {
   const baseUrl = envOrUndefined("BOOND_BASE_URL") || DEFAULT_BASE_URL;
 
@@ -40,6 +42,11 @@ export function initClient(): void {
   // 1. Build JWT from components (userToken + clientToken + clientKey)
   // 2. Pre-built JWT token
   // 3. BasicAuth (user:password)
+  //
+  // Per BoondManager's JWT spec the token must travel in the
+  // `X-Jwt-Client-Boondmanager` header — sending it as `Authorization: Bearer`
+  // makes the API reject the request with 422 "Signature verification failed".
+  // BasicAuth, on the other hand, uses the standard `Authorization` header.
   const userToken = envOrUndefined("BOOND_USER_TOKEN");
   const clientToken = envOrUndefined("BOOND_CLIENT_TOKEN");
   const clientKey = envOrUndefined("BOOND_CLIENT_KEY");
@@ -47,23 +54,25 @@ export function initClient(): void {
   const user = envOrUndefined("BOOND_USER");
   const password = envOrUndefined("BOOND_PASSWORD");
 
-  let authHeader: string;
+  let authHeaderName: string;
+  let authHeaderValue: string;
 
   if (userToken && clientToken && clientKey) {
-    const jwt = buildJwt(userToken, clientToken, clientKey);
-    authHeader = `Bearer ${jwt}`;
+    authHeaderName = JWT_HEADER_NAME;
+    authHeaderValue = buildJwt(userToken, clientToken, clientKey);
   } else if (token) {
-    authHeader = `Bearer ${token}`;
+    authHeaderName = JWT_HEADER_NAME;
+    authHeaderValue = token;
   } else if (user && password) {
-    const encoded = Buffer.from(`${user}:${password}`).toString("base64");
-    authHeader = `Basic ${encoded}`;
+    authHeaderName = "Authorization";
+    authHeaderValue = `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
   } else {
     throw new Error(
       "Authentication required. Set BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY, or BOOND_API_TOKEN, or both BOOND_USER and BOOND_PASSWORD."
     );
   }
 
-  config = { baseUrl, authHeader };
+  config = { baseUrl, authHeaderName, authHeaderValue };
 }
 
 function getConfig(): BoondConfig {
@@ -377,7 +386,7 @@ export async function apiRequest(
   body?: unknown,
   queryParams?: Record<string, QueryValue>
 ): Promise<JsonApiResponse> {
-  const { baseUrl, authHeader } = getConfig();
+  const { baseUrl, authHeaderName, authHeaderValue } = getConfig();
 
   const url = new URL(`${baseUrl}${path}`);
 
@@ -399,7 +408,7 @@ export async function apiRequest(
   }
 
   const headers: Record<string, string> = {
-    Authorization: authHeader,
+    [authHeaderName]: authHeaderValue,
     Accept: "application/json",
     "Content-Type": "application/json",
   };

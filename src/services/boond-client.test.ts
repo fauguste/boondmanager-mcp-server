@@ -487,6 +487,86 @@ describe("apiRequest", () => {
   });
 });
 
+describe("apiRequest auth header routing", () => {
+  // BoondManager rejects JWT auth carried in `Authorization: Bearer …` with
+  // `422 Signature verification failed`. The token must travel in
+  // `X-Jwt-Client-Boondmanager`. BasicAuth, by contrast, is plain HTTP and
+  // belongs in `Authorization`. These tests pin that contract so we don't
+  // regress.
+  const successResponse = () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ "content-length": "10" }),
+    json: () => Promise.resolve({ data: [] }),
+  });
+
+  beforeEach(() => {
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_USER;
+    delete process.env.BOOND_PASSWORD;
+    delete process.env.BOOND_USER_TOKEN;
+    delete process.env.BOOND_CLIENT_TOKEN;
+    delete process.env.BOOND_CLIENT_KEY;
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_USER;
+    delete process.env.BOOND_PASSWORD;
+    delete process.env.BOOND_USER_TOKEN;
+    delete process.env.BOOND_CLIENT_TOKEN;
+    delete process.env.BOOND_CLIENT_KEY;
+    delete process.env.BOOND_HTTP_MAX_RETRIES;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
+  });
+
+  it("sends auto-built JWT in X-Jwt-Client-Boondmanager (not Authorization)", async () => {
+    process.env.BOOND_USER_TOKEN = "user-tok";
+    process.env.BOOND_CLIENT_TOKEN = "client-tok";
+    process.env.BOOND_CLIENT_KEY = "secret";
+    initClient();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(successResponse()));
+
+    await apiRequest("/application/current-user");
+    const options = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const headers = options.headers as Record<string, string>;
+    expect(headers["X-Jwt-Client-Boondmanager"]).toBeDefined();
+    expect(headers["X-Jwt-Client-Boondmanager"].split(".")).toHaveLength(3);
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("sends pre-built BOOND_API_TOKEN in X-Jwt-Client-Boondmanager (not Authorization)", async () => {
+    process.env.BOOND_API_TOKEN = "pre-built.jwt.value";
+    initClient();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(successResponse()));
+
+    await apiRequest("/application/current-user");
+    const options = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const headers = options.headers as Record<string, string>;
+    expect(headers["X-Jwt-Client-Boondmanager"]).toBe("pre-built.jwt.value");
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("sends BasicAuth credentials in Authorization header", async () => {
+    process.env.BOOND_USER = "alice";
+    process.env.BOOND_PASSWORD = "s3cret";
+    initClient();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(successResponse()));
+
+    await apiRequest("/application/current-user");
+    const options = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const headers = options.headers as Record<string, string>;
+    const expected = `Basic ${Buffer.from("alice:s3cret").toString("base64")}`;
+    expect(headers.Authorization).toBe(expected);
+    expect(headers["X-Jwt-Client-Boondmanager"]).toBeUndefined();
+  });
+});
+
 describe("resolveTimeoutMs", () => {
   afterEach(() => {
     delete process.env.BOOND_HTTP_TIMEOUT_MS;
