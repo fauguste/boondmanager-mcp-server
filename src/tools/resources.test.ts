@@ -225,11 +225,50 @@ describe("registerResourceTools", () => {
     });
   });
 
+  // References live as embedded sub-objects inside /resources/{id}/technical-data.
+  // The three reference tools therefore all do a GET-then-PUT on technical-data
+  // (full references[] array republished).
+  function mockDtRefs(refs: Array<Record<string, unknown>>) {
+    return vi.spyOn(boondClient, "apiRequest").mockImplementation(async (_path, method, body) => {
+      if (method === undefined || method === "GET") {
+        return {
+          data: { id: "42", type: "resource", attributes: { references: refs } },
+        } as never;
+      }
+      const next =
+        (body as { data?: { attributes?: { references?: Array<Record<string, unknown>> } } } | undefined)?.data
+          ?.attributes?.references ?? refs;
+      return {
+        data: { id: "42", type: "resource", attributes: { references: next } },
+      } as never;
+    });
+  }
+
   describe("boond_resources_reference_create handler", () => {
-    it("POSTs to /resources/{id}/references with type=reference and no resourceId in attributes", async () => {
-      const apiSpy = vi
-        .spyOn(boondClient, "apiRequest")
-        .mockResolvedValue({ data: { id: "999", type: "reference", attributes: {} } } as never);
+    it("GETs the current refs then PUTs technical-data with the new ref appended", async () => {
+      const apiSpy = vi.spyOn(boondClient, "apiRequest").mockImplementation(async (_p, method) => {
+        if (method === undefined || method === "GET") {
+          return {
+            data: {
+              id: "42",
+              type: "resource",
+              attributes: { references: [{ id: "10", title: "Existing", company: "Old Co", description: "x" }] },
+            },
+          } as never;
+        }
+        return {
+          data: {
+            id: "42",
+            type: "resource",
+            attributes: {
+              references: [
+                { id: "10", title: "Existing", company: "Old Co", description: "x" },
+                { id: "11", title: "Lead Dev", company: "Acme", description: "New role" },
+              ],
+            },
+          },
+        } as never;
+      });
 
       registerResourceTools(server);
       const handler = vi
@@ -237,34 +276,54 @@ describe("registerResourceTools", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .mock.calls.find((c) => c[0] === "boond_resources_reference_create")![2] as any;
 
-      await handler({
+      const result = await handler({
         resourceId: "42",
         title: "Lead Dev",
         company: "Acme",
-        startMonth: "01",
-        startYear: "2024",
+        description: "New role",
+        startMonth: 5,
+        startYear: 2024,
       });
 
-      const [path, method, body] = apiSpy.mock.calls[0];
-      expect(path).toBe("/resources/42/references");
-      expect(method).toBe("POST");
-      const data = (body as { data: { type: string; attributes: Record<string, unknown>; id?: string } }).data;
-      expect(data.type).toBe("reference");
-      expect(data.id).toBeUndefined();
-      expect(data.attributes).toEqual({
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      expect(apiSpy.mock.calls[0][0]).toBe("/resources/42/technical-data");
+      expect(apiSpy.mock.calls[0][1]).toBeUndefined();
+
+      const [putPath, putMethod, putBody] = apiSpy.mock.calls[1];
+      expect(putPath).toBe("/resources/42/technical-data");
+      expect(putMethod).toBe("PUT");
+      const data = (putBody as { data: { id: string; type: string; attributes: { references: unknown[] } } }).data;
+      expect(data.id).toBe("42");
+      expect(data.type).toBe("resource");
+      const refs = data.attributes.references;
+      expect(refs).toHaveLength(2);
+      expect(refs[0]).toEqual({ id: "10", title: "Existing", company: "Old Co", description: "x" });
+      expect(refs[1]).toEqual({
         title: "Lead Dev",
         company: "Acme",
-        startMonth: "01",
-        startYear: "2024",
+        description: "New role",
+        startMonth: 5,
+        startYear: 2024,
       });
+      expect(result.content[0].text).toMatch(/✅/);
     });
   });
 
   describe("boond_resources_reference_update handler", () => {
-    it("PUTs to /references/{id} with only the provided attributes", async () => {
-      const apiSpy = vi
-        .spyOn(boondClient, "apiRequest")
-        .mockResolvedValue({ data: { id: "999", type: "reference", attributes: {} } } as never);
+    it("patches only the provided fields of the matching reference, others intact", async () => {
+      const apiSpy = mockDtRefs([
+        {
+          id: "10",
+          title: "Silamir",
+          company: "Silamir Group",
+          description: "BU Manager",
+          startMonth: "",
+          startYear: "",
+          endMonth: "",
+          endYear: "",
+        },
+        { id: "20", title: "AFD.TECH", company: "AFD", description: "Lead Dev", startMonth: "1", startYear: "2022" },
+      ]);
 
       registerResourceTools(server);
       const handler = vi
@@ -273,23 +332,63 @@ describe("registerResourceTools", () => {
         .mock.calls.find((c) => c[0] === "boond_resources_reference_update")![2] as any;
 
       await handler({
-        referenceId: "999",
-        endMonth: "12",
-        endYear: "2025",
+        resourceId: "42",
+        referenceId: "10",
+        startMonth: 5,
+        startYear: 2024,
+        endMonth: 1,
+        endYear: 2026,
       });
 
-      const [path, method, body] = apiSpy.mock.calls[0];
-      expect(path).toBe("/references/999");
-      expect(method).toBe("PUT");
-      const data = (body as { data: { id: string; type: string; attributes: Record<string, unknown> } }).data;
-      expect(data.id).toBe("999");
-      expect(data.attributes).toEqual({ endMonth: "12", endYear: "2025" });
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      const [, , putBody] = apiSpy.mock.calls[1];
+      const refs = (putBody as { data: { attributes: { references: Array<Record<string, unknown>> } } }).data.attributes
+        .references;
+      expect(refs).toHaveLength(2);
+      // Reference #10: dates filled, title/company/description preserved
+      expect(refs[0]).toEqual({
+        id: "10",
+        title: "Silamir",
+        company: "Silamir Group",
+        description: "BU Manager",
+        startMonth: 5,
+        startYear: 2024,
+        endMonth: 1,
+        endYear: 2026,
+      });
+      // Reference #20: untouched
+      expect(refs[1]).toEqual({
+        id: "20",
+        title: "AFD.TECH",
+        company: "AFD",
+        description: "Lead Dev",
+        startMonth: "1",
+        startYear: "2022",
+      });
+    });
+
+    it("returns isError=true with hint when the ref id isn't on the resource", async () => {
+      mockDtRefs([{ id: "10", title: "Other" }]);
+
+      registerResourceTools(server);
+      const handler = vi
+        .mocked(server.registerTool)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .mock.calls.find((c) => c[0] === "boond_resources_reference_update")![2] as any;
+
+      const result = await handler({ resourceId: "42", referenceId: "999", endMonth: 5 });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/introuvable/i);
+      expect(result.content[0].text).toMatch(/10/); // lists existing ids
     });
   });
 
   describe("boond_resources_reference_delete handler", () => {
-    it("DELETEs /references/{id}", async () => {
-      const apiSpy = vi.spyOn(boondClient, "apiRequest").mockResolvedValue({ data: [] } as never);
+    it("PUTs technical-data with the targeted reference removed", async () => {
+      const apiSpy = mockDtRefs([
+        { id: "10", title: "Keep me" },
+        { id: "20", title: "Delete me" },
+      ]);
 
       registerResourceTools(server);
       const handler = vi
@@ -297,9 +396,29 @@ describe("registerResourceTools", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .mock.calls.find((c) => c[0] === "boond_resources_reference_delete")![2] as any;
 
-      const result = await handler({ referenceId: "999" });
-      expect(apiSpy).toHaveBeenCalledWith("/references/999", "DELETE");
-      expect(result.content[0].text).toMatch(/999/);
+      const result = await handler({ resourceId: "42", referenceId: "20" });
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      const [, method, putBody] = apiSpy.mock.calls[1];
+      expect(method).toBe("PUT");
+      const refs = (putBody as { data: { attributes: { references: Array<Record<string, unknown>> } } }).data.attributes
+        .references;
+      expect(refs).toEqual([{ id: "10", title: "Keep me" }]);
+      expect(result.content[0].text).toMatch(/🗑️/);
+    });
+
+    it("returns isError when the ref id isn't on the resource", async () => {
+      const apiSpy = mockDtRefs([{ id: "10", title: "Only one" }]);
+
+      registerResourceTools(server);
+      const handler = vi
+        .mocked(server.registerTool)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .mock.calls.find((c) => c[0] === "boond_resources_reference_delete")![2] as any;
+
+      const result = await handler({ resourceId: "42", referenceId: "999" });
+      expect(result.isError).toBe(true);
+      // Only the GET happened; no PUT
+      expect(apiSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

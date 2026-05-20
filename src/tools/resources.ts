@@ -277,16 +277,52 @@ Les expériences professionnelles (références) ne sont PAS gérées ici : util
 
 const REFERENCE_CREATE_DESCRIPTION = `Crée une expérience professionnelle (référence) rattachée au DT d'une ressource.
 
-Champs requis : resourceId, title, company.
-Dates : startMonth/endMonth au format '01'..'12' et startYear/endYear au format 'YYYY' (chaînes, pas entiers).
+⚠️ Les références sont des sous-objets embarqués dans le DT, pas une entité REST autonome. L'outil fait read-modify-write : lit la liste actuelle via /resources/{id}/technical-data, ajoute la nouvelle référence et republie la liste complète.
 
-Pour ajouter des dates manquantes à une référence existante, préférer boond_resources_reference_update pour ne pas dupliquer.`;
+Champs requis : resourceId, title, company, description.
+Dates : startMonth/endMonth en int 1..12 (ou string '1'..'12' sans leading zero) ; startYear/endYear en int 4 chiffres. ⚠️ "05" avec leading zero est rejeté par l'API.
 
-const REFERENCE_UPDATE_DESCRIPTION = `Met à jour une référence existante. Seuls les champs explicitement fournis sont envoyés à l'API — un champ omis ne sera jamais écrasé par "".
+Pour compléter une référence existante, utiliser boond_resources_reference_update pour ne pas dupliquer.`;
+
+const REFERENCE_UPDATE_DESCRIPTION = `Met à jour une référence existante. Read-modify-write sur /resources/{id}/technical-data — seuls les champs explicitement fournis remplacent ceux de la référence ciblée, les autres champs et toutes les autres références restent intacts.
 
 Cas d'usage type : compléter startMonth/startYear/endMonth/endYear sur une référence sans toucher au titre, à la société ou à la description.`;
 
-const REFERENCE_DELETE_DESCRIPTION = `Supprime définitivement une référence (expérience professionnelle) du DT d'une ressource. ⚠️ Action irréversible — vérifier l'ID au préalable.`;
+const REFERENCE_DELETE_DESCRIPTION = `Supprime une référence (expérience professionnelle) du DT d'une ressource. Read-modify-write : lit la liste actuelle, en retire la référence ciblée, republie le reste. ⚠️ Action irréversible — vérifier l'ID au préalable.`;
+
+type EmbeddedReference = Record<string, unknown> & { id?: string | number };
+
+async function fetchTechnicalDataReferences(resourceId: string): Promise<EmbeddedReference[]> {
+  const response = await apiRequest(`/resources/${resourceId}/technical-data`);
+  const entity = Array.isArray(response.data) ? response.data[0] : response.data;
+  const refs = (entity?.attributes as { references?: unknown })?.references;
+  return Array.isArray(refs) ? (refs as EmbeddedReference[]) : [];
+}
+
+// Boond's GET on /technical-data returns empty strings for unset date fields
+// (`startMonth: ""`, `startYear: ""`, …) but its PUT validator rejects those
+// same empty strings with "1002 Wrong or missing attribute". So when we
+// echo back references unchanged we have to scrub null/empty fields first,
+// otherwise an innocuous round-trip blows up on any reference that has
+// missing dates. Exported for tests.
+export function normalizeReferenceForApi(ref: EmbeddedReference): EmbeddedReference {
+  const out: EmbeddedReference = {};
+  for (const [k, v] of Object.entries(ref)) {
+    if (v === undefined || v === null) continue;
+    if (typeof v === "string" && v === "") continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+async function putTechnicalDataReferences(
+  resourceId: string,
+  references: EmbeddedReference[]
+): Promise<ReturnType<typeof apiRequest>> {
+  const sanitized = references.map(normalizeReferenceForApi);
+  const body = buildJsonApiBody("resource", { references: sanitized }, resourceId);
+  return apiRequest(`/resources/${resourceId}/technical-data`, "PUT", body);
+}
 
 export function registerResourceTools(server: McpServer): void {
   registerSearchTool(server, OPTS, {
@@ -395,14 +431,21 @@ export function registerResourceTools(server: McpServer): void {
     },
     async (params: ReferenceCreateInput) => {
       const { resourceId, ...attrs } = params;
-      const body = buildJsonApiBody("reference", attrs);
-      const response = await apiRequest(`/resources/${resourceId}/references`, "POST", body);
+      const provided: Record<string, unknown> = Object.fromEntries(
+        Object.entries(attrs).filter(([, v]) => v !== undefined)
+      );
+      const current = await fetchTechnicalDataReferences(resourceId);
+      const next = [...current, provided as EmbeddedReference];
+      const response = await putTechnicalDataReferences(resourceId, next);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
+      const refs = ((entity?.attributes as { references?: EmbeddedReference[] })?.references ??
+        []) as EmbeddedReference[];
+      const created = refs[refs.length - 1];
       return {
         content: [
           {
             type: "text" as const,
-            text: `✅ Référence créée pour la ressource #${resourceId}.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+            text: `✅ Référence créée sur la ressource #${resourceId} (${refs.length} référence(s) au total).\nID: ${created?.id ?? "(non retourné)"}\n\n${formatDetailResponse(response)}`,
           },
         ],
       };
@@ -423,14 +466,31 @@ export function registerResourceTools(server: McpServer): void {
       },
     },
     async (params: ReferenceUpdateInput) => {
-      const { referenceId, ...attrs } = params;
-      const body = buildJsonApiBody("reference", attrs, referenceId);
-      const response = await apiRequest(`/references/${referenceId}`, "PUT", body);
+      const { resourceId, referenceId, ...attrs } = params;
+      const provided: Record<string, unknown> = Object.fromEntries(
+        Object.entries(attrs).filter(([, v]) => v !== undefined)
+      );
+      const current = await fetchTechnicalDataReferences(resourceId);
+      const idx = current.findIndex((r) => String(r.id) === String(referenceId));
+      if (idx === -1) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `❌ Référence #${referenceId} introuvable sur la ressource #${resourceId}. IDs présents: ${current.map((r) => r.id).join(", ") || "(aucun)"}.`,
+            },
+          ],
+        };
+      }
+      const next = [...current];
+      next[idx] = { ...current[idx], ...provided };
+      const response = await putTechnicalDataReferences(resourceId, next);
       return {
         content: [
           {
             type: "text" as const,
-            text: `✅ Référence #${referenceId} mise à jour.\n\n${formatDetailResponse(response)}`,
+            text: `✅ Référence #${referenceId} mise à jour sur la ressource #${resourceId}.\n\n${formatDetailResponse(response)}`,
           },
         ],
       };
@@ -451,12 +511,26 @@ export function registerResourceTools(server: McpServer): void {
       },
     },
     async (params: ReferenceIdInput) => {
-      await apiRequest(`/references/${params.referenceId}`, "DELETE");
+      const { resourceId, referenceId } = params;
+      const current = await fetchTechnicalDataReferences(resourceId);
+      const next = current.filter((r) => String(r.id) !== String(referenceId));
+      if (next.length === current.length) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `❌ Référence #${referenceId} introuvable sur la ressource #${resourceId}. IDs présents: ${current.map((r) => r.id).join(", ") || "(aucun)"}.`,
+            },
+          ],
+        };
+      }
+      await putTechnicalDataReferences(resourceId, next);
       return {
         content: [
           {
             type: "text" as const,
-            text: `🗑️ Référence #${params.referenceId} supprimée.`,
+            text: `🗑️ Référence #${referenceId} supprimée de la ressource #${resourceId} (${next.length} référence(s) restante(s)).`,
           },
         ],
       };

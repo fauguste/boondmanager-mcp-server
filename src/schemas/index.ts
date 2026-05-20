@@ -586,49 +586,74 @@ export const ResourceTechnicalDataUpdateSchema = z
   .strict();
 
 // ---- Reference (DT experience) schemas ----
-// Source: spec issue #79. POST /resources/{id}/references — PUT/DELETE /references/{id}.
-const referenceMonth = z
-  .string()
-  .regex(/^(0[1-9]|1[0-2])$/)
-  .describe("Mois sur 2 chiffres ('01'..'12').");
-const referenceYear = z
-  .string()
-  .regex(/^\d{4}$/)
-  .describe("Année sur 4 chiffres (ex: '2024').");
+// Validated live against the BoondManager API on 2026-05-20: references are NOT a
+// standalone REST entity. They're sub-objects embedded in the resource's DT (the
+// `attributes.references` array returned by `/resources/{id}/technical-data`).
+// All CRUD on references therefore goes through `PUT /resources/{id}/technical-data`
+// with the full `references` array.
+//
+// API quirks learned from probing:
+// - `description` is REQUIRED for any new reference (1017 otherwise)
+// - `startMonth` / `endMonth` accept int 1..12 OR string without leading zero ("5")
+//   — "05" is rejected with 1002. We normalize to int via `z.coerce.number()`.
+// - `startYear` / `endYear` accept int or string YYYY — coerced to int.
+const referenceMonth = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(12)
+  .describe("Mois (1-12). Accepte int ou string ('5'). ⚠️ '05' avec leading zero est rejeté par l'API Boond.");
+const referenceYear = z.coerce
+  .number()
+  .int()
+  .min(1900)
+  .max(2100)
+  .describe("Année (ex: 2024). Accepte int ou string '2024'.");
 
 export const ReferenceCreateSchema = z
   .object({
     resourceId: z.string().min(1).describe("ID de la ressource à laquelle rattacher la référence."),
     title: z.string().min(1).describe("Intitulé du poste."),
     company: z.string().min(1).describe("Société / employeur."),
+    description: z
+      .string()
+      .min(1)
+      .describe("Description / missions / réalisations. ⚠️ Requis côté API Boond (1017 sans)."),
     location: z.string().optional().describe("Lieu (ville)."),
     startMonth: referenceMonth.optional(),
     startYear: referenceYear.optional(),
     endMonth: referenceMonth.optional(),
     endYear: referenceYear.optional(),
     skills: z.string().optional().describe("Compétences mobilisées (texte libre, séparées par virgule)."),
-    description: z.string().optional().describe("Description / missions / réalisations."),
   })
   .strict();
 
 export const ReferenceUpdateSchema = z
   .object({
+    resourceId: z
+      .string()
+      .min(1)
+      .describe("ID de la ressource portant la référence (les references sont embarquées dans le DT)."),
     referenceId: z.string().min(1).describe("ID de la référence à modifier."),
     title: z.string().optional().describe("Intitulé du poste."),
     company: z.string().optional().describe("Société / employeur."),
+    description: z.string().optional().describe("Description / missions / réalisations."),
     location: z.string().optional().describe("Lieu (ville)."),
     startMonth: referenceMonth.optional(),
     startYear: referenceYear.optional(),
     endMonth: referenceMonth.optional(),
     endYear: referenceYear.optional(),
     skills: z.string().optional().describe("Compétences mobilisées."),
-    description: z.string().optional().describe("Description."),
   })
   .strict();
 
 export const ReferenceIdSchema = z
   .object({
-    referenceId: z.string().min(1).describe("ID de la référence."),
+    resourceId: z
+      .string()
+      .min(1)
+      .describe("ID de la ressource portant la référence (les references sont embarquées dans le DT)."),
+    referenceId: z.string().min(1).describe("ID de la référence à supprimer."),
   })
   .strict();
 
