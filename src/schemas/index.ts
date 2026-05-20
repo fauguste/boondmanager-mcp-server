@@ -541,6 +541,97 @@ export const ResourceUpdateSchema = z
   })
   .strict();
 
+// ---- Resource technical-data (DT) write schema ----
+// Source: spec issue #79. PUT /resources/{id}/technical-data with type=resource.
+const technicalDataToolItemSchema = z
+  .object({
+    tool: z
+      .string()
+      .min(1)
+      .describe("Slug de l'outil (ex: 'aws', 'snowflake', 'microsoftazure'). Voir dictionnaire setting.tool."),
+    level: z.number().int().min(1).max(4).describe("Niveau de maîtrise (1 = débutant, 4 = expert)."),
+  })
+  .strict();
+
+const technicalDataLanguageItemSchema = z
+  .object({
+    language: z.string().min(1).describe("Langue (ex: 'Anglais', 'Espagnol')."),
+    level: z.enum(["scolaire", "intermediaire", "courant", "bilingue", "maternel"]).describe("Niveau parlé."),
+  })
+  .strict();
+
+export const ResourceTechnicalDataUpdateSchema = z
+  .object({
+    id: z.string().min(1).describe("ID de la ressource dont le dossier technique est mis à jour."),
+    mode: z
+      .enum(["merge", "replace"])
+      .default("merge")
+      .describe(
+        "'merge' (défaut) enrichit le DT sans rien écraser. 'replace' remplace intégralement chaque champ fourni."
+      ),
+    title: z.string().optional().describe("Titre / poste actuel."),
+    summary: z.string().optional().describe("Résumé / synthèse du parcours."),
+    skills: z.string().optional().describe("Compétences libres, séparées par virgule (ex: 'Python, AWS, GCP')."),
+    experience: z.number().int().min(0).optional().describe("Années d'expérience."),
+    training: z.string().optional().describe("Formations / parcours académique."),
+    expertiseAreas: z.array(z.string()).optional().describe("Domaines d'expertise (texte libre, ex: 'Banque')."),
+    activityAreas: z.array(z.string()).optional().describe("Secteurs d'activité."),
+    tools: z.array(technicalDataToolItemSchema).optional().describe("Outils maîtrisés avec niveau (1-4)."),
+    languages: z.array(technicalDataLanguageItemSchema).optional().describe("Langues parlées avec niveau."),
+    diplomas: z
+      .array(z.string())
+      .optional()
+      .describe("Diplômes (texte libre, ex: 'DUT Informatique - IUT Bordeaux (2016)')."),
+  })
+  .strict();
+
+// ---- Reference (DT experience) schemas ----
+// Source: spec issue #79. POST /resources/{id}/references — PUT/DELETE /references/{id}.
+const referenceMonth = z
+  .string()
+  .regex(/^(0[1-9]|1[0-2])$/)
+  .describe("Mois sur 2 chiffres ('01'..'12').");
+const referenceYear = z
+  .string()
+  .regex(/^\d{4}$/)
+  .describe("Année sur 4 chiffres (ex: '2024').");
+
+export const ReferenceCreateSchema = z
+  .object({
+    resourceId: z.string().min(1).describe("ID de la ressource à laquelle rattacher la référence."),
+    title: z.string().min(1).describe("Intitulé du poste."),
+    company: z.string().min(1).describe("Société / employeur."),
+    location: z.string().optional().describe("Lieu (ville)."),
+    startMonth: referenceMonth.optional(),
+    startYear: referenceYear.optional(),
+    endMonth: referenceMonth.optional(),
+    endYear: referenceYear.optional(),
+    skills: z.string().optional().describe("Compétences mobilisées (texte libre, séparées par virgule)."),
+    description: z.string().optional().describe("Description / missions / réalisations."),
+  })
+  .strict();
+
+export const ReferenceUpdateSchema = z
+  .object({
+    referenceId: z.string().min(1).describe("ID de la référence à modifier."),
+    title: z.string().optional().describe("Intitulé du poste."),
+    company: z.string().optional().describe("Société / employeur."),
+    location: z.string().optional().describe("Lieu (ville)."),
+    startMonth: referenceMonth.optional(),
+    startYear: referenceYear.optional(),
+    endMonth: referenceMonth.optional(),
+    endYear: referenceYear.optional(),
+    skills: z.string().optional().describe("Compétences mobilisées."),
+    description: z.string().optional().describe("Description."),
+  })
+  .strict();
+
+export const ReferenceIdSchema = z
+  .object({
+    referenceId: z.string().min(1).describe("ID de la référence."),
+  })
+  .strict();
+
 // ---- Contact schemas ----
 
 export const ContactCreateSchema = z
@@ -1106,3 +1197,7 @@ export type ResourceTimesheetInput = z.infer<typeof ResourceTimesheetSchema>;
 export type TimesheetSearchInput = z.infer<typeof TimesheetSearchSchema>;
 export type TimesheetGetInput = z.infer<typeof TimesheetGetSchema>;
 export type DictionaryGetInput = z.infer<typeof DictionaryGetSchema>;
+export type ResourceTechnicalDataUpdateInput = z.infer<typeof ResourceTechnicalDataUpdateSchema>;
+export type ReferenceCreateInput = z.infer<typeof ReferenceCreateSchema>;
+export type ReferenceUpdateInput = z.infer<typeof ReferenceUpdateSchema>;
+export type ReferenceIdInput = z.infer<typeof ReferenceIdSchema>;

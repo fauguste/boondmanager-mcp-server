@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**167 tools** across **37 domains** · **11 prompts** · **21 resources**.
+**171 tools** across **37 domains** · **11 prompts** · **21 resources**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -282,7 +282,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_reporting_resources` | Reporting ressources | read · idempotent · open-world |
 | `boond_reporting_synthesis` | Reporting synthèse | read · idempotent · open-world |
 
-### resources (16)
+### resources (20)
 
 | Tool | Title | Hints |
 |---|---|---|
@@ -297,8 +297,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_resources_information` | Informations générales d'une ressource | read · idempotent |
 | `boond_resources_positionings` | Positionnements d'une ressource | read · idempotent |
 | `boond_resources_projects` | Projets d'une ressource | read · idempotent |
+| `boond_resources_reference_create` | Créer une référence (expérience pro) sur une ressource | write |
+| `boond_resources_reference_delete` | Supprimer une référence (expérience pro) | delete |
+| `boond_resources_reference_update` | Modifier une référence (expérience pro) | write · idempotent |
 | `boond_resources_search` | Rechercher des ressources | read · idempotent · open-world |
 | `boond_resources_technical_data` | Compétences techniques d'une ressource | read · idempotent |
+| `boond_resources_technical_data_update` | Mettre à jour le dossier technique d'une ressource | write · idempotent |
 | `boond_resources_times_reports` | Feuilles de temps d'une ressource | read · idempotent |
 | `boond_resources_timesheets` | Feuilles de temps d'une ressource | read · idempotent |
 | `boond_resources_update` | Modifier un(e) ressource | write · idempotent |

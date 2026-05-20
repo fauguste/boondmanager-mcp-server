@@ -1,6 +1,21 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ResourceCreateSchema, ResourceUpdateSchema, ResourceSearchSchema, IdSchema } from "../schemas/index.js";
-import type { IdInput } from "../schemas/index.js";
+import {
+  ResourceCreateSchema,
+  ResourceUpdateSchema,
+  ResourceSearchSchema,
+  ResourceTechnicalDataUpdateSchema,
+  ReferenceCreateSchema,
+  ReferenceUpdateSchema,
+  ReferenceIdSchema,
+  IdSchema,
+} from "../schemas/index.js";
+import type {
+  IdInput,
+  ResourceTechnicalDataUpdateInput,
+  ReferenceCreateInput,
+  ReferenceUpdateInput,
+  ReferenceIdInput,
+} from "../schemas/index.js";
 import {
   registerSearchTool,
   registerGetTool,
@@ -164,6 +179,115 @@ Pagination : \`page\` (1+), \`pageSize\` (1-500). Tri : \`sort: "lastName"\` (ou
 
 Returns : liste paginée. Utiliser \`boond_resources_get\` ou les outils d'onglets pour le détail.`;
 
+type DtToolItem = { tool: string; level: number };
+type DtLanguageItem = { language: string; level: string };
+
+// Merge a partial DT payload into the current DT attributes per the rules
+// agreed in spec issue #79. Only keys actually present in `input` are touched;
+// everything else is left untouched (i.e. not sent back to the API).
+export function mergeTechnicalData(
+  current: Record<string, unknown>,
+  input: Record<string, unknown>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+
+  const isBlank = (v: unknown) => v === undefined || v === null || v === "";
+
+  // Scalars filled only when the existing value is blank.
+  for (const key of ["title", "summary", "training"] as const) {
+    if (input[key] !== undefined && isBlank(current[key])) {
+      out[key] = input[key];
+    }
+  }
+  if (input.experience !== undefined) {
+    const cur = current.experience;
+    if (cur === undefined || cur === null || cur === 0) {
+      out.experience = input.experience;
+    }
+  }
+
+  if (typeof input.skills === "string") {
+    const split = (s: string) =>
+      s
+        .split(",")
+        .map((x) => x.trim())
+        .filter((x) => x !== "");
+    const curList = typeof current.skills === "string" ? split(current.skills) : [];
+    const newItems = split(input.skills);
+    const seen = new Set(curList.map((s) => s.toLowerCase()));
+    const additions = newItems.filter((s) => {
+      const k = s.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    out.skills = [...curList, ...additions].join(", ");
+  }
+
+  for (const key of ["expertiseAreas", "activityAreas", "diplomas"] as const) {
+    const incoming = input[key];
+    if (Array.isArray(incoming)) {
+      const cur = Array.isArray(current[key]) ? (current[key] as unknown[]).map((v) => String(v)) : [];
+      const seen = new Set(cur.map((s) => s.toLowerCase()));
+      const merged = [...cur];
+      for (const raw of incoming) {
+        const v = String(raw);
+        const k = v.toLowerCase();
+        if (!seen.has(k)) {
+          seen.add(k);
+          merged.push(v);
+        }
+      }
+      out[key] = merged;
+    }
+  }
+
+  if (Array.isArray(input.tools)) {
+    const cur = Array.isArray(current.tools) ? (current.tools as Array<Record<string, unknown>>) : [];
+    const existing = new Set(cur.map((t) => String(t.tool).toLowerCase()));
+    const additions = (input.tools as DtToolItem[]).filter((t) => !existing.has(String(t.tool).toLowerCase()));
+    out.tools = [...cur, ...additions];
+  }
+
+  if (Array.isArray(input.languages)) {
+    const cur = Array.isArray(current.languages) ? (current.languages as Array<Record<string, unknown>>) : [];
+    const existing = new Set(cur.map((l) => String(l.language).toLowerCase()));
+    const additions = (input.languages as DtLanguageItem[]).filter(
+      (l) => !existing.has(String(l.language).toLowerCase())
+    );
+    out.languages = [...cur, ...additions];
+  }
+
+  return out;
+}
+
+const TECHNICAL_DATA_UPDATE_DESCRIPTION = `Met à jour le dossier technique (DT) d'une ressource : compétences, outils, langues, expertises, formations, diplômes, expérience.
+
+Mode 'merge' (défaut, recommandé pour automation) — enrichit sans rien écraser :
+• skills (CSV) : concatène les compétences absentes
+• tools / languages : ajoute les entrées dont la clé (slug outil / langue) est nouvelle, conserve le niveau existant pour les autres
+• expertiseAreas, activityAreas, diplomas : ajoute les items absents
+• title, summary, training, experience : remplis UNIQUEMENT si actuellement vides
+
+Mode 'replace' — remplace intégralement chaque champ fourni par la valeur passée. Les champs non passés ne sont pas touchés.
+
+Seuls les champs explicitement fournis dans l'appel sont envoyés à l'API — un champ omis ne sera jamais réinitialisé à vide.
+
+Les expériences professionnelles (références) ne sont PAS gérées ici : utiliser boond_resources_reference_{create|update|delete}.`;
+
+const REFERENCE_CREATE_DESCRIPTION = `Crée une expérience professionnelle (référence) rattachée au DT d'une ressource.
+
+Champs requis : resourceId, title, company.
+Dates : startMonth/endMonth au format '01'..'12' et startYear/endYear au format 'YYYY' (chaînes, pas entiers).
+
+Pour ajouter des dates manquantes à une référence existante, préférer boond_resources_reference_update pour ne pas dupliquer.`;
+
+const REFERENCE_UPDATE_DESCRIPTION = `Met à jour une référence existante. Seuls les champs explicitement fournis sont envoyés à l'API — un champ omis ne sera jamais écrasé par "".
+
+Cas d'usage type : compléter startMonth/startYear/endMonth/endYear sur une référence sans toucher au titre, à la société ou à la description.`;
+
+const REFERENCE_DELETE_DESCRIPTION = `Supprime définitivement une référence (expérience professionnelle) du DT d'une ressource. ⚠️ Action irréversible — vérifier l'ID au préalable.`;
+
 export function registerResourceTools(server: McpServer): void {
   registerSearchTool(server, OPTS, {
     schema: ResourceSearchSchema,
@@ -202,4 +326,140 @@ export function registerResourceTools(server: McpServer): void {
       }
     );
   }
+
+  server.registerTool(
+    "boond_resources_technical_data_update",
+    {
+      title: "Mettre à jour le dossier technique d'une ressource",
+      description: TECHNICAL_DATA_UPDATE_DESCRIPTION,
+      inputSchema: ResourceTechnicalDataUpdateSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params: ResourceTechnicalDataUpdateInput) => {
+      const { id, mode, ...rest } = params;
+      const provided: Record<string, unknown> = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== undefined)
+      );
+
+      let attributes: Record<string, unknown>;
+      if (mode === "replace") {
+        attributes = provided;
+      } else {
+        const currentResponse = await apiRequest(`/resources/${id}/technical-data`);
+        const currentEntity = Array.isArray(currentResponse.data) ? currentResponse.data[0] : currentResponse.data;
+        const currentAttrs = (currentEntity?.attributes ?? {}) as Record<string, unknown>;
+        attributes = mergeTechnicalData(currentAttrs, provided);
+      }
+
+      if (Object.keys(attributes).length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `ℹ️ Dossier technique #${id} inchangé (aucun champ à mettre à jour en mode ${mode}).`,
+            },
+          ],
+        };
+      }
+
+      const body = buildJsonApiBody("resource", attributes, id);
+      const response = await apiRequest(`/resources/${id}/technical-data`, "PUT", body);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Dossier technique de la ressource #${id} mis à jour (mode: ${mode}).\n\n${formatDetailResponse(response)}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "boond_resources_reference_create",
+    {
+      title: "Créer une référence (expérience pro) sur une ressource",
+      description: REFERENCE_CREATE_DESCRIPTION,
+      inputSchema: ReferenceCreateSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (params: ReferenceCreateInput) => {
+      const { resourceId, ...attrs } = params;
+      const body = buildJsonApiBody("reference", attrs);
+      const response = await apiRequest(`/resources/${resourceId}/references`, "POST", body);
+      const entity = Array.isArray(response.data) ? response.data[0] : response.data;
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Référence créée pour la ressource #${resourceId}.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "boond_resources_reference_update",
+    {
+      title: "Modifier une référence (expérience pro)",
+      description: REFERENCE_UPDATE_DESCRIPTION,
+      inputSchema: ReferenceUpdateSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params: ReferenceUpdateInput) => {
+      const { referenceId, ...attrs } = params;
+      const body = buildJsonApiBody("reference", attrs, referenceId);
+      const response = await apiRequest(`/references/${referenceId}`, "PUT", body);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Référence #${referenceId} mise à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    "boond_resources_reference_delete",
+    {
+      title: "Supprimer une référence (expérience pro)",
+      description: REFERENCE_DELETE_DESCRIPTION,
+      inputSchema: ReferenceIdSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (params: ReferenceIdInput) => {
+      await apiRequest(`/references/${params.referenceId}`, "DELETE");
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `🗑️ Référence #${params.referenceId} supprimée.`,
+          },
+        ],
+      };
+    }
+  );
 }
