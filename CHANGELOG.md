@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.1] - 2026-05-25
+
+Patch de publication : synchronisation automatique de la description Docker Hub.
+
+### Added
+
+- **README-docker.md dédié** (10 438 chars, sous la limite Docker Hub 25k) focalisé sur l'usage Docker : pull/run, OAuth2 protected resource, env vars HTTP, exemples compose, reverse proxy, healthcheck, multi-arch, provenance/SBOM. Remplace le README principal (31k chars, trop long) pour le champ "Overview" Docker Hub.
+- **Sync automatique Docker Hub** dans `release.yml` : nouveau step `peter-evans/dockerhub-description@v4` après le push de l'image, qui sync `README-docker.md` → champ "Overview" + `short-description` depuis la description GitHub du repo. Skip prereleases + forks sans `DOCKERHUB_TOKEN`. `enable-url-completion: true` réécrit les liens relatifs en absolus vers GitHub raw (badges fonctionnent).
+
+### Changed
+
+- **Scope requis `DOCKERHUB_TOKEN`** : documentation clarifiée — le token doit avoir **Read, Write, Delete** (pas "Public Repo Read-only") pour pusher la description (write-only operation).
+
 ## [2.0.0] - 2026-05-23
 
 > **Promotion de [`2.0.0-alpha`](#200-alpha---2026-05-21) en stable** apres smoke test reel : conteneur Docker pull/run depuis Docker Hub, discovery `/.well-known/oauth-protected-resource` + 401 challenge `WWW-Authenticate` verifies, rejet du scheme non-Bearer confirme, handshake MCP `initialize` traverse end-to-end (serverInfo `2.0.0-alpha`, protocol `2025-06-18`).
