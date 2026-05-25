@@ -32,3 +32,27 @@ updates:
       - "fauguste"
     labels:
       - "ci"
+
+  # Docker base image
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    reviewers:
+      - "fauguste"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Python dependencies (GitHub Actions)
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    reviewers:
+      - "fauguste"
+    labels:
+      - "dependencies"
+      - "ci"
