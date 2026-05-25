@@ -20,7 +20,7 @@
 # See docs/oauth.md for the full flow.
 
 # ---- builder ----
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Install only what's needed to build, with cache-friendly layering.
@@ -36,7 +36,7 @@ RUN npm prune --omit=dev
 
 
 # ---- runtime ----
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 
 # OCI image annotations — make the image discoverable in registries.
