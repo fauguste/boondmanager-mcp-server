@@ -226,3 +226,16 @@ jobs:
           # essentials and we keep this step minimal.
           provenance: true
           sbom: true
+
+      - name: Sync Docker Hub description
+        if: env.DOCKERHUB_TOKEN != '' && steps.version.outputs.is_prerelease != 'true'
+        uses: peter-evans/dockerhub-description@v4
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/boondmanager-mcp-server
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./README-docker.md
+          enable-url-completion: true
