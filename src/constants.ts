@@ -75,14 +75,90 @@ export const API_PATHS = {
   reportingProductionPlans: "/reporting-production-plans",
 } as const;
 
+// Canonical list of tool domains exposed by the server, in registration order.
+// Domain names use dashes; the matching tool-name prefix replaces them with
+// underscores (e.g. `provider-invoices` -> `boond_provider_invoices_*`).
+// Lives here (not in server.ts) so the access-policy layer can validate
+// configured domains without importing server.ts (avoids an import cycle).
+export const REGISTERED_DOMAINS = [
+  "candidates",
+  "resources",
+  "contacts",
+  "companies",
+  "opportunities",
+  "actions",
+  "timesheets",
+  "projects",
+  "invoices",
+  "orders",
+  "deliveries",
+  "absences",
+  "expenses",
+  "products",
+  "positionings",
+  "payments",
+  "advantages",
+  "application",
+  "contracts",
+  "purchases",
+  "provider-invoices",
+  "accounts",
+  "agencies",
+  "business-units",
+  "roles",
+  "logs",
+  "notifications",
+  "threads",
+  "todolists",
+  "flags",
+  "calendars",
+  "webhooks",
+  "validations",
+  "poles",
+  "reporting",
+  "planning-absences",
+  "workflows",
+] as const;
+
+export type DomainName = (typeof REGISTERED_DOMAINS)[number];
+
 // Tab names available on entities (matching actual API endpoints)
 export const ENTITY_TABS = {
   candidates: ["information", "technical-data", "administrative", "actions", "positionings"] as const,
-  resources: ["information", "technical-data", "administrative", "advantages", "actions", "positionings", "projects", "times-reports", "expenses-reports", "absences-reports"] as const,
+  resources: [
+    "information",
+    "technical-data",
+    "administrative",
+    "advantages",
+    "actions",
+    "positionings",
+    "projects",
+    "times-reports",
+    "expenses-reports",
+    "absences-reports",
+  ] as const,
   contacts: ["information", "actions", "opportunities", "projects", "orders", "invoices"] as const,
-  companies: ["information", "contacts", "actions", "opportunities", "projects", "orders", "invoices", "purchases", "provider-invoices"] as const,
+  companies: [
+    "information",
+    "contacts",
+    "actions",
+    "opportunities",
+    "projects",
+    "orders",
+    "invoices",
+    "purchases",
+    "provider-invoices",
+  ] as const,
   opportunities: ["information", "actions", "positionings", "projects", "simulation"] as const,
-  projects: ["information", "actions", "simulation", "deliveries-groupments", "orders", "purchases", "productivity"] as const,
+  projects: [
+    "information",
+    "actions",
+    "simulation",
+    "deliveries-groupments",
+    "orders",
+    "purchases",
+    "productivity",
+  ] as const,
   invoices: ["information", "actions", "billable-items"] as const,
   orders: ["information", "actions", "invoices"] as const,
 } as const;

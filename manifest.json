@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "boondmanager-mcp-server",
   "display_name": "BoondManager MCP Server",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "MCP Server for BoondManager API - 167 tools, 11 prompts, 21 resources (ERP/CRM)",
   "author": {
     "name": "Frédéric Auguste",
@@ -29,7 +29,11 @@
         "BOOND_CLIENT_KEY": "${user_config.client_key}",
         "BOOND_API_TOKEN": "${user_config.api_token}",
         "BOOND_USER": "${user_config.user}",
-        "BOOND_PASSWORD": "${user_config.password}"
+        "BOOND_PASSWORD": "${user_config.password}",
+        "BOOND_MCP_DOMAINS": "${user_config.mcp_domains}",
+        "BOOND_MCP_EXCLUDE_DOMAINS": "${user_config.mcp_exclude_domains}",
+        "BOOND_MCP_OPERATIONS": "${user_config.mcp_operations}",
+        "BOOND_MCP_READ_ONLY": "${user_config.mcp_read_only}"
       }
     }
   },
@@ -80,6 +84,31 @@
       "title": "Mot de passe (Option 3 : BasicAuth)",
       "description": "Mot de passe BoondManager pour l'authentification BasicAuth.",
       "sensitive": true,
+      "required": false
+    },
+    "mcp_domains": {
+      "type": "string",
+      "title": "Restriction : domaines autorisés",
+      "description": "Liste blanche de domaines séparés par des virgules (ex: invoices,payments,application). Vide = tous les domaines. Voir docs/access-control.md.",
+      "required": false
+    },
+    "mcp_exclude_domains": {
+      "type": "string",
+      "title": "Restriction : domaines exclus",
+      "description": "Liste noire de domaines séparés par des virgules (ex: candidates,resources), appliquée après la liste blanche. Vide = aucune exclusion.",
+      "required": false
+    },
+    "mcp_operations": {
+      "type": "string",
+      "title": "Restriction : opérations autorisées",
+      "description": "Opérations autorisées séparées par des virgules parmi read,create,update,delete. Vide = toutes. Ignoré si 'Lecture seule' est activé.",
+      "required": false
+    },
+    "mcp_read_only": {
+      "type": "boolean",
+      "title": "Restriction : lecture seule",
+      "description": "Si activé, expose uniquement les outils de lecture (bloque création, modification et suppression). N'est pas une frontière de sécurité dure : les droits du compte BoondManager s'appliquent en plus.",
+      "default": false,
       "required": false
     }
   },

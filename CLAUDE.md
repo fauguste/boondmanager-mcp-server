@@ -298,6 +298,53 @@ Every tool must declare annotations:
 Prompts and resources don't take annotations — `title` and `description`
 are what the client surfaces.
 
+The access-control layer (below) classifies each tool's *operation* from
+these annotations, so they double as the source of truth for read-only /
+write / delete filtering. Keep them accurate.
+
+## Access Control (domain / operation restriction)
+
+Operator-side, env-driven filtering of the exposed surface. Implemented in
+`src/config/access-policy.ts` and wired in `src/server.ts::registerAll`. **Not
+a hard security boundary** — it hides tools/prompts from the model but the
+configured BoondManager credentials keep their rights (the real wall is the
+Boond account/role). Full guide: `docs/access-control.md`.
+
+Env vars (all optional, absent = full surface = legacy behaviour):
+
+| Var | Effect |
+|-----|--------|
+| `BOOND_MCP_DOMAINS` | CSV allow-list of domains. Absent = all. Dashes/underscores both accepted. |
+| `BOOND_MCP_EXCLUDE_DOMAINS` | CSV deny-list, applied after the allow-list (deny wins). |
+| `BOOND_MCP_OPERATIONS` | CSV of `read,create,update,delete`. Absent = all. Precedence over READ_ONLY. |
+| `BOOND_MCP_READ_ONLY` | Boolean (`1/true/yes`) shortcut for `OPERATIONS=read`. |
+
+Key design points (so future changes don't regress them):
+
+- **Domain filtering couples domain ↔ registrar** via the exported
+  `TOOL_REGISTRARS` array in `server.ts` (same list the TOOLS.md generator
+  consumes). No regex on tool names, so multi-word domains like
+  `provider-invoices` can't false-match `invoices`.
+- **Operation filtering is a `Proxy`** (`withPolicy`) around the McpServer that
+  drops a tool whose `operationOf(annotations)` is not allowed. Fast-path:
+  returns the server untouched when all operations are allowed. Operation is
+  derived from annotations: `readOnlyHint→read`, `destructiveHint→delete`,
+  `idempotentHint→update`, else `create`.
+- **Prompts** carry a `domains: DomainName[]` field (in `src/prompts/index.ts`);
+  a prompt is cut if any of its domains is disallowed. **Workflow tools**
+  (`boond_workflow_*`) mirror prompts 1:1 and follow the *same* rule (they are
+  NOT gated by allow-list membership of the `workflows` domain; a prompt and
+  its mirror appear/disappear together; an explicit `EXCLUDE_DOMAINS=workflows`
+  still drops the tool-form only).
+- **Resources are never filtered** (lookup substrate / dictionaries).
+- New signatures (`registerAllPrompts(server, policy?)`,
+  `registerWorkflowTools(server, policy?)`) keep `policy` **optional** so the
+  catalogue generator and existing tests register the full surface unchanged —
+  this is what keeps `TOOLS.md` from drifting.
+- The policy is resilient: unknown domains/operations are warned-and-ignored,
+  never fatal. Excluding `application` logs a guard-rail warning (it backs
+  dictionary/current-user resolution).
+
 ## Transports
 
 The server selects its transport from `MCP_TRANSPORT`:

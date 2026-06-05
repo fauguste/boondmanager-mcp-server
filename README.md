@@ -423,6 +423,27 @@ Pour eviter qu'une boucle d'outils emballee n'inonde l'API (et n'enchaine les `4
 | `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Debit soutenu (requetes/seconde). `0` desactive completement. |
 | `BOOND_HTTP_RATE_LIMIT_BURST` | `20` | Capacite du bucket = taille maximale de rafale immediate. |
 
+### Restriction d'accès (domaines / lecture seule)
+
+Vous pouvez restreindre **ce que l'IA voit et peut faire**, entièrement par
+variables d'environnement : exposer seulement certains domaines (ex. la
+comptabilité), et/ou bloquer les écritures et suppressions.
+
+| Variable | Effet |
+|----------|-------|
+| `BOOND_MCP_DOMAINS` | Liste blanche de domaines (CSV). Absente = tous. Ex. `invoices,payments,application` |
+| `BOOND_MCP_EXCLUDE_DOMAINS` | Liste noire de domaines (CSV), appliquée après la liste blanche. Ex. `candidates,resources` |
+| `BOOND_MCP_OPERATIONS` | Opérations autorisées (CSV) parmi `read,create,update,delete`. Absente = toutes. |
+| `BOOND_MCP_READ_ONLY` | Raccourci : `true` équivaut à `BOOND_MCP_OPERATIONS=read` (tout en lecture seule). |
+
+> ⚠️ **Ce n'est pas une frontière de sécurité dure.** Le filtre masque des
+> outils à l'IA mais n'altère pas les droits du compte BoondManager utilisé.
+> Pour un vrai cloisonnement, configurez d'abord les droits du compte/rôle
+> BoondManager (lecture seule, périmètre comptable…) ; ce filtre vient en
+> complément (économie de tokens, garde-fou anti-action accidentelle).
+
+Guide complet, règles de résolution et exemples : [docs/access-control.md](docs/access-control.md).
+
 ## Transports
 
 Le serveur supporte deux transports MCP, selectionnables via la variable d'environnement `MCP_TRANSPORT`.

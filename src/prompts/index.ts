@@ -1,5 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { DomainName } from "../constants.js";
+import { isDomainAllowed, type AccessPolicy } from "../config/access-policy.js";
 
 /**
  * Pre-orchestrated MCP prompts for the most common Boond workflows.
@@ -26,6 +28,16 @@ export interface PromptDefinition {
   title: string;
   description: string;
   argsSchema: z.ZodRawShape;
+  /**
+   * Business domains this prompt's runbook orchestrates. Used by the access
+   * policy: the prompt (and its mirror workflow tool in `tools/workflows.ts`)
+   * is cut when ANY of these domains is filtered out, so a surfaced runbook
+   * never points the model at tools that aren't registered. Optional
+   * name-resolution helpers (e.g. resolving a manager name via
+   * `boond_resources_search`) are intentionally NOT listed: if their domain
+   * is filtered, the user simply passes a numeric id instead.
+   */
+  domains: readonly DomainName[];
   build: (args: Record<string, string | undefined>) => string;
 }
 
@@ -107,6 +119,7 @@ export const PROMPTS: PromptDefinition[] = [
         .optional()
         .describe("Période d'analyse libre (ex: 'cette semaine', 'avril 2026'). Défaut: mois en cours."),
     },
+    domains: ["resources", "application"],
     build: ({ manager_id, periode }) => {
       const periodeText = periode || "le mois en cours";
       let preamble = "";
@@ -158,6 +171,7 @@ export const PROMPTS: PromptDefinition[] = [
             " Si absent, scope = équipe de l'utilisateur courant via `perimeterDynamic: ['data']`."
         ),
     },
+    domains: ["opportunities", "application"],
     build: ({ date_debut, date_fin, manager_id }) => {
       let preamble = "";
       let scopeFilter: string;
@@ -203,6 +217,7 @@ export const PROMPTS: PromptDefinition[] = [
         .optional()
         .describe("Société ciblée pour la relance. " + ID_OR_NAME_HINT_SOCIETY),
     },
+    domains: ["invoices", "application"],
     build: ({ society_id }) => {
       let preamble = "";
       let filterLine: string;
@@ -238,6 +253,7 @@ export const PROMPTS: PromptDefinition[] = [
     argsSchema: {
       opportunity_id: z.string().describe("Opportunité à pourvoir. " + ID_OR_NAME_HINT_OPPORTUNITY),
     },
+    domains: ["candidates", "opportunities", "application"],
     build: ({ opportunity_id }) => {
       const r = resolveEntity(opportunity_id ?? "", "opportunity", "<OPPORTUNITY_ID>");
       const oppLit = r.idForFilter;
@@ -268,6 +284,7 @@ export const PROMPTS: PromptDefinition[] = [
     argsSchema: {
       resource_id: z.string().describe("Ressource ciblée. " + ID_OR_NAME_HINT_RESOURCE),
     },
+    domains: ["resources"],
     build: ({ resource_id }) => {
       const r = resolveEntity(resource_id ?? "", "resource", "<RESOURCE_ID>");
       const idLit = r.idForFilter;
@@ -314,6 +331,7 @@ export const PROMPTS: PromptDefinition[] = [
             " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
     },
+    domains: ["resources", "application"],
     build: ({ start_date, end_date, competences, manager_id }) => {
       let preamble = "";
       let scope: string;
@@ -376,6 +394,7 @@ export const PROMPTS: PromptDefinition[] = [
             " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
     },
+    domains: ["resources", "application"],
     build: ({ horizon_jours, manager_id }) => {
       const horizon = horizon_jours || "60";
       let preamble = "";
@@ -437,6 +456,7 @@ export const PROMPTS: PromptDefinition[] = [
         .describe("Agence pour cartographier toute une agence (alternatif à `manager_id`). " + ID_OR_NAME_HINT_AGENCY),
       top_n: z.string().optional().describe("Nombre de compétences à mettre en avant dans le top (défaut: 20)."),
     },
+    domains: ["resources", "opportunities", "application"],
     build: ({ manager_id, agency_id, top_n }) => {
       const top = top_n || "20";
       let preamble = "";
@@ -500,6 +520,7 @@ export const PROMPTS: PromptDefinition[] = [
             " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
         ),
     },
+    domains: ["resources", "application"],
     build: ({ seuil_mois, manager_id }) => {
       const seuil = seuil_mois || "12";
       let preamble = "";
@@ -579,6 +600,7 @@ export const PROMPTS: PromptDefinition[] = [
             " Sinon scope ouvert (toute l'organisation accessible)."
         ),
     },
+    domains: ["resources", "candidates", "application"],
     build: ({ competences, experience_min, dispo_avant, inclure_candidats, manager_id }) => {
       const includeCandidates = (inclure_candidats || "oui").toLowerCase() !== "non";
       let preamble = "";
@@ -641,6 +663,7 @@ export const PROMPTS: PromptDefinition[] = [
         .optional()
         .describe("Semaine ciblée (ex: 'cette semaine', 'la semaine prochaine'). Défaut: cette semaine."),
     },
+    domains: ["resources", "opportunities", "projects", "application"],
     build: ({ semaine }) => {
       const semaineText = semaine || "cette semaine";
       return [
@@ -664,8 +687,11 @@ export const PROMPTS: PromptDefinition[] = [
   },
 ];
 
-export function registerAllPrompts(server: McpServer): void {
+export function registerAllPrompts(server: McpServer, policy?: AccessPolicy): void {
   for (const p of PROMPTS) {
+    // Cut a prompt when any domain it orchestrates is filtered out, so the
+    // surfaced runbook never references tools that aren't registered.
+    if (policy && !p.domains.every((d) => isDomainAllowed(policy, d))) continue;
     server.registerPrompt(
       p.name,
       {

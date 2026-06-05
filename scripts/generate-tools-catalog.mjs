@@ -29,10 +29,13 @@ if (!existsSync(DIST_DIR)) {
 }
 
 // Import everything we need from the compiled output.
-const tools = await import("../dist/tools/index.js");
 const { registerAllPrompts } = await import("../dist/prompts/index.js");
 const { registerAllResources } = await import("../dist/resources/index.js");
-const { REGISTERED_DOMAINS } = await import("../dist/server.js");
+// TOOL_REGISTRARS is the single source of truth for "which registrars run, in
+// what order" — shared with the real createMcpServer(). We call each registrar
+// WITHOUT an access policy so the catalogue always reflects the full surface,
+// regardless of any BOOND_MCP_* restriction set in the environment.
+const { REGISTERED_DOMAINS, TOOL_REGISTRARS } = await import("../dist/server.js");
 
 // Domains that span more than one underscore segment (e.g. `business_units`).
 // REGISTERED_DOMAINS uses dashes; tool names use underscores. Convert and
@@ -58,31 +61,14 @@ const stub = {
   },
 };
 
-// Mirror the order in src/server.ts so the captured set is identical to a
-// real createMcpServer() boot.
-const TOOL_REGISTRARS = [
-  "registerCandidateTools", "registerResourceTools", "registerContactTools",
-  "registerCompanyTools", "registerOpportunityTools", "registerActionTools",
-  "registerTimesheetTools", "registerProjectTools", "registerInvoiceTools",
-  "registerOrderTools", "registerDeliveryTools", "registerAbsenceTools",
-  "registerExpenseTools", "registerProductTools", "registerPositioningTools",
-  "registerPaymentTools", "registerAdvantageTools", "registerApplicationTools",
-  "registerContractTools", "registerPurchaseTools", "registerProviderInvoiceTools",
-  "registerAccountTools", "registerAgencyTools", "registerBusinessUnitTools",
-  "registerRoleTools", "registerLogTools", "registerNotificationTools",
-  "registerThreadTools", "registerTodolistTools", "registerFlagTools",
-  "registerCalendarTools", "registerWebhookTools", "registerValidationTools",
-  "registerPoleTools", "registerReportingTools", "registerPlanningAbsenceTools",
-  "registerWorkflowTools",
-];
-
-for (const fnName of TOOL_REGISTRARS) {
-  const fn = tools[fnName];
-  if (typeof fn !== "function") {
-    console.error(`ERROR: ${fnName} is not exported from dist/tools/index.js`);
+// Run the exact same registrars as createMcpServer(), in the same order,
+// against the stub — no policy, so we always capture the full surface.
+for (const [domain, register] of TOOL_REGISTRARS) {
+  if (typeof register !== "function") {
+    console.error(`ERROR: registrar for domain "${domain}" is not a function`);
     process.exit(1);
   }
-  fn(stub);
+  register(stub);
 }
 registerAllPrompts(stub);
 registerAllResources(stub);

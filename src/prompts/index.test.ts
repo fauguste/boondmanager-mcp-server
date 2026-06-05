@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerAllPrompts, REGISTERED_PROMPTS } from "./index.js";
+import { registerAllPrompts, REGISTERED_PROMPTS, PROMPTS } from "./index.js";
+import { REGISTERED_DOMAINS } from "../constants.js";
+import { resolveAccessPolicy } from "../config/access-policy.js";
 
 function createMockServer() {
   return { registerPrompt: vi.fn() } as unknown as McpServer;
@@ -338,6 +340,42 @@ describe("registerAllPrompts", () => {
       expect(text).not.toContain("Préalable");
       expect(text).not.toContain("<RESOURCE_ID>");
       expect(text).toContain("18081");
+    });
+  });
+
+  describe("domain metadata + access-policy filtering", () => {
+    const known = new Set<string>(REGISTERED_DOMAINS);
+
+    it("every prompt declares a non-empty domains array of known domains", () => {
+      for (const p of PROMPTS) {
+        expect(p.domains.length).toBeGreaterThan(0);
+        for (const d of p.domains) {
+          expect(known.has(d)).toBe(true);
+        }
+      }
+    });
+
+    it("no policy → all prompts registered (back-compat)", () => {
+      registerAllPrompts(server);
+      expect(server.registerPrompt).toHaveBeenCalledTimes(PROMPTS.length);
+    });
+
+    it("allow-list keeps only prompts whose domains are fully allowed", () => {
+      const policy = resolveAccessPolicy({ BOOND_MCP_DOMAINS: "invoices,application" } as NodeJS.ProcessEnv);
+      registerAllPrompts(server, policy);
+      const names = vi.mocked(server.registerPrompt).mock.calls.map((c) => c[0]);
+      expect(names).toContain("factures_a_relancer");
+      expect(names).not.toContain("synthese_equipe");
+      expect(names).not.toContain("pipeline_commercial");
+    });
+
+    it("excluding a transversal domain (application) cuts the prompts that rely on it", () => {
+      const policy = resolveAccessPolicy({ BOOND_MCP_EXCLUDE_DOMAINS: "application" } as NodeJS.ProcessEnv);
+      registerAllPrompts(server, policy);
+      const names = vi.mocked(server.registerPrompt).mock.calls.map((c) => c[0]);
+      // fiche_consultant is the only prompt that does not depend on `application`.
+      expect(names).toContain("fiche_consultant");
+      expect(names).not.toContain("synthese_equipe");
     });
   });
 });

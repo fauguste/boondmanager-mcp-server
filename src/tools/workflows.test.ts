@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerWorkflowTools } from "./workflows.js";
 import { PROMPTS } from "../prompts/index.js";
+import { resolveAccessPolicy } from "../config/access-policy.js";
 
 function createMockServer() {
   return { registerTool: vi.fn() } as unknown as McpServer;
@@ -93,5 +94,20 @@ describe("registerWorkflowTools", () => {
       expect(config.description).toContain(p.description);
       expect(config.description).toContain(p.name);
     }
+  });
+
+  describe("access-policy domain filtering", () => {
+    it("no policy → one tool per prompt (back-compat)", () => {
+      registerWorkflowTools(server);
+      expect(server.registerTool).toHaveBeenCalledTimes(PROMPTS.length);
+    });
+
+    it("keeps only workflow tools whose source prompt's domains are fully allowed", () => {
+      const policy = resolveAccessPolicy({ BOOND_MCP_DOMAINS: "invoices,application" } as NodeJS.ProcessEnv);
+      registerWorkflowTools(server, policy);
+      const names = vi.mocked(server.registerTool).mock.calls.map((c) => c[0]);
+      expect(names).toContain("boond_workflow_factures_a_relancer");
+      expect(names).not.toContain("boond_workflow_synthese_equipe");
+    });
   });
 });

@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PROMPTS } from "../prompts/index.js";
+import { isDomainAllowed, type AccessPolicy } from "../config/access-policy.js";
 
 /**
  * Workflow tools — same runbooks as the MCP prompts in `src/prompts/index.ts`,
@@ -19,8 +20,12 @@ import { PROMPTS } from "../prompts/index.js";
  * Same args, same output. The runbook returned in the tool result is
  * exactly the text the prompt would have produced.
  */
-export function registerWorkflowTools(server: McpServer): void {
+export function registerWorkflowTools(server: McpServer, policy?: AccessPolicy): void {
   for (const p of PROMPTS) {
+    // Mirror the prompt-level domain filter: cut a workflow tool when any
+    // domain its source prompt orchestrates is filtered out (keeps the
+    // workflow tools and the MCP prompts perfectly in sync).
+    if (policy && !p.domains.every((d) => isDomainAllowed(policy, d))) continue;
     server.registerTool(
       `boond_workflow_${p.name}`,
       {

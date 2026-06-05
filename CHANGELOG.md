@@ -3,6 +3,29 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.0] - 2026-06-05
+
+Restriction d'accès configurable par variables d'environnement : limiter les domaines exposés et/ou bloquer les écritures, sans modifier le code.
+
+### Added
+
+- **Filtrage par domaine et par opération** (`src/config/access-policy.ts`). Quatre variables, toutes optionnelles (absentes = surface complète, comportement historique) :
+  - `BOOND_MCP_DOMAINS` : liste blanche de domaines (CSV). Tirets ou underscores acceptés.
+  - `BOOND_MCP_EXCLUDE_DOMAINS` : liste noire (CSV), appliquée après la liste blanche (la liste noire l'emporte).
+  - `BOOND_MCP_OPERATIONS` : opérations autorisées (CSV) parmi `read,create,update,delete`. Prioritaire sur le raccourci ci-dessous.
+  - `BOOND_MCP_READ_ONLY` : raccourci booléen (`1`/`true`/`yes`) equivalent a `BOOND_MCP_OPERATIONS=read`.
+- **Cohérence prompts / workflow-tools** : chaque prompt déclare les domaines qu'il orchestre (`domains[]`) ; un prompt et son outil miroir `boond_workflow_*` sont coupés ensemble dès qu'un de ces domaines est filtré, pour qu'aucun runbook ne pointe vers un outil absent.
+- **Exposition côté MCPB** : les quatre options sont disponibles dans `user_config` de `manifest.json` (toggles dans l'UI Claude Desktop).
+- **Documentation dédiée** : `docs/access-control.md` (règles de résolution, exemples, et avertissement de sécurité).
+
+### Changed
+
+- `REGISTERED_DOMAINS` déplacé dans `src/constants.ts` ; nouveau `TOOL_REGISTRARS` exporté depuis `src/server.ts` couplant chaque domaine à sa fonction d'enregistrement. La détection de domaine ne repose plus sur une analyse du nom d'outil (plus de faux positif entre `invoices` et `provider-invoices`). Le générateur de `TOOLS.md` réutilise cette liste unique.
+
+### Why
+
+Réduire la surface exposée au modèle économise des tokens de contexte et sert de garde-fou contre les actions accidentelles. Ce filtre n'est pas une frontière de sécurité dure : les droits du compte BoondManager restent la vraie barrière. Le filtre vit dans `createMcpServer` (signatures de policy optionnelles), donc `TOOLS.md` n'est jamais impacté et le drift-check CI reste vert.
+
 ## [2.1.0] - 2026-05-27
 
 Mécanisme de notification de mise à jour pour les installations `.mcpb` dans Claude Desktop (et tous les autres canaux : stdio CLI, transport HTTP, conteneur Docker).
