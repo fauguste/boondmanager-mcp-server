@@ -756,17 +756,32 @@ export const ActionSearchSchema = z
   })
   .strict();
 
+// POST /actions requires a polymorphic `dependsOn` relationship (the entity the
+// action is attached to) and a numeric `typeOf` (dictionary id, see
+// `setting.action.*` in /application/dictionary). Valid attributes are `title`
+// and `text` (not subject/content) — anything else triggers a 422.
 export const ActionCreateSchema = z
   .object({
-    typeOf: z.string().min(1).describe("Type d'action (ex: call, email, meeting, note)"),
-    subject: z.string().optional().describe("Sujet de l'action"),
-    content: z.string().optional().describe("Contenu / description"),
-    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD ou ISO)"),
-    endDate: z.string().optional().describe("Date de fin"),
-    candidateId: z.string().optional().describe("ID du candidat associé"),
-    resourceId: z.string().optional().describe("ID de la ressource associée"),
-    contactId: z.string().optional().describe("ID du contact associé"),
-    companyId: z.string().optional().describe("ID de la société associée"),
+    typeOf: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .describe(
+        "Type d'action : ID numérique du dictionnaire BoondManager (setting.action.*, via boond_application_dictionary)"
+      ),
+    title: z.string().optional().describe("Titre de l'action"),
+    text: z.string().optional().describe("Contenu / notes de l'action"),
+    startDate: z
+      .string()
+      .optional()
+      .describe("Date de début au format ISO avec timezone (ex: 2026-06-05T10:00:00+0200)"),
+    endDate: z.string().optional().describe("Date de fin (même format que startDate)"),
+    candidateId: z.string().optional().describe("ID du candidat auquel rattacher l'action (dependsOn)"),
+    resourceId: z.string().optional().describe("ID de la ressource à laquelle rattacher l'action (dependsOn)"),
+    contactId: z.string().optional().describe("ID du contact auquel rattacher l'action (dependsOn)"),
+    opportunityId: z.string().optional().describe("ID de l'opportunité à laquelle rattacher l'action (dependsOn)"),
+    projectId: z.string().optional().describe("ID du projet auquel rattacher l'action (dependsOn)"),
+    companyId: z.string().optional().describe("ID de la société associée (uniquement en complément d'un contactId)"),
   })
   .strict();
 
