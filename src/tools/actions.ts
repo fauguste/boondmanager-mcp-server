@@ -61,7 +61,16 @@ Returns: Liste des actions correspondantes.`,
     "boond_actions_create",
     {
       title: "Créer une action",
-      description: `Crée une nouvelle action (appel, email, RDV, note) dans BoondManager, optionnellement liée à un candidat, ressource, contact ou société.`,
+      description: `Crée une nouvelle action (appel, email, RDV, note) dans BoondManager, rattachée à un contact, candidat, ressource, opportunité ou projet (relation dependsOn, obligatoire).
+
+Args:
+  - typeOf (number, requis): ID numérique du type d'action (dictionnaire setting.action.*, via boond_application_dictionary)
+  - title, text (string, optional): Titre et contenu de l'action
+  - startDate, endDate (string, optional): Dates ISO avec timezone (ex: 2026-06-05T10:00:00+0200)
+  - contactId | candidateId | resourceId | opportunityId | projectId (string, un requis): Entité de rattachement
+  - companyId (string, optional): Société, uniquement en complément d'un contactId
+
+Returns: L'action créée avec son ID.`,
       inputSchema: ActionCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -71,23 +80,46 @@ Returns: Liste des actions correspondantes.`,
       },
     },
     async (params) => {
-      const { candidateId, resourceId, contactId, companyId, ...attrs } = params;
-      const body = buildJsonApiBody("action", attrs);
-      const relationships: Record<string, unknown> = {};
-      if (candidateId) relationships.candidate = { data: { id: candidateId, type: "candidate" } };
-      if (resourceId) relationships.resource = { data: { id: resourceId, type: "resource" } };
-      if (contactId) relationships.contact = { data: { id: contactId, type: "contact" } };
-      if (companyId) relationships.company = { data: { id: companyId, type: "company" } };
-      if (Object.keys(relationships).length > 0) {
-        (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
+      const { candidateId, resourceId, contactId, opportunityId, projectId, companyId, ...attrs } = params;
+      // The API requires a polymorphic `dependsOn` relationship pointing to the
+      // entity the action is attached to (422 "Missing required relationship"
+      // otherwise). `company` is only accepted alongside a contact `dependsOn`.
+      const dependsOnCandidates: Array<{ id: string | undefined; type: string }> = [
+        { id: contactId, type: "contact" },
+        { id: candidateId, type: "candidate" },
+        { id: resourceId, type: "resource" },
+        { id: opportunityId, type: "opportunity" },
+        { id: projectId, type: "project" },
+      ];
+      const dependsOn = dependsOnCandidates.find((c) => c.id);
+      if (!dependsOn) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: "❌ L'API BoondManager exige de rattacher l'action à une entité (dependsOn). Fournissez l'un des paramètres : contactId, candidateId, resourceId, opportunityId ou projectId. (companyId seul ne suffit pas : une action ne peut pas être rattachée directement à une société, passez par un contact.)",
+            },
+          ],
+        };
       }
+      const body = buildJsonApiBody("action", attrs);
+      const relationships: Record<string, unknown> = {
+        dependsOn: { data: { id: dependsOn.id, type: dependsOn.type } },
+      };
+      if (companyId && dependsOn.type === "contact") {
+        relationships.company = { data: { id: companyId, type: "company" } };
+      }
+      (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
       const response = await apiRequest("/actions", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Action créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Action créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );

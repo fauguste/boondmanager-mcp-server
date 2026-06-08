@@ -260,14 +260,32 @@ describe("ActionSearchSchema", () => {
 describe("ActionCreateSchema", () => {
   it("should accept valid action", () => {
     const result = ActionCreateSchema.safeParse({
-      typeOf: "call",
-      subject: "Appel de suivi",
+      typeOf: 1,
+      title: "Appel de suivi",
+      text: "Notes de meeting",
+      contactId: "6695",
     });
     expect(result.success).toBe(true);
   });
 
+  it("should coerce a numeric string typeOf to a number", () => {
+    const result = ActionCreateSchema.safeParse({ typeOf: "1", contactId: "6695" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.typeOf).toBe(1);
+    }
+  });
+
+  it("should reject a non-numeric typeOf", () => {
+    expect(ActionCreateSchema.safeParse({ typeOf: "call" }).success).toBe(false);
+  });
+
   it("should require typeOf", () => {
     expect(ActionCreateSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("should reject legacy subject/content attributes", () => {
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, subject: "x", content: "y" }).success).toBe(false);
   });
 });
 
