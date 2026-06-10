@@ -20,6 +20,9 @@ import {
   resetClientForTests,
   oauthContextAuth,
   assertSafeApiPath,
+  apiDownload,
+  apiUploadForm,
+  parseContentDispositionFilename,
 } from "./boond-client.js";
 import { oauthContext } from "./oauth.js";
 import {
@@ -50,6 +53,12 @@ describe("buildSearchQuery", () => {
   it("should not include undefined extra params", () => {
     const result = buildSearchQuery({ keywords: "test", extra: undefined });
     expect(result).not.toHaveProperty("extra");
+  });
+
+  it("should never forward `fields` (client-side projection) to the API", () => {
+    const result = buildSearchQuery({ keywords: "test", fields: ["title", "city"] });
+    expect(result).not.toHaveProperty("fields");
+    expect(result.keywords).toBe("test");
   });
 });
 
@@ -181,6 +190,43 @@ describe("formatListResponse", () => {
       "candidat"
     );
     expect(result).toContain("Jean Dupont");
+  });
+
+  describe("fields projection", () => {
+    const response = {
+      data: [
+        {
+          id: "1",
+          type: "candidate",
+          attributes: { firstName: "Jean", lastName: "Dupont", title: "Dev", city: "Paris", skills: { main: "TS" } },
+        },
+      ],
+      meta: { totals: { rows: 1 } },
+    };
+
+    it("restricts each line to the selected attributes", () => {
+      const result = formatListResponse(response, "candidat", ["title", "city"]);
+      expect(result).toContain("[#1]");
+      expect(result).toContain("title: Dev");
+      expect(result).toContain("city: Paris");
+      expect(result).not.toContain("Jean");
+    });
+
+    it("silently skips unknown attribute names", () => {
+      const result = formatListResponse(response, "candidat", ["title", "nope"]);
+      expect(result).toContain("title: Dev");
+      expect(result).not.toContain("nope");
+    });
+
+    it("JSON-serialises nested object values", () => {
+      const result = formatListResponse(response, "candidat", ["skills"]);
+      expect(result).toContain('skills: {"main":"TS"}');
+    });
+
+    it("falls back to the standard summary when fields is empty", () => {
+      const result = formatListResponse(response, "candidat", []);
+      expect(result).toContain("Jean Dupont");
+    });
   });
 });
 
@@ -1245,5 +1291,156 @@ describe("oauthContextAuth", () => {
     initClientWithAuth(oauthContextAuth);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(successResponse()));
     await expect(apiRequest("/application/current-user")).rejects.toThrow(/Bearer/);
+  });
+});
+
+describe("parseContentDispositionFilename", () => {
+  it("parses the quoted form", () => {
+    expect(parseContentDispositionFilename('attachment; filename="cv-dupont.pdf"')).toBe("cv-dupont.pdf");
+  });
+
+  it("parses the unquoted form", () => {
+    expect(parseContentDispositionFilename("attachment; filename=cv.pdf")).toBe("cv.pdf");
+  });
+
+  it("parses the RFC 5987 UTF-8 form", () => {
+    expect(parseContentDispositionFilename("attachment; filename*=UTF-8''CV%20Dupont.pdf")).toBe("CV Dupont.pdf");
+  });
+
+  it("returns undefined when absent", () => {
+    expect(parseContentDispositionFilename(null)).toBeUndefined();
+    expect(parseContentDispositionFilename("inline")).toBeUndefined();
+  });
+});
+
+describe("apiDownload", () => {
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+    resetClientForTests();
+    initClient();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
+    resetClientForTests();
+  });
+
+  it("returns the raw bytes, content type, and filename", async () => {
+    const bytes = Buffer.from("%PDF-1.4");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          "content-type": "application/pdf; charset=binary",
+          "content-disposition": 'attachment; filename="cv.pdf"',
+        }),
+        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)),
+      })
+    );
+    const doc = await apiDownload("/documents/12");
+    expect(doc.data.toString()).toBe("%PDF-1.4");
+    expect(doc.contentType).toBe("application/pdf");
+    expect(doc.filename).toBe("cv.pdf");
+  });
+
+  it("defaults the content type when the header is missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(2)),
+      })
+    );
+    const doc = await apiDownload("/documents/12");
+    expect(doc.contentType).toBe("application/octet-stream");
+    expect(doc.filename).toBeUndefined();
+  });
+
+  it("throws a formatted error on non-2xx", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        headers: new Headers(),
+        text: () => Promise.resolve(""),
+      })
+    );
+    await expect(apiDownload("/documents/999")).rejects.toThrow(/404/);
+  });
+
+  it("rejects unsafe paths before any network call", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiDownload("/documents/../invoices/5")).rejects.toThrow(/Unsafe API path/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("apiUploadForm", () => {
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+    resetClientForTests();
+    initClient();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
+    resetClientForTests();
+  });
+
+  it("POSTs a FormData body with the given fields and returns JSON", async () => {
+    const mockResponse = { data: { id: "777", type: "document", attributes: {} } };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-length": "50" }),
+      json: () => Promise.resolve(mockResponse),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await apiUploadForm("/documents", {
+      parentType: "candidateResume",
+      parentId: "42",
+      fileUrl: "https://example.com/cv.pdf",
+    });
+    expect(result).toEqual(mockResponse);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/documents");
+    expect(options.method).toBe("POST");
+    const form = options.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect(form.get("parentType")).toBe("candidateResume");
+    expect(form.get("parentId")).toBe("42");
+    // No manual Content-Type: fetch must derive the multipart boundary itself
+    expect((options.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+  });
+
+  it("throws a formatted error on non-2xx", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        statusText: "Unprocessable",
+        headers: new Headers(),
+        text: () => Promise.resolve('{"errors":[{"detail":"invalid parentType"}]}'),
+      })
+    );
+    await expect(apiUploadForm("/documents", { parentType: "nope" })).rejects.toThrow(/invalid parentType/);
   });
 });

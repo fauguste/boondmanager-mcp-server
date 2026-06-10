@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.4.0] - 2026-06-10
+
+Six évolutions produit : documents/CV, sorties structurées, confirmation des suppressions, économie de tokens, healthcheck HTTP, et réparation du moniteur d'API.
+
+### Added
+
+- **Domaine `documents`** (`src/tools/documents.ts`) — 3 outils :
+  - `boond_documents_get` : télécharge un document (CV de candidat/ressource, justificatif, contrat…) et le retourne en ressource MCP embarquée (base64 pour les binaires, texte brut pour les fichiers texte, plafond 5 Mo). Les IDs se trouvent dans les onglets des entités (ex. `boond_candidates_information` → relations `resumes`/`files`).
+  - `boond_documents_create` : téléversement **par URL uniquement** (`fileUrl` — BoondManager télécharge le fichier côté serveur, le serveur MCP ne lit jamais de fichier local), avec option `parsing` (analyse IA du CV pour `candidateResume`).
+  - `boond_documents_delete` : via la factory (confirmation + sortie structurée).
+  - Nouvelles primitives client : `apiDownload()` (binaire) et `apiUploadForm()` (multipart) dans `boond-client.ts`.
+- **Sorties structurées MCP** (`outputSchema` + `structuredContent`) sur les outils de la crud-factory : `search` retourne `{ total, count, items: [{id, type, summary|attributes}] }` (compact — jamais les ressources JSON:API complètes), `create`/`update` retournent `{ id, type }`, `delete` retourne `{ id, deleted, reason? }`. Les outils `get` restent volontairement texte seul (leur texte est déjà le JSON complet — le dupliquer doublerait la charge).
+- **Confirmation des suppressions par élicitation MCP** (spec 2025-06-18) : chaque `boond_*_delete` demande confirmation à l'utilisateur quand le client déclare la capacité `elicitation`. Refus/annulation → suppression avortée. Clients sans la capacité (ou échec du round-trip) → comportement historique. Opt-out : `BOOND_MCP_CONFIRM_DELETE=0` (toggle `confirm_delete` dans le manifest MCPB). Les 8 deletes hors factory (absences, actions, expenses, invoices, orders, positionings, purchases, références de ressources) ont été alignés.
+- **Paramètre `fields` sur les 6 recherches principales** (resources, candidates, contacts, companies, opportunities, projects) : projection côté client des attributs affichés par résultat (ex. `fields: ["title","updateDate"]`) — réduit fortement la consommation de contexte sur les grandes pages. Jamais transmis à l'API.
+- **`GET /healthz` sur le transport HTTP** : sonde de vivacité non authentifiée (exemptée de la validation Host pour que les probes Docker/K8s passent), retourne `{ status, version, mode, sessions }`. Le `HEALTHCHECK` de l'image Docker l'utilise désormais.
+
+### Fixed
+
+- **Moniteur d'API réparé** (`.github/scripts/api-monitor.mjs`) : le scraping HTML de la page d'index RAML n'a jamais fonctionné (403 WAF — le snapshot restait à 0 endpoint). Le moniteur sonde désormais les fichiers RAML bruts (accessibles statiquement, 152 fichiers sur 50 domaines), hashe leur contenu et diffe contre le snapshot. Zéro dépendance npm (fetch natif — le job a un token issues/PR, il n'exécute plus de code tiers). Le snapshot n'est réécrit que si le contenu change (plus de PR hebdomadaire vide), et un échec réseau sur un fichier connu saute le diff au lieu de générer de fausses suppressions.
+
 ## [2.3.0] - 2026-06-10
 
 Durcissement de sécurité issu d'un audit complet (code applicatif, transport HTTP, chaîne d'approvisionnement CI/CD).

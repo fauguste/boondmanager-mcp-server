@@ -628,6 +628,130 @@ export async function apiRequest(
   throw lastError ?? new Error("BoondManager API request exhausted retries with no recorded error.");
 }
 
+/**
+ * Parse the filename out of a `Content-Disposition` header. Handles the
+ * common `filename="…"`/`filename=…` forms and the RFC 5987
+ * `filename*=UTF-8''…` form. Returns undefined when absent. Exported for
+ * unit testing.
+ */
+export function parseContentDispositionFilename(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const star = header.match(/filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].trim());
+    } catch {
+      // fall through to the plain form
+    }
+  }
+  const plain = header.match(/filename\s*=\s*"([^"]+)"/) ?? header.match(/filename\s*=\s*([^;]+)/);
+  return plain ? plain[1].trim() : undefined;
+}
+
+export interface DownloadedDocument {
+  data: Buffer;
+  contentType: string;
+  filename?: string;
+}
+
+/**
+ * Download a binary payload (documents, justificatifs…) from the BoondManager
+ * API. Same auth/safety/rate-limit plumbing as `apiRequest`, but the body is
+ * returned raw instead of being parsed as JSON:API. Single attempt: document
+ * downloads are interactive one-offs, not worth a retry loop.
+ */
+export async function apiDownload(path: string): Promise<DownloadedDocument> {
+  const { baseUrl, auth } = getConfig();
+  assertSafeApiPath(path);
+
+  const url = new URL(`${baseUrl}${path}`);
+  const base = new URL(baseUrl);
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new Error(`API path escaped the configured base URL: ${path}`);
+  }
+
+  const limiter = getRateLimiter();
+  if (limiter) await limiter.acquire();
+
+  const authHeader = await auth();
+  const timeoutMs = resolveTimeoutMs();
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { [authHeader.name]: authHeader.value, Accept: "*/*" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new Error(
+        [
+          `BoondManager API request timed out after ${timeoutMs}ms`,
+          `Endpoint: GET ${path}`,
+          "Hint: Increase BOOND_HTTP_TIMEOUT_MS or check connectivity to the BoondManager API.",
+        ].join("\n"),
+        { cause: err }
+      );
+    }
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(formatApiError(response.status, response.statusText, "GET", path, errorText));
+  }
+
+  const data = Buffer.from(await response.arrayBuffer());
+  return {
+    data,
+    contentType: response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream",
+    filename: parseContentDispositionFilename(response.headers.get("content-disposition")),
+  };
+}
+
+/**
+ * POST a multipart/form-data payload to the BoondManager API (document
+ * upload). Form values are simple string fields — the file itself travels by
+ * reference via the `fileUrl` field (Boond downloads it server-side), so the
+ * MCP server never buffers file bytes.
+ */
+export async function apiUploadForm(path: string, fields: Record<string, string>): Promise<JsonApiResponse> {
+  const { baseUrl, auth } = getConfig();
+  assertSafeApiPath(path);
+
+  const url = new URL(`${baseUrl}${path}`);
+  const base = new URL(baseUrl);
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new Error(`API path escaped the configured base URL: ${path}`);
+  }
+
+  const limiter = getRateLimiter();
+  if (limiter) await limiter.acquire();
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    form.set(key, value);
+  }
+
+  const authHeader = await auth();
+  // No Content-Type header: fetch derives the multipart boundary from FormData.
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: { [authHeader.name]: authHeader.value, Accept: "application/json" },
+    body: form,
+    signal: AbortSignal.timeout(resolveTimeoutMs()),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(formatApiError(response.status, response.statusText, "POST", path, errorText));
+  }
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return { data: [] };
+  }
+  return (await response.json()) as JsonApiResponse;
+}
+
 export function buildSearchQuery(params: SearchParams): Record<string, QueryValue> {
   const query: Record<string, QueryValue> = {};
 
@@ -635,9 +759,11 @@ export function buildSearchQuery(params: SearchParams): Record<string, QueryValu
   if (params.page !== undefined) query["page"] = params.page;
   if (params.pageSize !== undefined) query["maxResults"] = params.pageSize;
 
-  // Forward any additional filter params (strings, numbers, or arrays)
+  // Forward any additional filter params (strings, numbers, or arrays).
+  // `fields` is a client-side projection consumed by formatListResponse,
+  // never a BoondManager query parameter.
   for (const [key, value] of Object.entries(params)) {
-    if (["keywords", "page", "pageSize"].includes(key)) continue;
+    if (["keywords", "page", "pageSize", "fields"].includes(key)) continue;
     if (value === undefined || value === null) continue;
     if (Array.isArray(value)) {
       // Pass arrays through so apiRequest emits repeated bracket notation
@@ -693,7 +819,27 @@ export function formatEntitySummary(entity: unknown): string {
   return parts.join(" | ");
 }
 
-export function formatListResponse(response: JsonApiResponse, entityType: string): string {
+/**
+ * One result line restricted to the caller-selected attribute names.
+ * Unknown names are skipped silently (the schemas document this), so a typo
+ * degrades to a shorter line rather than an error. Non-primitive values are
+ * JSON-serialised — some Boond attributes are nested objects.
+ */
+function formatProjectedSummary(entity: unknown, fields: string[]): string {
+  const e = (entity ?? {}) as Record<string, unknown>;
+  const attrs = (e.attributes ?? e) as Record<string, unknown>;
+  const id = e.id !== undefined ? String(e.id) : "?";
+  const parts: string[] = [`[#${id}]`];
+  for (const field of fields) {
+    const value = attrs[field];
+    if (value === undefined) continue;
+    const rendered = value === null || typeof value === "object" ? JSON.stringify(value) : String(value);
+    parts.push(`${field}: ${rendered}`);
+  }
+  return parts.join(" | ");
+}
+
+export function formatListResponse(response: JsonApiResponse, entityType: string, fields?: string[]): string {
   const data = Array.isArray(response.data) ? response.data : [response.data];
   const total = response.meta?.totals?.rows;
 
@@ -701,7 +847,8 @@ export function formatListResponse(response: JsonApiResponse, entityType: string
     return `Aucun(e) ${entityType} trouvé(e).`;
   }
 
-  const lines = data.map((item) => formatEntitySummary(item));
+  const projected = fields !== undefined && fields.length > 0;
+  const lines = data.map((item) => (projected ? formatProjectedSummary(item, fields) : formatEntitySummary(item)));
   let result = lines.join("\n");
 
   if (total !== undefined) {

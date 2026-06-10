@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**171 tools** across **37 domains** · **11 prompts** · **21 resources**.
+**174 tools** across **38 domains** · **11 prompts** · **21 resources**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -133,6 +133,14 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 |---|---|---|
 | `boond_deliveries_get` | Détails d'une livraison / CRA | read · idempotent |
 | `boond_deliveries_search` | Rechercher des livraisons / CRA | read · idempotent · open-world |
+
+### documents (3)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_documents_create` | Téléverser un document | write |
+| `boond_documents_delete` | Supprimer un document | delete |
+| `boond_documents_get` | Télécharger un document | read · idempotent |
 
 ### expenses (5)
 

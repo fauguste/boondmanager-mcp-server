@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ExpenseSearchSchema, ExpenseCreateSchema, ExpenseUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
 export function registerExpenseTools(server: McpServer): void {
   // Search expenses
@@ -83,10 +83,12 @@ Returns: Liste des notes de frais correspondantes.`,
       const response = await apiRequest("/expenses-reports", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Note de frais créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Note de frais créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
@@ -110,33 +112,28 @@ Returns: Liste des notes de frais correspondantes.`,
       const body = buildJsonApiBody("expense", attrs, id);
       const response = await apiRequest(`/expenses-reports/${id}`, "PUT", body);
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Note de frais #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Note de frais #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
 
-  // Delete expense
-  server.registerTool(
-    "boond_expenses_delete",
+  // Delete expense — via la factory pour l'élicitation de confirmation + structuredContent
+  registerDeleteTool(
+    server,
+    {
+      entityName: "note de frais",
+      entityNamePlural: "notes de frais",
+      apiPath: "/expenses-reports",
+      prefix: "boond_expenses",
+    },
     {
       title: "Supprimer une note de frais",
-      description: `Supprime une note de frais de BoondManager. ⚠️ Action irréversible.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      await apiRequest(`/expenses-reports/${params.id}`, "DELETE");
-      return {
-        content: [{ type: "text" as const, text: `🗑️ Note de frais #${params.id} supprimée.` }],
-      };
+      description: `Supprime une note de frais de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
     }
   );
 }

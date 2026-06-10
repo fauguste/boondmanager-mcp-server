@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AbsenceSearchSchema, AbsenceCreateSchema, AbsenceUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
 export function registerAbsenceTools(server: McpServer): void {
   // Search absences
@@ -82,10 +82,12 @@ Returns: Liste des absences correspondantes.`,
       const response = await apiRequest("/absences-reports", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Absence créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Absence créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
@@ -109,33 +111,23 @@ Returns: Liste des absences correspondantes.`,
       const body = buildJsonApiBody("absence", attrs, id);
       const response = await apiRequest(`/absences-reports/${id}`, "PUT", body);
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Absence #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Absence #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
 
-  // Delete absence
-  server.registerTool(
-    "boond_absences_delete",
+  // Delete absence — via la factory pour l'élicitation de confirmation + structuredContent
+  registerDeleteTool(
+    server,
+    { entityName: "absence", entityNamePlural: "absences", apiPath: "/absences-reports", prefix: "boond_absences" },
     {
       title: "Supprimer une absence",
-      description: `Supprime une absence de BoondManager. ⚠️ Action irréversible.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      await apiRequest(`/absences-reports/${params.id}`, "DELETE");
-      return {
-        content: [{ type: "text" as const, text: `🗑️ Absence #${params.id} supprimée.` }],
-      };
+      description: `Supprime une absence de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
     }
   );
 }

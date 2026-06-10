@@ -23,6 +23,7 @@ import {
   registerUpdateTool,
   registerDeleteTool,
   buildJsonApiBody,
+  confirmDeletion,
 } from "./crud-factory.js";
 import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
 
@@ -512,6 +513,17 @@ export function registerResourceTools(server: McpServer): void {
     },
     async (params: ReferenceIdInput) => {
       const { resourceId, referenceId } = params;
+      const confirmation = await confirmDeletion(server, "référence", referenceId);
+      if (!confirmation.confirmed) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `❌ Suppression de la référence #${referenceId} annulée par l'utilisateur.`,
+            },
+          ],
+        };
+      }
       const current = await fetchTechnicalDataReferences(resourceId);
       const next = current.filter((r) => String(r.id) !== String(referenceId));
       if (next.length === current.length) {

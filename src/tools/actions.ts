@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ActionSearchSchema, ActionCreateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
 export function registerActionTools(server: McpServer): void {
   // Search actions
@@ -124,25 +124,13 @@ Returns: L'action créée avec son ID.`,
     }
   );
 
-  // Delete action
-  server.registerTool(
-    "boond_actions_delete",
+  // Delete action — via la factory pour l'élicitation de confirmation + structuredContent
+  registerDeleteTool(
+    server,
+    { entityName: "action", entityNamePlural: "actions", apiPath: "/actions", prefix: "boond_actions" },
     {
       title: "Supprimer une action",
-      description: `Supprime une action de BoondManager. ⚠️ Action irréversible.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      await apiRequest(`/actions/${params.id}`, "DELETE");
-      return {
-        content: [{ type: "text" as const, text: `🗑️ Action #${params.id} supprimée.` }],
-      };
+      description: `Supprime une action de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
     }
   );
 }

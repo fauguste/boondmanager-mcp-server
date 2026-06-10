@@ -9,6 +9,12 @@ export const MAX_PAGE_SIZE = 500;
 // typical interactive exploration. The model can refine filters instead.
 export const MAX_SEARCH_PAGE = 100;
 
+// Max size of a document returned inline by boond_documents_get. Base64
+// inflates the payload by ~33% and everything lands in the model context, so
+// anything beyond this is refused with a clear message instead of silently
+// flooding the conversation.
+export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+
 // HTTP client defaults
 // Timeout applied to every BoondManager API request. Overridable via
 // BOOND_HTTP_TIMEOUT_MS to handle slow tenants or long reporting queries.
@@ -73,6 +79,7 @@ export const API_PATHS = {
   reportingResources: "/reporting-resources",
   reportingSynthesis: "/reporting-synthesis",
   reportingProductionPlans: "/reporting-production-plans",
+  documents: "/documents",
 } as const;
 
 // Canonical list of tool domains exposed by the server, in registration order.
@@ -117,6 +124,7 @@ export const REGISTERED_DOMAINS = [
   "poles",
   "reporting",
   "planning-absences",
+  "documents",
   "workflows",
 ] as const;
 

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InvoiceSearchSchema, InvoiceCreateSchema, InvoiceUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
 export function registerInvoiceTools(server: McpServer): void {
   // Search invoices
@@ -86,10 +86,12 @@ Returns: Liste des factures correspondantes.`,
       const response = await apiRequest("/invoices", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Facture créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Facture créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
@@ -113,33 +115,23 @@ Returns: Liste des factures correspondantes.`,
       const body = buildJsonApiBody("invoice", attrs, id);
       const response = await apiRequest(`/invoices/${id}`, "PATCH", body);
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Facture #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Facture #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
 
-  // Delete invoice
-  server.registerTool(
-    "boond_invoices_delete",
+  // Delete invoice — via la factory pour l'élicitation de confirmation + structuredContent
+  registerDeleteTool(
+    server,
+    { entityName: "facture", entityNamePlural: "factures", apiPath: "/invoices", prefix: "boond_invoices" },
     {
       title: "Supprimer une facture",
-      description: `Supprime une facture de BoondManager. ⚠️ Action irréversible.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      await apiRequest(`/invoices/${params.id}`, "DELETE");
-      return {
-        content: [{ type: "text" as const, text: `🗑️ Facture #${params.id} supprimée.` }],
-      };
+      description: `Supprime une facture de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
     }
   );
 }

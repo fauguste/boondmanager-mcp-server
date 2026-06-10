@@ -172,6 +172,51 @@ describe("startHttpTransport (integration)", () => {
     handle = undefined;
   });
 
+  it("serves /healthz without authentication", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34561,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/healthz`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const doc = (await res.json()) as Record<string, unknown>;
+    expect(doc["status"]).toBe("ok");
+    expect(typeof doc["version"]).toBe("string");
+    expect(doc["mode"]).toBe("stateless");
+    expect(doc["sessions"]).toBe(0);
+  });
+
+  it("serves /healthz even when the Host header is not in the allow-list", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34562,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+      allowedHosts: ["mcp.example.com"],
+    });
+    // Probes (Docker/Kubernetes) often send the pod IP as Host — /healthz
+    // must answer before Host validation kicks in.
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/healthz`);
+    expect(res.status).toBe(200);
+  });
+
+  it("does not answer /healthz on non-GET methods", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34563,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/healthz`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(404);
+  });
+
   it("returns 404 for unknown paths", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",

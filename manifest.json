@@ -2,8 +2,8 @@
   "manifest_version": "0.3",
   "name": "boondmanager-mcp-server",
   "display_name": "BoondManager MCP Server",
-  "version": "2.3.0",
-  "description": "MCP Server for BoondManager API - 167 tools, 11 prompts, 21 resources (ERP/CRM)",
+  "version": "2.4.0",
+  "description": "MCP Server for BoondManager API - 174 tools, 11 prompts, 21 resources (ERP/CRM)",
   "author": {
     "name": "Frédéric Auguste",
     "url": "https://github.com/fauguste/boondmanager-mcp-server"
@@ -33,7 +33,8 @@
         "BOOND_MCP_DOMAINS": "${user_config.mcp_domains}",
         "BOOND_MCP_EXCLUDE_DOMAINS": "${user_config.mcp_exclude_domains}",
         "BOOND_MCP_OPERATIONS": "${user_config.mcp_operations}",
-        "BOOND_MCP_READ_ONLY": "${user_config.mcp_read_only}"
+        "BOOND_MCP_READ_ONLY": "${user_config.mcp_read_only}",
+        "BOOND_MCP_CONFIRM_DELETE": "${user_config.confirm_delete}"
       }
     }
   },
@@ -109,6 +110,13 @@
       "title": "Restriction : lecture seule",
       "description": "Si activé, expose uniquement les outils de lecture (bloque création, modification et suppression). N'est pas une frontière de sécurité dure : les droits du compte BoondManager s'appliquent en plus.",
       "default": false,
+      "required": false
+    },
+    "confirm_delete": {
+      "type": "boolean",
+      "title": "Confirmer les suppressions",
+      "description": "Si activé (défaut), une confirmation est demandée avant chaque suppression lorsque le client MCP supporte l'élicitation. Désactiver pour retrouver le comportement historique (suppression directe).",
+      "default": true,
       "required": false
     }
   },

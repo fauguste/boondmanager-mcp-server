@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PositioningSearchSchema, PositioningCreateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
 export function registerPositioningTools(server: McpServer): void {
   // Search positionings
@@ -84,33 +84,28 @@ Returns: Liste des positionnements correspondants.`,
       const response = await apiRequest("/positionings", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Positionnement créé avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Positionnement créé avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
 
-  // Delete positioning
-  server.registerTool(
-    "boond_positionings_delete",
+  // Delete positioning — via la factory pour l'élicitation de confirmation + structuredContent
+  registerDeleteTool(
+    server,
+    {
+      entityName: "positionnement",
+      entityNamePlural: "positionnements",
+      apiPath: "/positionings",
+      prefix: "boond_positionings",
+    },
     {
       title: "Supprimer un positionnement",
-      description: `Supprime un positionnement de BoondManager. ⚠️ Action irréversible.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      await apiRequest(`/positionings/${params.id}`, "DELETE");
-      return {
-        content: [{ type: "text" as const, text: `🗑️ Positionnement #${params.id} supprimé.` }],
-      };
+      description: `Supprime un positionnement de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
     }
   );
 }

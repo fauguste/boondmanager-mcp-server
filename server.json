@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.fauguste/boondmanager-mcp-server",
   "title": "BoondManager MCP Server",
-  "description": "MCP Server for BoondManager API - 167 tools, 11 prompts, 21 resources (ERP/CRM)",
-  "version": "2.3.0",
+  "description": "MCP Server for BoondManager API - 174 tools, 11 prompts, 21 resources (ERP/CRM)",
+  "version": "2.4.0",
   "websiteUrl": "https://github.com/fauguste/boondmanager-mcp-server",
   "repository": {
     "url": "https://github.com/fauguste/boondmanager-mcp-server",
@@ -20,14 +20,14 @@
     {
       "registryType": "npm",
       "identifier": "boondmanager-mcp-server",
-      "version": "2.3.0",
+      "version": "2.4.0",
       "transport": {
         "type": "stdio"
       }
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/fauguste/boondmanager-mcp-server/releases/download/v2.3.0/boondmanager-mcp-server-v2.3.0.mcpb",
+      "identifier": "https://github.com/fauguste/boondmanager-mcp-server/releases/download/v2.4.0/boondmanager-mcp-server-v2.4.0.mcpb",
       "fileSha256": "PLACEHOLDER",
       "transport": {
         "type": "stdio"

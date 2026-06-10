@@ -43,6 +43,14 @@ const pageSizeField = z
 const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
 const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri (asc/desc)");
 const intArray = (doc: string) => z.array(z.number().int()).optional().describe(doc);
+const fieldsField = z
+  .array(z.string())
+  .optional()
+  .describe(
+    "Projection côté client : liste d'attributs JSON:API à afficher pour chaque résultat " +
+      "(ex: ['title', 'updateDate', 'numberOfActiveProjects']). Réduit fortement la taille de la réponse. " +
+      "Absent = résumé standard (nom, email, ville, statut...). Les noms inconnus sont ignorés."
+  );
 const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
 
 // Shared "perimeter" filters available on every entity search (from RAML trait `searchable`).
@@ -176,6 +184,7 @@ export const ResourceSearchSchema = z
     order: orderField,
     page: pageField,
     pageSize: pageSizeField,
+    fields: fieldsField,
   })
   .strict();
 
@@ -251,6 +260,7 @@ export const CandidateSearchSchema = z
     order: orderField,
     page: pageField,
     pageSize: pageSizeField,
+    fields: fieldsField,
   })
   .strict();
 
@@ -321,6 +331,7 @@ export const ContactSearchSchema = z
     order: orderField,
     page: pageField,
     pageSize: pageSizeField,
+    fields: fieldsField,
   })
   .strict();
 
@@ -364,6 +375,7 @@ export const CompanySearchSchema = z
     order: orderField,
     page: pageField,
     pageSize: pageSizeField,
+    fields: fieldsField,
   })
   .strict();
 
@@ -417,6 +429,7 @@ export const OpportunitySearchSchema = z
     order: orderField,
     page: pageField,
     pageSize: pageSizeField,
+    fields: fieldsField,
   })
   .strict();
 
@@ -456,6 +469,7 @@ export const ProjectSearchSchema = z
     order: orderField,
     page: pageField,
     pageSize: pageSizeField,
+    fields: fieldsField,
   })
   .strict();
 
@@ -1234,6 +1248,57 @@ export const DictionaryGetSchema = z
   })
   .strict();
 
+// ---- Documents ----
+// Source: https://doc.boondmanager.com/api-externe/raml-build/resources/documents/search.raml
+// L'upload passe par `fileUrl` uniquement : l'API BoondManager télécharge le
+// fichier elle-même, le serveur MCP ne bufferise jamais d'octets de fichier
+// (et n'expose pas de lecture du système de fichiers local).
+export const DocumentParentTypes = [
+  "action",
+  "resourceResume",
+  "candidateResume",
+  "resource",
+  "candidate",
+  "expensesReport",
+  "timesReport",
+  "absencesReport",
+  "payment",
+  "company",
+  "project",
+  "order",
+  "product",
+  "purchase",
+  "delivery",
+  "groupment",
+  "inactivity",
+  "positioning",
+  "followeddocument",
+  "appentity",
+  "contract",
+  "invoice",
+  "providerinvoice",
+] as const;
+
+export const DocumentCreateSchema = z
+  .object({
+    parentType: z
+      .enum(DocumentParentTypes)
+      .describe(
+        "Type d'entité parente. Notables : 'candidateResume' (CV de candidat), 'resourceResume' (CV de ressource), " +
+          "'candidate'/'resource' (dossier administratif), 'company', 'project', 'invoice'..."
+      ),
+    parentId: z.number().int().min(1).describe("ID de l'entité parente"),
+    fileUrl: z
+      .string()
+      .url()
+      .describe("URL (https) du fichier à téléverser — BoondManager télécharge le fichier depuis cette URL."),
+    parsing: z
+      .boolean()
+      .optional()
+      .describe("Lancer le parsing IA du CV après upload (uniquement pour parentType=candidateResume)."),
+  })
+  .strict();
+
 export type SearchInput = z.infer<typeof SearchSchema>;
 export type ResourceSearchInput = z.infer<typeof ResourceSearchSchema>;
 export type CandidateSearchInput = z.infer<typeof CandidateSearchSchema>;
@@ -1251,3 +1316,4 @@ export type ResourceTechnicalDataUpdateInput = z.infer<typeof ResourceTechnicalD
 export type ReferenceCreateInput = z.infer<typeof ReferenceCreateSchema>;
 export type ReferenceUpdateInput = z.infer<typeof ReferenceUpdateSchema>;
 export type ReferenceIdInput = z.infer<typeof ReferenceIdSchema>;
+export type DocumentCreateInput = z.infer<typeof DocumentCreateSchema>;

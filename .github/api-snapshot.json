@@ -1,8 +1,920 @@
 {
-  "timestamp": "2026-06-08T10:44:52.997Z",
+  "formatVersion": 2,
+  "timestamp": "2026-06-10T20:34:38.086Z",
   "url": "https://doc.boondmanager.com/api-externe/raml-build/",
-  "endpointsCount": 0,
-  "endpoints": [],
-  "error": "HTTP 403 - Access blocked by Cloudflare/WAF",
-  "note": "Will retry next run"
+  "endpointsCount": 152,
+  "endpoints": [
+    {
+      "path": "resources/absences/search.raml",
+      "sha256": "3b4ae88d2242ea7903ffffc860381f95dacf5ead2336ae33c2dcbda0ffa9cdf9",
+      "bytes": 1684,
+      "description": "Search absences"
+    },
+    {
+      "path": "resources/absencesReports/default.raml",
+      "sha256": "ae80737f84d0ad33bd5b7b6231b1955947b82124a5444f20fbdbe2b88dc1ddbc",
+      "bytes": 494,
+      "description": "Manage empty request of absences default basic data"
+    },
+    {
+      "path": "resources/absencesReports/rights.raml",
+      "sha256": "d2779697cb13df0ebca545eaa2d2c6f89d04343e90dd30143740162b7feff410",
+      "bytes": 426,
+      "description": "Get request of absences rights"
+    },
+    {
+      "path": "resources/absencesReports/search.raml",
+      "sha256": "86f8ba21859a470f74ea3935781c545d1bfa6e9ce1125d03f34e86e7e136dd5d",
+      "bytes": 2215,
+      "description": "Search & create requests of absences"
+    },
+    {
+      "path": "resources/accounts/default.raml",
+      "sha256": "d0ace7bbae40fdda88a8f175b9e6db97979f1a65914e4e718a7442e20e65765e",
+      "bytes": 333,
+      "description": "Manage empty account's default basic data"
+    },
+    {
+      "path": "resources/accounts/search.raml",
+      "sha256": "3dac297975382973759436bd2008d625e130ba97ebdefcb5bf77b236fc8b4a80",
+      "bytes": 4816,
+      "description": "Search & create accounts"
+    },
+    {
+      "path": "resources/actions/attachedFlags.raml",
+      "sha256": "3c4960e7bffc82d373208c2c0b039e4a6e909c3e050e5f14f5bfce714dd2040b",
+      "bytes": 202,
+      "description": "Manage action's attached flags"
+    },
+    {
+      "path": "resources/actions/default.raml",
+      "sha256": "1782e3907e24cbe3c0627a03fe655a564876958c0290b72908785027fe410795",
+      "bytes": 1275,
+      "description": "Manage empty action's default basic data"
+    },
+    {
+      "path": "resources/actions/rights.raml",
+      "sha256": "d5c0cc56508ae8bf968b71fde9237f05db23289a83d47c341ae8c8fa72d99f25",
+      "bytes": 1228,
+      "description": "Get action's rights"
+    },
+    {
+      "path": "resources/actions/search.raml",
+      "sha256": "e2e53d1890952b5df60f321348e06402539b8560c172c7cb4b6b3a660cff590b",
+      "bytes": 8174,
+      "description": "Search & create actions"
+    },
+    {
+      "path": "resources/advantages/default.raml",
+      "sha256": "31d46bd3dca15b09b0459cfd654249cff8a19e194a7bdc07d980133d469f9fd1",
+      "bytes": 811,
+      "description": "Manage empty advantage's default basic data"
+    },
+    {
+      "path": "resources/advantages/rights.raml",
+      "sha256": "1b99bdeb65e1a114d61512fc1560c5fca43e084672fdd083624442d17a2dd0de",
+      "bytes": 785,
+      "description": "Get advantage's rights"
+    },
+    {
+      "path": "resources/advantages/search.raml",
+      "sha256": "f61113ec0c95dbf2fd14f56127dfeaab73cd0aee8c5deb0f7c756b167092e877",
+      "bytes": 171,
+      "description": "Create advantages"
+    },
+    {
+      "path": "resources/agencies/default.raml",
+      "sha256": "aa3c5e5268fb917655899470f914cd92253ab0f314208f59d4af172136905e08",
+      "bytes": 229,
+      "description": "Manage empty agency's default information data"
+    },
+    {
+      "path": "resources/agencies/information.raml",
+      "sha256": "3cc3b2300670e08935b11c26bae20fadc7acec597b9b7e5864430fa56f4485a6",
+      "bytes": 274,
+      "description": "Manage candidate's information data"
+    },
+    {
+      "path": "resources/agencies/rights.raml",
+      "sha256": "9bde6ce92e7e90f5767c2b984ba8942aee82bd2838cd3852c302636e50f1afe3",
+      "bytes": 170,
+      "description": "Get agency's rights"
+    },
+    {
+      "path": "resources/agencies/search.raml",
+      "sha256": "71646c7f94338bcaf7f9e27f6387a4f9305270320ed1ae762568b2dae7647be2",
+      "bytes": 210,
+      "description": "Search & create agencies"
+    },
+    {
+      "path": "resources/alerts/search.raml",
+      "sha256": "59b7058df4059123d91304c4a7f880df324b1c17793767ec39ef9936794e1313",
+      "bytes": 182,
+      "description": "Search alerts for user dashboard"
+    },
+    {
+      "path": "resources/application/currentUser.raml",
+      "sha256": "bd3b7e6b86d9bc8ec3249a37c5010085bf26fb0240597fe4b6e3ced6c7934624",
+      "bytes": 254,
+      "description": "Get current user's data"
+    },
+    {
+      "path": "resources/application/dictionary.raml",
+      "sha256": "c36f182876a4563f8f13c0fa8368155aadfe094a44316d0a276a72cbc539ae2f",
+      "bytes": 864,
+      "description": "Manage the specific translations"
+    },
+    {
+      "path": "resources/apps/search.raml",
+      "sha256": "951ff053ae0834392b208dce0c4f1973071f23843752d024c46e3d3ba6287358",
+      "bytes": 170,
+      "description": "Search installed apps"
+    },
+    {
+      "path": "resources/businessUnits/default.raml",
+      "sha256": "e1d655a7657def54fa26dae67fb55723876bf57e4c76b9e71e077314832af97f",
+      "bytes": 248,
+      "description": "Manage empty business unit's default information data"
+    },
+    {
+      "path": "resources/businessUnits/search.raml",
+      "sha256": "c784204d842bf2d294ba1666f3b362ae356ef61fe381799558cb39510de6b28d",
+      "bytes": 234,
+      "description": "Search & create business units"
+    },
+    {
+      "path": "resources/calendars/default.raml",
+      "sha256": "3668d3ebcc1c7822d97957ced67566f0f0e73ad2510b07b382f50cb32ddb35ff",
+      "bytes": 449,
+      "description": "Manage empty calendar's default data"
+    },
+    {
+      "path": "resources/calendars/search.raml",
+      "sha256": "b101933a96adfada057cd4fbfc588a50db7f8e384f01eacf006c395d7ef6481a",
+      "bytes": 164,
+      "description": "Search calendars"
+    },
+    {
+      "path": "resources/candidates/actions.raml",
+      "sha256": "c1be72d278b16243e4dbd0ca2fa88905687309306e68a0068d4b95e1c7a877de",
+      "bytes": 778,
+      "description": "Manage candidate's actions"
+    },
+    {
+      "path": "resources/candidates/attachedFlags.raml",
+      "sha256": "52d0cb5c0a15c8480fcca4ebf4e33d70238c80144b7fddee808ecc018e0cdc27",
+      "bytes": 211,
+      "description": "Manage candidate's attached flags"
+    },
+    {
+      "path": "resources/candidates/default.raml",
+      "sha256": "99e127b14392e7a70a68be81093c460de7b40efcab4f87a729c6491346f32310",
+      "bytes": 237,
+      "description": "Manage empty candidate's default information data"
+    },
+    {
+      "path": "resources/candidates/information.raml",
+      "sha256": "3d86d73c9ec73920a92b3e689c6f162d9ccea9c8646ca9891ae5b39c360311dc",
+      "bytes": 1467,
+      "description": "Manage candidate's information data"
+    },
+    {
+      "path": "resources/candidates/rights.raml",
+      "sha256": "57bec5a91556a4028434dfbcd9058209e350d54abf81176cdd2d11afff59e159",
+      "bytes": 178,
+      "description": "Get candidate's rights"
+    },
+    {
+      "path": "resources/candidates/search.raml",
+      "sha256": "2856775f5af8f9fc79d4ae632c505e80d399b6e2ecf3c6e7b82b410394b18c26",
+      "bytes": 13343,
+      "description": "Search & create candidates"
+    },
+    {
+      "path": "resources/candidates/tasks.raml",
+      "sha256": "7e699f7f431029e850ada4bdc6d07ee333e21399302584caa7dacfd5140c10b3",
+      "bytes": 184,
+      "description": "Manage candidate's tasks"
+    },
+    {
+      "path": "resources/companies/actions.raml",
+      "sha256": "bf56ae1679e34b632d8e9118fe229a07efa5e5effee57ba968d2679f29e5ce17",
+      "bytes": 778,
+      "description": "Manage company's actions"
+    },
+    {
+      "path": "resources/companies/attachedFlags.raml",
+      "sha256": "0ca09ef5d687a44e788bee37ed302ce880c5693ca318d9c8afb2272e1665c3bc",
+      "bytes": 206,
+      "description": "Manage company's attached flags"
+    },
+    {
+      "path": "resources/companies/default.raml",
+      "sha256": "b496665bdb08e1c9179431663ac867389858486d8b482d28f236af6bbb03c9b0",
+      "bytes": 232,
+      "description": "Manage empty company's default information data"
+    },
+    {
+      "path": "resources/companies/information.raml",
+      "sha256": "7ffdb6c90efb86460910f09fd7ce7111baab6daef0f091cf612983462445d0c8",
+      "bytes": 530,
+      "description": "Manage company's information data"
+    },
+    {
+      "path": "resources/companies/rights.raml",
+      "sha256": "e94499460bb78844ddd5db74c68ba7769eabcc5891f10ead4d7b70d69f0b3894",
+      "bytes": 173,
+      "description": "Get company's rights"
+    },
+    {
+      "path": "resources/companies/search.raml",
+      "sha256": "9ff12d59a623d3173764a1e8867b0657b04f1b42abf180f21e7c37a1e87c8648",
+      "bytes": 7955,
+      "description": "Search & create companies"
+    },
+    {
+      "path": "resources/companies/tasks.raml",
+      "sha256": "23f982aae81db619d02eaf9a4f406dd03b1d04ccbef29f39bbd1eb2ebe19eae7",
+      "bytes": 179,
+      "description": "Manage company's tasks"
+    },
+    {
+      "path": "resources/contacts/actions.raml",
+      "sha256": "4c4d460cafb7daa6370f81ad40c5ed4913fb4cff09fb1278cd3ae5bcbcdd387b",
+      "bytes": 673,
+      "description": "Manage contact's actions"
+    },
+    {
+      "path": "resources/contacts/attachedFlags.raml",
+      "sha256": "c25e2c4413b625b6ce0103cfbfac45568fd97de71ee9a221c0e68a7aea1945fb",
+      "bytes": 205,
+      "description": "Manage contact's attached flags"
+    },
+    {
+      "path": "resources/contacts/default.raml",
+      "sha256": "ceda12bec996a2af43ac05a42f1ba114cfd7b353399e16fd2b0c6be44933c20b",
+      "bytes": 363,
+      "description": "Manage empty contact's default information data"
+    },
+    {
+      "path": "resources/contacts/information.raml",
+      "sha256": "5ebb89fe1bfa684bd268577b2640f59c25e0ea196a5801e94b3a7c441d08d96e",
+      "bytes": 273,
+      "description": "Manage contact's information data"
+    },
+    {
+      "path": "resources/contacts/rights.raml",
+      "sha256": "f2895c946f5f6d80eb5c0a2820bf231086a088be83b9039d07189f0ac346dc22",
+      "bytes": 283,
+      "description": "Get contact's rights"
+    },
+    {
+      "path": "resources/contacts/search.raml",
+      "sha256": "a79ec79e6cd50cda91a7e83ed7c056dac0eb257fe2faa0b972697fa7ff2a3baf",
+      "bytes": 10874,
+      "description": "Search & create contacts"
+    },
+    {
+      "path": "resources/contacts/tasks.raml",
+      "sha256": "5f10d167a179c4f7bf1723054707227f2f52a4055881bb441128afea0f0be894",
+      "bytes": 178,
+      "description": "Manage contact's tasks"
+    },
+    {
+      "path": "resources/contracts/default.raml",
+      "sha256": "8901186aad6621d279dedd6277f280a8087a469c6b9ebc8df62dacca38112a6d",
+      "bytes": 619,
+      "description": "Manage empty contract's default basic data"
+    },
+    {
+      "path": "resources/contracts/rights.raml",
+      "sha256": "42aa6f6f9fe60742afd600723a052a46e87ffe39443490949634c1da1c8b48c0",
+      "bytes": 572,
+      "description": "Get contract's rights"
+    },
+    {
+      "path": "resources/contracts/search.raml",
+      "sha256": "a86166c9bcc7657e29c92a5aae7bb829bcf985b73260bffa50c07daa3ffff65c",
+      "bytes": 167,
+      "description": "Create contracts"
+    },
+    {
+      "path": "resources/contracts/tasks.raml",
+      "sha256": "b87dc45251679a4937cff87dcc1bbb1712837187898fea9126fb37fbae53c87b",
+      "bytes": 181,
+      "description": "Manage contract's tasks"
+    },
+    {
+      "path": "resources/deliveries/rights.raml",
+      "sha256": "c1b3bb391973cd609eaac671f3c89547762c5ce707cf65e9563bcd2fa740696f",
+      "bytes": 176,
+      "description": "Get delivery's rights"
+    },
+    {
+      "path": "resources/deliveries/search.raml",
+      "sha256": "9bca8e40313e63d606eb26ded18b24a06afbafefeab57baaa60e1c8e9f0e04b9",
+      "bytes": 1487,
+      "description": "Create deliveries"
+    },
+    {
+      "path": "resources/deliveries/tasks.raml",
+      "sha256": "ed30971af900993f1f51031e0fe15ada55df8a9640346879823d18f3bb728a7e",
+      "bytes": 182,
+      "description": "Manage delivery's tasks"
+    },
+    {
+      "path": "resources/deliveriesGroupments/search.raml",
+      "sha256": "f036a8450aae16a40d733c6932ec2a59c33b7cbaf54daaf4c12e9ddfa5159a0f",
+      "bytes": 9717,
+      "description": "Search deliveries & groupments"
+    },
+    {
+      "path": "resources/documents/search.raml",
+      "sha256": "93def5c6b5ff1df8beb2ff589b1bcaca5196f0569bbd6d6376317bfe100014b6",
+      "bytes": 2795,
+      "description": "Create documents"
+    },
+    {
+      "path": "resources/expenses/search.raml",
+      "sha256": "59f1292ab0def7a327f27beb22b82cc890a7715054a6daf63c2e763b6e0c831e",
+      "bytes": 2519,
+      "description": "Search expenses"
+    },
+    {
+      "path": "resources/expensesReports/default.raml",
+      "sha256": "9bd1ace0b13430716afe7d8e4ce0c6e678e19b8939b6725213f138a4f118dfe5",
+      "bytes": 566,
+      "description": "Manage empty expenses default basic data"
+    },
+    {
+      "path": "resources/expensesReports/rights.raml",
+      "sha256": "b82b7d464b45a78da72c9a93a6e52d87334cd4c0769cd6051583c592e8f6c9a6",
+      "bytes": 477,
+      "description": "Get expenses rights"
+    },
+    {
+      "path": "resources/expensesReports/search.raml",
+      "sha256": "1341dbf4662745e9e7b24153bdbce10371530aac1dc7fb7c0902138fcc9c6c72",
+      "bytes": 2834,
+      "description": "Search & create expenses"
+    },
+    {
+      "path": "resources/flags/search.raml",
+      "sha256": "c4c5f6828a9e9bb61e963db9586c40f98252d08a7451e78fa398d6091d7203ca",
+      "bytes": 279,
+      "description": "Search & create flags"
+    },
+    {
+      "path": "resources/forms/default.raml",
+      "sha256": "56a2d736b0f7f6dd4343ad243c4c00db62f5d88ccff0ec49ca29130260ccd91e",
+      "bytes": 439,
+      "description": "Manage empty form's default basic data"
+    },
+    {
+      "path": "resources/forms/rights.raml",
+      "sha256": "89653e64600e89d13a9f20363d12ab2de1a9d61f28ab6fec26c2b3f667dcd5fc",
+      "bytes": 163,
+      "description": "Get form's rights"
+    },
+    {
+      "path": "resources/forms/search.raml",
+      "sha256": "9e171dbc0a48474a92bbd64b4aee31e9be017eada76567fb67486edbcc6d2511",
+      "bytes": 164,
+      "description": "Search & create forms"
+    },
+    {
+      "path": "resources/forms/tasks.raml",
+      "sha256": "25a0f9814ca2f0a0e8320db443df4ab8bde174ccb36939fdd5d733a2b5b411a4",
+      "bytes": 169,
+      "description": "Manage form's tasks"
+    },
+    {
+      "path": "resources/groupments/default.raml",
+      "sha256": "66f46d37a9a4ec3c039f9a4fc655ad495b0b674495b766344f944298fde32354",
+      "bytes": 372,
+      "description": "Manage empty groupment's default information data"
+    },
+    {
+      "path": "resources/groupments/rights.raml",
+      "sha256": "3b0869394aa4af336303de8468693b5e1d4efbeb74c6236a523e68203cc7776c",
+      "bytes": 292,
+      "description": "Get groupment's rights"
+    },
+    {
+      "path": "resources/groupments/search.raml",
+      "sha256": "1dd057e8aac4e7a8755eee86a4ff99f1f0a9405385ef4c03b436fc7c3b8c2136",
+      "bytes": 170,
+      "description": "Create groupments"
+    },
+    {
+      "path": "resources/inactivities/default.raml",
+      "sha256": "40159094e4d8b661c5bc602a18d422a4d62b9a0405d700f2504405a11b728d38",
+      "bytes": 380,
+      "description": "Manage empty inactivity's default information data"
+    },
+    {
+      "path": "resources/inactivities/rights.raml",
+      "sha256": "097f9f5db13f5a6cb2d2d6fc147698985b9fd44897b2f0fc4b417c2855268e59",
+      "bytes": 299,
+      "description": "Get inactivity's rights"
+    },
+    {
+      "path": "resources/inactivities/search.raml",
+      "sha256": "d4155803d73b300c406e48f38f581980b2ac918a9933b62a824887df42a4c591",
+      "bytes": 176,
+      "description": "Create inactivities"
+    },
+    {
+      "path": "resources/invoices/actions.raml",
+      "sha256": "10985a1d17fa3fce4a43abfca6bc6ad8dc82e904bf56c49903774d36bd53f6e3",
+      "bytes": 652,
+      "description": "Manage invoice's actions"
+    },
+    {
+      "path": "resources/invoices/attachedFlags.raml",
+      "sha256": "f02d0d4d8942b249329294d0f7a8f58400001a3e6151b14b98a8ce7ab0ef2d57",
+      "bytes": 205,
+      "description": "Manage invoice's attached flags"
+    },
+    {
+      "path": "resources/invoices/default.raml",
+      "sha256": "1cd4b897d7ed24f838e4f354e80805a4738e628ab24f074b1e4ecbc5a131c7c7",
+      "bytes": 908,
+      "description": "Manage empty invoice's default information data"
+    },
+    {
+      "path": "resources/invoices/information.raml",
+      "sha256": "14a9f1676d6bbf66c09cb38128346aecb63e098ced3c6438cb0b827a314144fd",
+      "bytes": 470,
+      "description": "Manage invoice's information data"
+    },
+    {
+      "path": "resources/invoices/rights.raml",
+      "sha256": "cbea574a6b4a3d362496398f21be280e8982a52813b3726a066ad46a94332ba1",
+      "bytes": 829,
+      "description": "Get invoice's rights"
+    },
+    {
+      "path": "resources/invoices/search.raml",
+      "sha256": "bddc9ebd77ef89002f215299b03984b9c8f4c7a06dc342ac6e2ab03f062ef74b",
+      "bytes": 10241,
+      "description": "Search invoices"
+    },
+    {
+      "path": "resources/invoices/tasks.raml",
+      "sha256": "1ec68a43484649bac3678464db1af92bab3d5ea8a5ca564477d183eadb642ece",
+      "bytes": 178,
+      "description": "Manage invoice's tasks"
+    },
+    {
+      "path": "resources/logs/search.raml",
+      "sha256": "945b35be44e2ca3e7adae213256583e44a15ec38d9a0c4f3666a217de5856f78",
+      "bytes": 11055,
+      "description": "Search logs"
+    },
+    {
+      "path": "resources/marketplace/default.raml",
+      "sha256": "feb6d1ecf616668fbc1c9db83e5874c220a6618f353c1dd25682e4a1eb6e3b4b",
+      "bytes": 415,
+      "description": "Manage empty marketplace's App default information data"
+    },
+    {
+      "path": "resources/marketplace/rights.raml",
+      "sha256": "176b2dc705ff2424d065a602b35e2939077ea0ba1d0b7aef84580a13f4d17f78",
+      "bytes": 191,
+      "description": "Get marketplace's App rights"
+    },
+    {
+      "path": "resources/marketplace/search.raml",
+      "sha256": "f1c2718f7707b0b753ea33dd6f67a7b80cb407e46812cf24a14e7445900e6cc5",
+      "bytes": 2270,
+      "description": "Search marketplace's Apps"
+    },
+    {
+      "path": "resources/notifications/search.raml",
+      "sha256": "63918502fc04dde185c13457a6762c46a2248725814e9303a0719c82958e7a98",
+      "bytes": 909,
+      "description": "Search notifications"
+    },
+    {
+      "path": "resources/opportunities/actions.raml",
+      "sha256": "9131c12cd394dec426df1eb524f4255d44a89124b5442a55e57a286a0a9eac3a",
+      "bytes": 673,
+      "description": "Manage opportunity's actions"
+    },
+    {
+      "path": "resources/opportunities/attachedFlags.raml",
+      "sha256": "99c6c004ed4067ad54e1922e9992abcc866a421947a49969b0d0c868afb0b5e9",
+      "bytes": 218,
+      "description": "Manage opportunity's attached flags"
+    },
+    {
+      "path": "resources/opportunities/default.raml",
+      "sha256": "229e40bb59c485dd0b9c7903c50a66ac20d999da5afb3a7ed69fca29e702f21d",
+      "bytes": 756,
+      "description": "Manage empty opportunity's default information data"
+    },
+    {
+      "path": "resources/opportunities/information.raml",
+      "sha256": "e18cc3e52ca2f9337b5e38d85eb00c4756885bcf374fd3a8a90f23607f57276c",
+      "bytes": 291,
+      "description": "Manage opportunity's information data"
+    },
+    {
+      "path": "resources/opportunities/rights.raml",
+      "sha256": "9bcce740189c963da06092a33db5ea9f0e4b0df41501ba0000bda30a365edafc",
+      "bytes": 300,
+      "description": "Get opportunity's rights"
+    },
+    {
+      "path": "resources/opportunities/search.raml",
+      "sha256": "c9c326f7b3a0875b61e9c54df1f46870147bbc62b84ca3da392da868db58b155",
+      "bytes": 11228,
+      "description": "Search & create opportunities"
+    },
+    {
+      "path": "resources/opportunities/tasks.raml",
+      "sha256": "9011b82248c863c53ddf44faf720b5491a14f62e651d198fd11560eeaeca008e",
+      "bytes": 191,
+      "description": "Manage opportunity's tasks"
+    },
+    {
+      "path": "resources/orders/actions.raml",
+      "sha256": "fb151efd6ffae53d3063d6bf5e7bda934dfa77b46b59236a011a2fab7933abad",
+      "bytes": 642,
+      "description": "Manage order's actions"
+    },
+    {
+      "path": "resources/orders/attachedFlags.raml",
+      "sha256": "6b6ca83f00a367943733e6ca30504793d5ff17dcaf7e8d9874df9ef8b37e06aa",
+      "bytes": 199,
+      "description": "Manage order's attached flags"
+    },
+    {
+      "path": "resources/orders/default.raml",
+      "sha256": "7a3d3ed7e36bf788d5666cbbcb11e9afd9b9238a1182966ff2ef15493ff6703e",
+      "bytes": 549,
+      "description": "Manage empty order's default information data"
+    },
+    {
+      "path": "resources/orders/information.raml",
+      "sha256": "f5c6e07bf943ad241f11b62cb4da15661c0d56e5c1abb1bcab70239843b7e2cb",
+      "bytes": 266,
+      "description": "Manage order's information data"
+    },
+    {
+      "path": "resources/orders/rights.raml",
+      "sha256": "7342f5e118a51caf571a3e38b705851ca60d18f4ffbdca8f6166e5a41c6bfabd",
+      "bytes": 469,
+      "description": "Get order's rights"
+    },
+    {
+      "path": "resources/orders/search.raml",
+      "sha256": "cb2e9c66e399a91605ee2e9ceab4099820a6cc8cee2a294ddf00a90e9810c48d",
+      "bytes": 7614,
+      "description": "Search orders"
+    },
+    {
+      "path": "resources/orders/tasks.raml",
+      "sha256": "3bba333aa47d069c4e83e03dc2a7e2246805b2321bc18dab43021b7924e7a4a5",
+      "bytes": 172,
+      "description": "Manage order's tasks"
+    },
+    {
+      "path": "resources/payments/default.raml",
+      "sha256": "46d6a8d136501ff8c2d68283f3fc91fba438e2c022f52ba08e9f6431168c8af3",
+      "bytes": 448,
+      "description": "Manage empty payment's default basic data"
+    },
+    {
+      "path": "resources/payments/rights.raml",
+      "sha256": "bf21399f64ca13d71767be36d7b783ba824729fc237ec6f8e0fa835ec3de1dd9",
+      "bytes": 380,
+      "description": "Get payment's rights"
+    },
+    {
+      "path": "resources/payments/search.raml",
+      "sha256": "e3b2d18f24827b55c3954d79598a9ad977113a311c04bf7da5660ef21cfc213d",
+      "bytes": 7514,
+      "description": "Search payments"
+    },
+    {
+      "path": "resources/payments/tasks.raml",
+      "sha256": "b87c4bfc31de3219da372af1cdce1dbcc4868cb037f44c828d96d6c202acbbf3",
+      "bytes": 178,
+      "description": "Manage payment's tasks"
+    },
+    {
+      "path": "resources/planningAbsences/search.raml",
+      "sha256": "88ececab6f733286d83434d789dda92afc4fee82f23b44079f0448f92e8996d0",
+      "bytes": 1423,
+      "description": "Search planning absences"
+    },
+    {
+      "path": "resources/poles/search.raml",
+      "sha256": "21b26da568b35ba107df6c7bf4a56330acf4250b3adafd3ddc7cc9cc02ff55fc",
+      "bytes": 198,
+      "description": "Search & create poles"
+    },
+    {
+      "path": "resources/positionings/attachedFlags.raml",
+      "sha256": "a03925b2e4cf33879aa20471eda1f05bb0872fd34c765aa5bae9e763ad1ead87",
+      "bytes": 217,
+      "description": "Manage positioning's attached flags"
+    },
+    {
+      "path": "resources/positionings/rights.raml",
+      "sha256": "6509fc6598f747e3bf2276f887b7762f8d9bfa5c5e6914c15d23d20ddcb83407",
+      "bytes": 184,
+      "description": "Get positioning's rights"
+    },
+    {
+      "path": "resources/positionings/search.raml",
+      "sha256": "fe73653b2165c7a7fb6c7003348c500586eeb2624c99ec9456d805e93acf38c7",
+      "bytes": 9154,
+      "description": "Search & create positionings"
+    },
+    {
+      "path": "resources/positionings/tasks.raml",
+      "sha256": "679956d8090455d7f0634e9db64243f4698f95460274c0b380160ba3184e6372",
+      "bytes": 191,
+      "description": "Manage positionning's tasks"
+    },
+    {
+      "path": "resources/products/attachedFlags.raml",
+      "sha256": "86bd9064f6e9d8f41d1cc0e65d46902cde13d9e2816b5211c6cd28a69258b01a",
+      "bytes": 205,
+      "description": "Manage product's attached flags"
+    },
+    {
+      "path": "resources/products/default.raml",
+      "sha256": "cecb8ed68c85f57ba6395d043d8e0eafcb6c6bef47892d1cf34c18c925008174",
+      "bytes": 231,
+      "description": "Manage empty product's default information data"
+    },
+    {
+      "path": "resources/products/information.raml",
+      "sha256": "0603f84a292d1d132c0aa0a511ad4d9aa79358d96e92f4b0f43298cdd5bdae45",
+      "bytes": 273,
+      "description": "Manage product's information data"
+    },
+    {
+      "path": "resources/products/rights.raml",
+      "sha256": "cf24785208d9ff609b06831d8813632243111cb222536467ad545346361d2081",
+      "bytes": 172,
+      "description": "Get product's rights"
+    },
+    {
+      "path": "resources/products/search.raml",
+      "sha256": "a60f02d4a3ed0556d25a9f14a7a9131f9fb40f4d3999a8016ed48200a9724729",
+      "bytes": 5303,
+      "description": "Search & create products"
+    },
+    {
+      "path": "resources/products/tasks.raml",
+      "sha256": "c33115468224dc7caf9b559bbc2dc562aa4621c5d7ebc29f6da80733a068bc5c",
+      "bytes": 178,
+      "description": "Manage product's tasks"
+    },
+    {
+      "path": "resources/projects/actions.raml",
+      "sha256": "4e3dc87b18021900a24c1175d42145932b96f3b7d6aeade1a2cf1fd076c9d5d9",
+      "bytes": 751,
+      "description": "Manage project's actions"
+    },
+    {
+      "path": "resources/projects/attachedFlags.raml",
+      "sha256": "ab19172d763085054d04befde3d8a6c7a54a47eed46557f5b81ba7b804a9752e",
+      "bytes": 205,
+      "description": "Manage project's attached flags"
+    },
+    {
+      "path": "resources/projects/information.raml",
+      "sha256": "655b21020c7097f169d4098263872b0b900ceb54143ab135a2865dae8b3ad02e",
+      "bytes": 273,
+      "description": "Manage project's information data"
+    },
+    {
+      "path": "resources/projects/rights.raml",
+      "sha256": "822ae519fb2d9555e7b42609a83b566cf67d31d511de159bf62305c3d73a08b6",
+      "bytes": 172,
+      "description": "Get project's rights"
+    },
+    {
+      "path": "resources/projects/search.raml",
+      "sha256": "5a847d58c440fd28fc6afdb287b0d39cc96508d9823e11a83ed31cb9758b187e",
+      "bytes": 8305,
+      "description": "Search projects"
+    },
+    {
+      "path": "resources/projects/tasks.raml",
+      "sha256": "48ec0a221d77702f8bc73d0ff58a9a3322e52be3c1dda9ba3c2cf2144b009939",
+      "bytes": 178,
+      "description": "Manage project's tasks"
+    },
+    {
+      "path": "resources/providerInvoices/default.raml",
+      "sha256": "a64ed6f878ac278476614882f5c9e004dfc9e2bf2c052d2560dbed04faa86061",
+      "bytes": 367,
+      "description": "Manage empty provider invoice's default basic data"
+    },
+    {
+      "path": "resources/providerInvoices/rights.raml",
+      "sha256": "436a745d36fb9c4fce7ee7852fa0845471a3676514639e630e1a3f9ae1529621",
+      "bytes": 198,
+      "description": "Get provider invoice's rights"
+    },
+    {
+      "path": "resources/providerInvoices/search.raml",
+      "sha256": "0c6764d8335683c799e1d1820b36cb76788b947d1051268498347b9dd3d49a9a",
+      "bytes": 6128,
+      "description": "Search provider invoices"
+    },
+    {
+      "path": "resources/purchases/attachedFlags.raml",
+      "sha256": "0260261dc773b09f8db299ad324434dc033123f600bb1452c45efcee7ad77551",
+      "bytes": 208,
+      "description": "Manage purchase's attached flags"
+    },
+    {
+      "path": "resources/purchases/default.raml",
+      "sha256": "fe14b20d6993b863f1d0cf42c3bd2cb5456ee793e6e4a656f0e3116d0071eeac",
+      "bytes": 759,
+      "description": "Manage empty purchase's default information data"
+    },
+    {
+      "path": "resources/purchases/information.raml",
+      "sha256": "01e4807f33fabe7f72061d894c26c8637659328ddfffe8433121292e3f85ac7b",
+      "bytes": 277,
+      "description": "Manage purchase's information data"
+    },
+    {
+      "path": "resources/purchases/rights.raml",
+      "sha256": "75880062845b1987cf03c7e2a98feb95d9608e635895a0c2b37c3925de4741a0",
+      "bytes": 512,
+      "description": "Get purchase's rights"
+    },
+    {
+      "path": "resources/purchases/search.raml",
+      "sha256": "d2a8bb8b8189d9593d6ab990c4e37ac184b7a5f3b15b642dc89e151293a200d0",
+      "bytes": 7454,
+      "description": "Search & create purchases"
+    },
+    {
+      "path": "resources/purchases/tasks.raml",
+      "sha256": "b36683e0e17176860d65684c21f58e9495350fcb490256de82f0f3986a486763",
+      "bytes": 181,
+      "description": "Manage purchase's tasks"
+    },
+    {
+      "path": "resources/reportingCompanies/search.raml",
+      "sha256": "f90382c827e107a417d5c2ee959110f63985a8af3d8ad25bba5c91b6fca5a60e",
+      "bytes": 4427,
+      "description": "Search companies reporting"
+    },
+    {
+      "path": "resources/reportingProductionPlans/search.raml",
+      "sha256": "60254196763680731c685e0861ff7a9e119a3a53a17b2f67e9b20948249a880b",
+      "bytes": 4897,
+      "description": "Search production plans reporting"
+    },
+    {
+      "path": "resources/reportingProjects/search.raml",
+      "sha256": "1c5fd5d7f982ce8ca36170d0a7b80aaf825b03de27127d7da659af71aad8ba0e",
+      "bytes": 4901,
+      "description": "Search projects reporting"
+    },
+    {
+      "path": "resources/reportingResources/search.raml",
+      "sha256": "183a51d1d4719f3c36a8054ea7fa400528148152d10e519987f43c7b8f87742b",
+      "bytes": 6027,
+      "description": "Search resources reporting"
+    },
+    {
+      "path": "resources/reportingSynthesis/search.raml",
+      "sha256": "fd86686fefe4c064c40ad86390fa5e8f3fdd0072ae08a1b31c3c92bddfa5841b",
+      "bytes": 6357,
+      "description": "Search synthesis reporting"
+    },
+    {
+      "path": "resources/resources/actions.raml",
+      "sha256": "c638491418891270bdbdfdb8f3a9e0fd4987bd670bb54d2eddd7590539c5d9d1",
+      "bytes": 773,
+      "description": "Manage resource's actions"
+    },
+    {
+      "path": "resources/resources/attachedFlags.raml",
+      "sha256": "c2859f95a533cbdeae805d975061a95d5fd968be16d109b0e59b2ba9f61fdb67",
+      "bytes": 208,
+      "description": "Manage resource's attached flags"
+    },
+    {
+      "path": "resources/resources/default.raml",
+      "sha256": "0d054598d9ad4aa307b5f751101b4d6c31897dc65a2518591500970f0cd6f69d",
+      "bytes": 234,
+      "description": "Manage empty resource's default information data"
+    },
+    {
+      "path": "resources/resources/information.raml",
+      "sha256": "9054f08ccf0f623cbbbb04f5771d1274cebad39d8713e4a2c7f6310c474cf5ba",
+      "bytes": 278,
+      "description": "Manage resource's information data"
+    },
+    {
+      "path": "resources/resources/rights.raml",
+      "sha256": "56fe4ca827ee032b4ef5fd125143ecdb105b2ebfdc75af72de6e0afb42eedde7",
+      "bytes": 175,
+      "description": "Get resource's rights"
+    },
+    {
+      "path": "resources/resources/search.raml",
+      "sha256": "969a4400f67d37ba3cabeb6edff80a4fee79c66af50919ea4a31e6e36517f53f",
+      "bytes": 14524,
+      "description": "Search & create resources"
+    },
+    {
+      "path": "resources/resources/tasks.raml",
+      "sha256": "c0de72c4f7d01fa4b25832edaa2a15e27aa5fd7139f6ccd6b279af6ab044affa",
+      "bytes": 181,
+      "description": "Manage resource's tasks"
+    },
+    {
+      "path": "resources/roles/default.raml",
+      "sha256": "6dc7c673bf9d6f165164a94612a90b546a53ec67e05075e441c9ffcd5fd2ce86",
+      "bytes": 545,
+      "description": "Manage empty role's default basic data"
+    },
+    {
+      "path": "resources/roles/search.raml",
+      "sha256": "e26c52c8703a055f30c3044c9bed1b6f206058243a625e93c5ef469916031e02",
+      "bytes": 498,
+      "description": "Search & create roles"
+    },
+    {
+      "path": "resources/threads/default.raml",
+      "sha256": "e7dc82744704ab1af612e08b284ed4296c480aca37f727cf6a1c5ae057d3824f",
+      "bytes": 2569,
+      "description": "Manage empty thread's default basic data"
+    },
+    {
+      "path": "resources/threads/search.raml",
+      "sha256": "b31ca2de8a018fa36ed6a89e543d046e416b7aab0ecf8d4e787d889f884213f0",
+      "bytes": 4885,
+      "description": "Search & create threads"
+    },
+    {
+      "path": "resources/timesReports/default.raml",
+      "sha256": "640c22f57d1a7fe333231267ac06e5fa948934ddaa9c3810e22a5581e6bd106f",
+      "bytes": 571,
+      "description": "Manage empty timesheet's default basic data"
+    },
+    {
+      "path": "resources/timesReports/rights.raml",
+      "sha256": "9d95eba8643249cb1f71e38bec763aa6d22ce22d98429a491902f95b2ce2e35b",
+      "bytes": 482,
+      "description": "Get timesheet's rights"
+    },
+    {
+      "path": "resources/timesReports/search.raml",
+      "sha256": "f3fb85b4f97a655f10138fa5c9da3ae615f1121b81ae1236bfbd7e87c25c9b54",
+      "bytes": 2420,
+      "description": "Search & create timesheets"
+    },
+    {
+      "path": "resources/todolists/default.raml",
+      "sha256": "8962c202d2104a1e91dfbefcb804313bd6e98c86022156622136645f7a0ff66a",
+      "bytes": 160,
+      "description": "Manage empty TodoList's default basic data"
+    },
+    {
+      "path": "resources/todolists/search.raml",
+      "sha256": "010c827ed87cf65a761eef275751653bc53a2bf9ec925aa791116711eedfb74f",
+      "bytes": 263,
+      "description": "Manage TodoLists"
+    },
+    {
+      "path": "resources/validations/search.raml",
+      "sha256": "cb4c380a138d8cc050d3c397560e449c9cb6ba990f5fec1e9a99e8ad6232f85a",
+      "bytes": 2526,
+      "description": "Search validations"
+    },
+    {
+      "path": "resources/webhooks/search.raml",
+      "sha256": "e1ba275acf4d2d42532f6aa98b2736a0ba694b636f3aeb8af2c6bc67cc7f0df1",
+      "bytes": 864,
+      "description": "Search webhooks"
+    },
+    {
+      "path": "traits/searchable.raml",
+      "sha256": "b7c1d6006f8f0db05f84c74a3ff20862949bd826b7374c6ea2e4367e1c543047",
+      "bytes": 1716,
+      "description": ""
+    },
+    {
+      "path": "traits/sortablePaginable.raml",
+      "sha256": "c4ba4fc2db5b2be530ea86251699c882e0653f191be9b4d656b0891ddc363027",
+      "bytes": 408,
+      "description": ""
+    }
+  ]
 }

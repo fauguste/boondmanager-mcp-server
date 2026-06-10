@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { OrderSearchSchema, OrderCreateSchema, OrderUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
 export function registerOrderTools(server: McpServer): void {
   // Search orders
@@ -82,10 +82,12 @@ Returns: Liste des bons de commande correspondants.`,
       const response = await apiRequest("/orders", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Bon de commande créé avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Bon de commande créé avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
@@ -109,33 +111,23 @@ Returns: Liste des bons de commande correspondants.`,
       const body = buildJsonApiBody("order", attrs, id);
       const response = await apiRequest(`/orders/${id}`, "PATCH", body);
       return {
-        content: [{
-          type: "text" as const,
-          text: `✅ Bon de commande #${id} mis à jour.\n\n${formatDetailResponse(response)}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Bon de commande #${id} mis à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
       };
     }
   );
 
-  // Delete order
-  server.registerTool(
-    "boond_orders_delete",
+  // Delete order — via la factory pour l'élicitation de confirmation + structuredContent
+  registerDeleteTool(
+    server,
+    { entityName: "bon de commande", entityNamePlural: "bons de commande", apiPath: "/orders", prefix: "boond_orders" },
     {
       title: "Supprimer un bon de commande",
-      description: `Supprime un bon de commande de BoondManager. ⚠️ Action irréversible.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      await apiRequest(`/orders/${params.id}`, "DELETE");
-      return {
-        content: [{ type: "text" as const, text: `🗑️ Bon de commande #${params.id} supprimé.` }],
-      };
+      description: `Supprime un bon de commande de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
     }
   );
 }

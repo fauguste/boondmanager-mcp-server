@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger, generateCorrelationId } from "../services/logger.js";
+import { SERVER_VERSION } from "../server.js";
 import {
   buildProtectedResourceMetadata,
   extractBearerToken,
@@ -302,6 +303,23 @@ export async function startHttpTransport(
     const reqLogger = logger.child({ corrId, method: req.method, path: req.url });
 
     try {
+      // Liveness probe — served before Host validation so Docker/Kubernetes
+      // probes (which often send the pod IP as Host) always succeed. GET only,
+      // no auth: it exposes nothing beyond the server version.
+      if (req.method === "GET" && req.url?.split("?")[0] === "/healthz") {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            status: "ok",
+            version: SERVER_VERSION,
+            mode: options.stateless ? "stateless" : "stateful",
+            sessions: sessions.size,
+          })
+        );
+        return;
+      }
+
       // DNS rebinding protection: validate the Host header against the
       // configured allow-list before doing anything else. See CVE-2025-66414.
       if (allowedHosts.length > 0) {
