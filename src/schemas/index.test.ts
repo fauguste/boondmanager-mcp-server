@@ -85,6 +85,12 @@ describe("IdSchema", () => {
     const result = IdSchema.safeParse({});
     expect(result.success).toBe(false);
   });
+
+  it("should reject non-numeric ids (path-traversal / query-injection guard)", () => {
+    for (const id of ["../invoices/5", "1?maxResults=99999", "1/financial", "abc", "%2e%2e"]) {
+      expect(IdSchema.safeParse({ id }).success, id).toBe(false);
+    }
+  });
 });
 
 describe("IdTabSchema", () => {
@@ -93,9 +99,19 @@ describe("IdTabSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("should accept hyphenated tab segments", () => {
+    expect(IdTabSchema.safeParse({ id: "123", tab: "technical-data" }).success).toBe(true);
+  });
+
   it("should accept id without tab", () => {
     const result = IdTabSchema.safeParse({ id: "123" });
     expect(result.success).toBe(true);
+  });
+
+  it("should reject non-numeric id and unsafe tab segments", () => {
+    expect(IdTabSchema.safeParse({ id: "../x", tab: "information" }).success).toBe(false);
+    expect(IdTabSchema.safeParse({ id: "1", tab: "../secrets" }).success).toBe(false);
+    expect(IdTabSchema.safeParse({ id: "1", tab: "a/b" }).success).toBe(false);
   });
 });
 

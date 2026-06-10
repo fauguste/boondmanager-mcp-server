@@ -459,21 +459,31 @@ export const ProjectSearchSchema = z
   })
   .strict();
 
+// BoondManager entity ids are numeric. Constraining the schema to digits
+// (rather than an open `z.string()`) prevents a caller from smuggling path
+// segments, traversal sequences (`..`), or query syntax (`?`, `#`) into the
+// id, which would otherwise be interpolated raw into the API path. See the
+// defense-in-depth guard in boond-client.ts (`assertSafeApiPath`).
+export const EntityIdSchema = z.string().regex(/^\d+$/, "L'identifiant BoondManager doit être numérique");
+
+// Tab segments are also interpolated into the path; restrict them to a small
+// safe alphabet (letters and hyphens, e.g. `technical-data`).
+const TabSchema = z.string().regex(/^[a-zA-Z][a-zA-Z-]*$/, "Onglet invalide");
+
 // ID param schema
 export const IdSchema = z
   .object({
-    id: z.string().min(1).describe("Identifiant unique de l'entité BoondManager"),
+    id: EntityIdSchema.describe("Identifiant unique de l'entité BoondManager (numérique)"),
   })
   .strict();
 
 // ID + tab param schema
 export const IdTabSchema = z
   .object({
-    id: z.string().min(1).describe("Identifiant unique de l'entité"),
-    tab: z
-      .string()
-      .optional()
-      .describe("Onglet spécifique à récupérer (information, technical, financial, actions, contracts, documents)"),
+    id: EntityIdSchema.describe("Identifiant unique de l'entité (numérique)"),
+    tab: TabSchema.optional().describe(
+      "Onglet spécifique à récupérer (information, technical, financial, actions, contracts, documents)"
+    ),
   })
   .strict();
 

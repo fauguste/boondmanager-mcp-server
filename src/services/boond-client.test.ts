@@ -19,6 +19,7 @@ import {
   initClientWithAuth,
   resetClientForTests,
   oauthContextAuth,
+  assertSafeApiPath,
 } from "./boond-client.js";
 import { oauthContext } from "./oauth.js";
 import {
@@ -312,6 +313,44 @@ describe("buildJwt", () => {
     const a = buildJwt("u", "c", "key1");
     const b = buildJwt("u", "c", "key2");
     expect(a).not.toBe(b);
+  });
+
+  it("omits iat/exp by default (legacy payload shape)", () => {
+    const payload = JSON.parse(Buffer.from(buildJwt("u", "c", "k").split(".")[1], "base64url").toString());
+    expect(payload).toEqual({ userToken: "u", clientToken: "c" });
+  });
+
+  it("adds iat/exp when expiresInSeconds is set", () => {
+    const jwt = buildJwt("u", "c", "k", { expiresInSeconds: 3600, nowSeconds: 1000 });
+    const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString());
+    expect(payload).toEqual({ userToken: "u", clientToken: "c", iat: 1000, exp: 4600 });
+  });
+});
+
+describe("assertSafeApiPath", () => {
+  it("accepts well-formed paths with numeric ids and tab segments", () => {
+    expect(() => assertSafeApiPath("/candidates/123")).not.toThrow();
+    expect(() => assertSafeApiPath("/resources/42/technical-data")).not.toThrow();
+    expect(() => assertSafeApiPath("/application/current-user")).not.toThrow();
+  });
+
+  it("rejects path traversal", () => {
+    expect(() => assertSafeApiPath("/candidates/../invoices/5")).toThrow(/Unsafe API path/);
+    expect(() => assertSafeApiPath("/candidates/../../admin/1")).toThrow(/Unsafe API path/);
+  });
+
+  it("rejects query/fragment injection in the path", () => {
+    expect(() => assertSafeApiPath("/candidates/1?maxResults=99999")).toThrow(/Unsafe API path/);
+    expect(() => assertSafeApiPath("/candidates/1#x")).toThrow(/Unsafe API path/);
+  });
+
+  it("rejects percent-encoding and backslashes (encoded traversal)", () => {
+    expect(() => assertSafeApiPath("/candidates/%2e%2e/invoices/5")).toThrow(/Unsafe API path/);
+    expect(() => assertSafeApiPath("/candidates/1\\..\\x")).toThrow(/Unsafe API path/);
+  });
+
+  it("rejects paths not starting with /", () => {
+    expect(() => assertSafeApiPath("candidates/1")).toThrow(/must start with/);
   });
 });
 

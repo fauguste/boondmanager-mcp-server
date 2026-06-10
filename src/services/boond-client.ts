@@ -39,9 +39,28 @@ function base64url(data: string | Buffer): string {
   return b64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
-export function buildJwt(userToken: string, clientToken: string, clientKey: string): string {
+/**
+ * Build the BoondManager HS256 JWT. By default the payload is exactly
+ * `{ userToken, clientToken }` (BoondManager's documented scheme). When
+ * `expiresInSeconds` is provided, standard `iat`/`exp` claims are added so the
+ * generated token is no longer replayable forever if it leaks — this requires
+ * regenerating the token per request (see `jwtAuth`). Opt-in because not every
+ * BoondManager deployment is known to honour `exp`.
+ */
+export function buildJwt(
+  userToken: string,
+  clientToken: string,
+  clientKey: string,
+  options?: { expiresInSeconds?: number; nowSeconds?: number }
+): string {
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const payload = base64url(JSON.stringify({ userToken, clientToken }));
+  const claims: Record<string, unknown> = { userToken, clientToken };
+  if (options?.expiresInSeconds && options.expiresInSeconds > 0) {
+    const now = options.nowSeconds ?? Math.floor(Date.now() / 1000);
+    claims.iat = now;
+    claims.exp = now + options.expiresInSeconds;
+  }
+  const payload = base64url(JSON.stringify(claims));
   const signature = base64url(createHmac("sha256", clientKey).update(`${header}.${payload}`).digest());
   return `${header}.${payload}.${signature}`;
 }
@@ -62,6 +81,27 @@ export const JWT_HEADER_NAME = "X-Jwt-Client-Boondmanager";
 function staticAuth(name: string, value: string): BoondAuthProvider {
   const cached = Promise.resolve({ name, value });
   return () => cached;
+}
+
+/**
+ * JWT auth provider. When `ttlSeconds` is set (via BOOND_JWT_TTL_SECONDS), a
+ * fresh token with `iat`/`exp` is minted per request so a leaked token expires;
+ * otherwise the token is built once and cached (legacy, never-expiring).
+ */
+function jwtAuth(
+  userToken: string,
+  clientToken: string,
+  clientKey: string,
+  ttlSeconds: number | undefined
+): BoondAuthProvider {
+  if (!ttlSeconds || ttlSeconds <= 0) {
+    return staticAuth(JWT_HEADER_NAME, buildJwt(userToken, clientToken, clientKey));
+  }
+  return () =>
+    Promise.resolve({
+      name: JWT_HEADER_NAME,
+      value: buildJwt(userToken, clientToken, clientKey, { expiresInSeconds: ttlSeconds }),
+    });
 }
 
 export function initClient(): void {
@@ -88,7 +128,9 @@ export function initClient(): void {
   let auth: BoondAuthProvider;
 
   if (userToken && clientToken && clientKey) {
-    auth = staticAuth(JWT_HEADER_NAME, buildJwt(userToken, clientToken, clientKey));
+    const ttlRaw = envOrUndefined("BOOND_JWT_TTL_SECONDS");
+    const ttlSeconds = ttlRaw ? Number(ttlRaw) : undefined;
+    auth = jwtAuth(userToken, clientToken, clientKey, Number.isFinite(ttlSeconds) ? ttlSeconds : undefined);
   } else if (token) {
     auth = staticAuth(JWT_HEADER_NAME, token);
   } else if (user && password) {
@@ -424,6 +466,27 @@ export function formatApiError(status: number, statusText: string, method: strin
   return lines.join("\n");
 }
 
+/**
+ * Defense-in-depth against path traversal / query injection through entity
+ * ids interpolated into API paths at ~40 call sites. Even though the id
+ * schemas are now numeric-only, a future tool could forget to validate, so we
+ * assert here that the path is well-formed: it must start with `/`, carry no
+ * query (`?`) or fragment (`#`) — those arrive via `queryParams`, never the
+ * path — and contain no traversal (`..`) or percent/backslash escapes. Built
+ * paths only ever combine static segments with numeric ids and hyphenated tab
+ * names, so this rejects nothing legitimate. Exported for unit testing.
+ */
+export function assertSafeApiPath(path: string): void {
+  if (!path.startsWith("/")) {
+    throw new Error(`Invalid API path (must start with "/"): ${path}`);
+  }
+  // `?`/`#` would inject a query/fragment; `%`/`\` could encode a traversal;
+  // `..` is a literal traversal segment.
+  if (/[?#%\\]/.test(path) || path.includes("..")) {
+    throw new Error(`Unsafe API path rejected: ${path}`);
+  }
+}
+
 export async function apiRequest(
   path: string,
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "GET",
@@ -432,7 +495,16 @@ export async function apiRequest(
 ): Promise<JsonApiResponse> {
   const { baseUrl, auth } = getConfig();
 
+  assertSafeApiPath(path);
+
   const url = new URL(`${baseUrl}${path}`);
+
+  // Belt-and-braces: confirm the constructed URL did not escape the API base
+  // origin/path despite the textual guard above.
+  const base = new URL(baseUrl);
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new Error(`API path escaped the configured base URL: ${path}`);
+  }
 
   if (queryParams) {
     for (const [key, value] of Object.entries(queryParams)) {

@@ -44,15 +44,3 @@ updates:
     labels:
       - "dependencies"
       - "docker"
-
-  # Python dependencies (GitHub Actions)
-  - package-ecosystem: "pip"
-    directory: "/.github"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    reviewers:
-      - "fauguste"
-    labels:
-      - "dependencies"
-      - "ci"

@@ -149,9 +149,14 @@ describe("resolveAllowedHosts", () => {
     expect(resolveAllowedHosts([], "0.0.0.0")).toEqual([]);
   });
 
-  it("treats `*` as an explicit opt-out", () => {
+  it("treats a sole `*` as an explicit opt-out", () => {
     expect(resolveAllowedHosts(["*"], "127.0.0.1")).toEqual([]);
-    expect(resolveAllowedHosts(["*", "example.com"], "0.0.0.0")).toEqual([]);
+  });
+
+  it("ignores `*` when mixed with real hosts (keeps validation on)", () => {
+    // A bare `*` alongside real hostnames is almost always a mistake; we drop
+    // the `*` and keep validating the explicit hosts rather than opening up.
+    expect(resolveAllowedHosts(["*", "example.com"], "0.0.0.0")).toEqual(["example.com"]);
   });
 
   it("uses the configured allow-list verbatim when provided", () => {
@@ -428,5 +433,78 @@ describe("startHttpTransport (integration)", () => {
       result?: { serverInfo?: { name?: string } };
     };
     expect(json.result?.serverInfo?.name).toBe("boondmanager-mcp-server");
+  });
+
+  it("rejects an oversized body with 413 (Content-Length precheck)", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34574,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+    const big = "x".repeat(2 * 1024 * 1024);
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADER },
+      body: big,
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it("rejects new sessions with 503 once the session cap is reached", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34575,
+      path: "/mcp",
+      stateless: false,
+      enableJsonResponse: true,
+      maxSessions: 1,
+      sessionTtlMs: 60_000,
+      sessionSweepIntervalMs: 60_000,
+    });
+    const initBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "vitest", version: "1.0.0" } },
+    });
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...AUTH_HEADER,
+    };
+
+    const first = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers,
+      body: initBody,
+    });
+    expect(first.status).toBe(200);
+    await first.text();
+    expect(handle.sessionCount()).toBe(1);
+
+    const second = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers,
+      body: initBody,
+    });
+    expect(second.status).toBe(503);
+  });
+
+  it("builds the metadata URL by stripping the path as a suffix", async () => {
+    // publicUrl whose host embeds the path string ('/mcp') must not be mangled.
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34576,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+      publicUrl: "https://mcp.example.com/mcp",
+    });
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(401);
+    const challenge = res.headers.get("www-authenticate") ?? "";
+    expect(challenge).toContain('resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"');
   });
 });

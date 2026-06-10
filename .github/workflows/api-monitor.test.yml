@@ -12,17 +12,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          npm install -g @apidevtools/json-schema-ref-parser
-          npm install axios cheerio diff
+        run: npm install --no-save --ignore-scripts axios@1.17.0 cheerio@1.2.0 diff@9.0.0
 
       - name: Test fetch script (dry-run)
         run: |

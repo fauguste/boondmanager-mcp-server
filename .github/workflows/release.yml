@@ -16,12 +16,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
+          # This job never pushes back with git (releases use GITHUB_TOKEN via
+          # the API, MCP Registry uses OIDC, npm uses NODE_AUTH_TOKEN), so don't
+          # leave a usable git credential on disk for downloaded tools to find.
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
@@ -72,9 +76,14 @@ jobs:
           echo "Detected: version=$TAG_VERSION prerelease=$IS_PRERELEASE npm_tag=$NPM_TAG"
 
       - name: Build MCPB bundle
+        env:
+          # Pin the bundler version — this step produces the distributed .mcpb
+          # artifact (and the sha256 recorded in server.json), so a floating
+          # `latest` would let a compromised release tamper the shipped file.
+          MCPB_CLI_VERSION: "2.1.2"
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          npx @anthropic-ai/mcpb pack . "boondmanager-mcp-server-v${TAG_VERSION}.mcpb"
+          npx --yes "@anthropic-ai/mcpb@${MCPB_CLI_VERSION}" pack . "boondmanager-mcp-server-v${TAG_VERSION}.mcpb"
 
       - name: Publish to npm
         # `--tag <npm_tag>` ensures prereleases land under e.g. `@alpha`
@@ -103,7 +112,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           body_path: RELEASE_NOTES.md
           generate_release_notes: true
@@ -131,8 +140,21 @@ jobs:
           cat server.json
 
       - name: Install mcp-publisher
+        env:
+          # Pin the registry CLI version (was `latest`) and verify the binary
+          # against the release's own checksums file before executing it — this
+          # step runs with id-token/packages/contents write access, so an
+          # unpinned, unverified download was a code-execution risk.
+          MCP_PUBLISHER_VERSION: "1.7.9"
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          ASSET="mcp-publisher_${OS}_${ARCH}.tar.gz"
+          BASE="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          curl -fsSL -o "$ASSET" "${BASE}/${ASSET}"
+          curl -fsSL -o checksums.txt "${BASE}/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
+          grep " ${ASSET}\$" checksums.txt | sha256sum -c -
+          tar xzf "$ASSET" mcp-publisher
           chmod +x mcp-publisher
 
       - name: Publish to MCP Registry
@@ -147,13 +169,13 @@ jobs:
       # artifacts, so users running LobeChat or a custom MCP gateway can
       # `docker pull` the same version they would `npm install`.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -164,7 +186,7 @@ jobs:
       # uses the same env trick to decide whether to add Docker Hub tags.
       - name: Log in to Docker Hub
         if: env.DOCKERHUB_TOKEN != ''
-        uses: docker/login-action@v4
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
@@ -215,7 +237,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -229,7 +251,7 @@ jobs:
 
       - name: Sync Docker Hub description
         if: env.DOCKERHUB_TOKEN != '' && steps.version.outputs.is_prerelease != 'true'
-        uses: peter-evans/dockerhub-description@v5
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:

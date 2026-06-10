@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.0] - 2026-06-10
+
+Durcissement de sécurité issu d'un audit complet (code applicatif, transport HTTP, chaîne d'approvisionnement CI/CD).
+
+### Security
+
+- **Validation des identifiants d'entité** (`src/schemas/index.ts`, `src/services/boond-client.ts`) : les `id` sont désormais strictement numériques et un garde-fou centralisé (`assertSafeApiPath`) rejette toute traversée de chemin (`..`), injection de query (`?`/`#`) ou encodage suspect (`%`/`\`) avant la construction de l'URL. Empêche le contournement du filtre d'accès par domaine via un `id` du type `../invoices/5`.
+- **Limite de taille du corps de requête HTTP** (`src/transports/http.ts`) : pré-check `Content-Length` + garde en streaming à 1 Mio, réponse `413`. Borne la mémoire qu'une requête authentifiée peut forcer à bufferiser.
+- **Plafond de sessions en mode stateful** (`MCP_HTTP_MAX_SESSIONS`, défaut `1000`) : nouvelles `initialize` rejetées en `503` une fois le plafond atteint (après un balayage des sessions inactives). Évite l'épuisement mémoire par création illimitée de sessions.
+- **Validation de l'en-tête Host durcie** : un `*` dans `MCP_HTTP_ALLOWED_HOSTS` ne désactive la validation que s'il est la **seule** entrée ; mêlé à de vrais hôtes il est ignoré (avec avertissement) plutôt que d'ouvrir à tous.
+- **JWT à expiration optionnelle** (`BOOND_JWT_TTL_SECONDS`) : régénère le JWT par requête avec des claims `iat`/`exp` pour qu'un token fuité ne soit pas rejouable indéfiniment. Désactivé par défaut (comportement historique préservé).
+- **Chaîne d'approvisionnement CI/CD** :
+  - Toutes les GitHub Actions tierces (et `actions/*`) épinglées par SHA de commit (Dependabot maintient les pins).
+  - `mcp-publisher` épinglé en version + vérification du checksum SHA-256 avant exécution (remplace un téléchargement `latest` non vérifié exécuté avec des droits d'écriture).
+  - `@anthropic-ai/mcpb` épinglé en version (`ci.yml`, `release.yml`).
+  - Image Docker de base épinglée par digest d'index multi-arch (`Dockerfile`).
+  - `release.yml` : `persist-credentials: false` au checkout (le job ne pousse pas via git).
+  - `api-monitor.yml` : dépendances npm épinglées + `--ignore-scripts`, dépendance inutilisée retirée, mise à jour du snapshot via **PR** au lieu d'un push direct sur `main`, contenu scrapé échappé avant insertion dans l'issue.
+- **Vulnérabilités de dépendances** : `hono` et `brace-expansion` (transitives) mises à jour — `npm audit` revient à zéro vulnérabilité.
+
+### Removed
+
+- Fichiers de travail temporaires sous `.github/` (`GIT_COMMANDS.sh`, `COMMIT_MESSAGE.txt`, etc.) et stanza Dependabot `pip` sans manifeste Python.
+
 ## [2.2.0] - 2026-06-08
 
 Restriction d'accès configurable par variables d'environnement : limiter les domaines exposés et/ou bloquer les écritures, sans modifier le code.

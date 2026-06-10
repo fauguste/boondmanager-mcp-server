@@ -364,7 +364,10 @@ HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
 | `MCP_HTTP_PUBLIC_URL` | (derived) | Public URL advertised in the OAuth2 discovery metadata. Required behind a reverse proxy. |
 | `MCP_HTTP_SESSION_TTL_MS` | `1800000` (30 min) | Stateful only: idle window before a session is closed |
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only: how often to scan for idle sessions |
-| `MCP_HTTP_ALLOWED_HOSTS` | (auto) | Comma-separated allow-list of `Host` header hostnames for DNS rebinding protection (CVE-2025-66414). Default = `localhost,127.0.0.1,[::1]` when bound to a loopback interface, otherwise validation is disabled. Set to `*` to opt out explicitly when fronting the server with a reverse proxy that already validates hosts. |
+| `MCP_HTTP_MAX_SESSIONS` | `1000` | Stateful only: max concurrent sessions. New `initialize` requests beyond the cap get `503` (after an idle sweep). Guards against memory exhaustion via unbounded session creation. |
+| `MCP_HTTP_ALLOWED_HOSTS` | (auto) | Comma-separated allow-list of `Host` header hostnames for DNS rebinding protection (CVE-2025-66414). Default = `localhost,127.0.0.1,[::1]` when bound to a loopback interface, otherwise validation is disabled. Set to exactly `*` (sole entry) to opt out explicitly when fronting the server with a reverse proxy that already validates hosts; a `*` mixed with real hostnames is ignored (validation stays on) with a warning. |
+
+Request bodies are capped at 1 MiB (`Content-Length` precheck + streaming guard); oversized requests get `413`.
 
 Stateless mode spins up a fresh `McpServer`+`StreamableHTTPServerTransport` per POST. Stateful mode keeps a `sessionId → { transport, server, lastActivityAt }` map; a periodic sweep closes idle sessions (transport + McpServer) so a buggy client that disconnects without `onsessionclosed` cannot leak resources. The sweep timer is `unref()`'d so it never blocks shutdown. The handle exposes `sessionCount()` and `sweepIdleSessions()` for observability/tests.
 
@@ -382,6 +385,10 @@ per-request).
    - `BOOND_CLIENT_TOKEN` — Client token (Administration → Espace Développeur → API / Sandbox)
    - `BOOND_CLIENT_KEY` — Client secret key (Administration → Espace Développeur → API / Sandbox)
    - The server generates the JWT (HS256) automatically from these 3 values.
+   - Optional: `BOOND_JWT_TTL_SECONDS` adds `iat`/`exp` claims and regenerates
+     the JWT per request so a leaked token expires (bounded replay window).
+     Absent/0 = legacy behaviour (token built once, no expiry). Opt-in because
+     not every BoondManager deployment is known to honour `exp`.
 2. **Pre-built JWT**: `BOOND_API_TOKEN` (JWT Bearer)
 3. **BasicAuth**: `BOOND_USER` + `BOOND_PASSWORD` (base64-encoded)
 

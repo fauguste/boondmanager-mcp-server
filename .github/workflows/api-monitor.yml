@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 jobs:
   check-api-changes:
@@ -16,19 +17,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          npm install -g @apidevtools/json-schema-ref-parser
-          npm install axios cheerio diff
+        # Pinned exact versions + `--ignore-scripts`: this job runs with a
+        # token that can push branches and open issues/PRs, so an install
+        # script in any of these packages (or a hijacked transitive dep) must
+        # not execute. The previously-installed json-schema-ref-parser was
+        # never required by the inline scripts, so it is dropped.
+        run: npm install --no-save --ignore-scripts axios@1.17.0 cheerio@1.2.0 diff@9.0.0
 
       - name: Fetch BoondManager API documentation
         id: fetch-api
@@ -230,20 +234,33 @@ jobs:
           });
           EOF
 
-      - name: Commit snapshot changes
+      - name: Open PR with snapshot changes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [[ -f .github/api-snapshot.json ]]; then
-            git add .github/api-snapshot.json
-            if git diff --staged --quiet; then
-              echo "No changes to commit"
-            else
-              git commit -m "chore: update BoondManager API snapshot [skip ci]"
-              git push
-            fi
+          if [[ ! -f .github/api-snapshot.json ]]; then
+            echo "No snapshot file"
+            exit 0
           fi
+          git add .github/api-snapshot.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          # Open a PR rather than pushing scraped third-party content straight
+          # to main — this keeps the snapshot update under review/CI.
+          BRANCH="api-monitor/snapshot-${{ github.run_number }}"
+          git checkout -b "$BRANCH"
+          git commit -m "chore: update BoondManager API snapshot"
+          git push --set-upstream origin "$BRANCH"
+          gh pr create \
+            --title "chore: update BoondManager API snapshot" \
+            --body "Automated snapshot refresh from the API monitor. Review the diff before merging." \
+            --base main --head "$BRANCH" \
+            --label api-update || echo "PR may already exist for $BRANCH"
 
       - name: Create GitHub issue for changes
         if: success()
@@ -260,6 +277,16 @@ jobs:
           const { execSync } = require('child_process');
 
           const changes = JSON.parse(fs.readFileSync('changes.json', 'utf8'));
+
+          // The endpoint names/paths/descriptions are scraped from an external
+          // site. Neutralise Markdown/HTML before embedding them in the issue
+          // body: strip backticks (code-span break-out), link/image brackets,
+          // angle brackets (raw HTML), and newlines; cap the length.
+          const esc = (v) =>
+            String(v ?? '')
+              .replace(/[`<>\[\]]/g, '')
+              .replace(/\r?\n/g, ' ')
+              .slice(0, 200);
 
           if (changes.isFirstRun) {
             console.log('First run - no issue created');
@@ -279,9 +306,9 @@ jobs:
           if (changes.changes.added.length > 0) {
             body += `### ➕ Nouveaux endpoints (${changes.changes.added.length})\n\n`;
             changes.changes.added.slice(0, 10).forEach(ep => {
-              body += `- **${ep.method || 'GET'}** \`${ep.name || ep.path}\`\n`;
+              body += `- **${esc(ep.method || 'GET')}** \`${esc(ep.name || ep.path)}\`\n`;
               if (ep.description) {
-                body += `  > ${ep.description}\n`;
+                body += `  > ${esc(ep.description)}\n`;
               }
             });
             if (changes.changes.added.length > 10) {
@@ -293,7 +320,7 @@ jobs:
           if (changes.changes.removed.length > 0) {
             body += `### ➖ Endpoints supprimés (${changes.changes.removed.length})\n\n`;
             changes.changes.removed.slice(0, 10).forEach(ep => {
-              body += `- **${ep.method || 'GET'}** \`${ep.name || ep.path}\`\n`;
+              body += `- **${esc(ep.method || 'GET')}** \`${esc(ep.name || ep.path)}\`\n`;
             });
             if (changes.changes.removed.length > 10) {
               body += `\n_... et ${changes.changes.removed.length - 10} autres_\n`;
@@ -304,7 +331,7 @@ jobs:
           if (changes.changes.modified.length > 0) {
             body += `### 🔄 Endpoints modifiés (${changes.changes.modified.length})\n\n`;
             changes.changes.modified.slice(0, 5).forEach(({ old, new: curr }) => {
-              body += `- \`${curr.name || curr.path}\`\n`;
+              body += `- \`${esc(curr.name || curr.path)}\`\n`;
             });
             if (changes.changes.modified.length > 5) {
               body += `\n_... et ${changes.changes.modified.length - 5} autres_\n`;
@@ -341,7 +368,7 @@ jobs:
 
       - name: Upload changes artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: api-changes-${{ github.run_number }}
           path: |

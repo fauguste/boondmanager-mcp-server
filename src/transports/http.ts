@@ -22,6 +22,8 @@ export interface HttpTransportOptions {
   sessionTtlMs?: number;
   /** How often to sweep idle sessions, in ms. Defaults to 5 min. */
   sessionSweepIntervalMs?: number;
+  /** Max concurrent stateful sessions before new inits are rejected with 503. */
+  maxSessions?: number;
   /**
    * Allow-list of Host header hostnames (port-agnostic) for DNS rebinding
    * protection. Empty array = validation disabled. Use `["*"]` to opt out
@@ -52,6 +54,10 @@ export interface HttpServerHandle {
 // a 5-minute sweep keeps memory bounded without hammering the event loop.
 const DEFAULT_SESSION_TTL_MS = 30 * 60_000;
 const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 5 * 60_000;
+// Ceiling on concurrent stateful sessions. Each session holds a live
+// McpServer + transport until its TTL sweep, so without a cap an authenticated
+// client could spin up unbounded `initialize` requests and exhaust memory.
+const DEFAULT_MAX_SESSIONS = 1000;
 
 // Loopback addresses that should default to the localhost host allow-list.
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -89,7 +95,19 @@ function readAllowedHosts(): string[] | undefined {
  */
 export function resolveAllowedHosts(configured: string[] | undefined, host: string): string[] {
   if (configured && configured.length > 0) {
-    if (configured.includes("*")) return [];
+    // `*` disables validation, but only when it is the *sole* entry — a bare
+    // `*` mixed with real hostnames (`"mcp.example.com,*"`) is almost always a
+    // mistake, so we keep validation on and warn rather than silently opening
+    // up to every Host. (A glob like `*.example.com` stays a literal token and
+    // is treated as a normal allow-list entry.)
+    if (configured.includes("*")) {
+      if (configured.length === 1) return [];
+      logger.warn(
+        { allowedHosts: configured },
+        "MCP_HTTP_ALLOWED_HOSTS contains '*' alongside other hosts; ignoring '*' and keeping Host validation enabled. Set it to exactly '*' to disable validation."
+      );
+      return configured.filter((h) => h !== "*");
+    }
     return configured;
   }
   if (LOOPBACK_HOSTS.has(host)) return LOCALHOST_ALLOWED_HOSTS;
@@ -129,6 +147,7 @@ export function resolveHttpOptions(): HttpTransportOptions {
     enableJsonResponse,
     sessionTtlMs: readPositiveInt("MCP_HTTP_SESSION_TTL_MS", DEFAULT_SESSION_TTL_MS),
     sessionSweepIntervalMs: readPositiveInt("MCP_HTTP_SESSION_SWEEP_INTERVAL_MS", DEFAULT_SESSION_SWEEP_INTERVAL_MS),
+    maxSessions: readPositiveInt("MCP_HTTP_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
     allowedHosts: readAllowedHosts(),
     publicUrl: readEnv("MCP_HTTP_PUBLIC_URL"),
   };
@@ -145,10 +164,28 @@ function resolveResourceUrl(options: HttpTransportOptions): string {
   return `http://${options.host}:${options.port}${options.path}`;
 }
 
+/** Max accepted request body size (1 MiB). MCP initialize payloads are tiny;
+ *  this caps the memory a single authenticated request can force us to buffer. */
+const MAX_BODY_BYTES = 1024 * 1024;
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("Request body exceeds the maximum allowed size");
+    this.name = "PayloadTooLargeError";
+  }
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of req) {
-    chunks.push(chunk as Buffer);
+    const buf = chunk as Buffer;
+    total += buf.length;
+    if (total > MAX_BODY_BYTES) {
+      req.destroy();
+      throw new PayloadTooLargeError();
+    }
+    chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw) return undefined;
@@ -194,14 +231,20 @@ export async function startHttpTransport(
   const sessions = new Map<string, SessionEntry>();
   const sessionTtlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const sessionSweepIntervalMs = options.sessionSweepIntervalMs ?? DEFAULT_SESSION_SWEEP_INTERVAL_MS;
+  const maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   const allowedHosts = resolveAllowedHosts(options.allowedHosts, options.host);
   const resourceUrl = resolveResourceUrl(options);
   const authorizationServer = resolveAuthorizationServer();
   const advertisedScopes = resolveAdvertisedScopes();
   // Per RFC 9728 §3.2 the metadata URL is `/.well-known/oauth-protected-resource`
   // optionally suffixed with the resource path so multiple resources can
-  // coexist on one host. We serve both for compatibility.
-  const metadataUrl = `${resourceUrl.replace(options.path, "")}/.well-known/oauth-protected-resource${options.path}`;
+  // coexist on one host. We serve both for compatibility. Strip the path as a
+  // *suffix* (not an arbitrary substring) so a hostname that happens to embed
+  // the path string isn't mangled.
+  const resourceOrigin = resourceUrl.endsWith(options.path)
+    ? resourceUrl.slice(0, resourceUrl.length - options.path.length)
+    : resourceUrl;
+  const metadataUrl = `${resourceOrigin}/.well-known/oauth-protected-resource${options.path}`;
   const wwwAuthenticate = `Bearer realm="${resourceUrl}", resource_metadata="${metadataUrl}"`;
 
   const sweepIdleSessions = async (): Promise<number> => {
@@ -271,6 +314,15 @@ export async function startHttpTransport(
           writeJsonRpcError(res, 403, `Invalid Host: ${hostname}`);
           return;
         }
+      }
+
+      // Reject oversized payloads up front when the client advertises the
+      // length, before buffering anything. The streaming guard in
+      // readJsonBody still covers chunked / lying Content-Length cases.
+      const contentLength = Number(req.headers["content-length"]);
+      if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+        writeJsonRpcError(res, 413, "Request body too large");
+        return;
       }
 
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -352,6 +404,20 @@ export async function startHttpTransport(
           return;
         }
 
+        // Cap concurrent sessions. Try a sweep first in case the ceiling is
+        // hit purely by idle-but-not-yet-reaped sessions, then reject.
+        if (sessions.size >= maxSessions) {
+          await sweepIdleSessions();
+          if (sessions.size >= maxSessions) {
+            reqLogger.warn(
+              { sessionCount: sessions.size, maxSessions },
+              "Session limit reached; rejecting new initialize"
+            );
+            writeJsonRpcError(res, 503, "Server session limit reached; retry later");
+            return;
+          }
+        }
+
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           enableJsonResponse: options.enableJsonResponse,
@@ -385,6 +451,14 @@ export async function startHttpTransport(
         await transport.handleRequest(req, res, body);
       });
     } catch (error) {
+      if (error instanceof PayloadTooLargeError) {
+        if (!res.headersSent) {
+          writeJsonRpcError(res, 413, "Request body too large");
+        } else {
+          res.end();
+        }
+        return;
+      }
       reqLogger.error({ err: error }, "HTTP transport error");
       if (!res.headersSent) {
         writeJsonRpcError(res, 500, "Internal server error");
