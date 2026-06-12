@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**174 tools** across **38 domains** · **11 prompts** · **21 resources**.
+**174 tools** across **38 domains** · **11 prompts** · **22 resources**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -391,7 +391,7 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `staffing_disponible` | Consultants disponibles pour un staffing | `start_date` `end_date` `competences?` `manager_id?` |
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |
 
-## Resources (21)
+## Resources (22)
 
 Reference data exposed as MCP resources.
 
@@ -405,6 +405,7 @@ Reference data exposed as MCP resources.
 | `boond://dictionary/expertiseAreas` | Domaines d'expertise |
 | `boond://dictionary/languages` | Langues |
 | `boond://dictionary/mobilityAreas` | Mobilités |
+| `boond://dictionary/overrides` | Libellés personnalisés (overrides) |
 | `boond://dictionary/states/candidates` | États candidats |
 | `boond://dictionary/states/companies` | États sociétés |
 | `boond://dictionary/states/contacts` | États contacts |

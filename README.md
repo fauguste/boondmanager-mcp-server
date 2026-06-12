@@ -444,6 +444,25 @@ comptabilité), et/ou bloquer les écritures et suppressions.
 
 Guide complet, règles de résolution et exemples : [docs/access-control.md](docs/access-control.md).
 
+### Libellés personnalisés du dictionnaire
+
+Si votre instance BoondManager utilise des libellés de dictionnaire
+personnalisés (ex. types d'action ou états en anglais), vous pouvez déclarer
+le mapping libellé→ID via `BOOND_DICTIONARY_OVERRIDES` (JSON inline ou chemin
+vers un fichier JSON) :
+
+```bash
+export BOOND_DICTIONARY_OVERRIDES='{"action":{"contact":{"Call":61,"Email":63}},"state":{"candidate":{"Interviewed":2}}}'
+```
+
+Le serveur accepte alors ces libellés pour le `typeOf` de
+`boond_actions_create` et les champs `state` des créations/modifications, les
+résout automatiquement en IDs numériques, et enrichit les descriptions des
+outils avec les libellés disponibles. Sans cette variable, le comportement est
+strictement inchangé.
+
+Format complet, entités supportées et limites : [docs/dictionary-overrides.md](docs/dictionary-overrides.md).
+
 ## Transports
 
 Le serveur supporte deux transports MCP, selectionnables via la variable d'environnement `MCP_TRANSPORT`.
