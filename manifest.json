@@ -3,7 +3,7 @@
   "name": "boondmanager-mcp-server",
   "display_name": "BoondManager MCP Server",
   "version": "2.4.0",
-  "description": "MCP Server for BoondManager API - 174 tools, 11 prompts, 21 resources (ERP/CRM)",
+  "description": "MCP Server for BoondManager API - 174 tools, 11 prompts, 22 resources (ERP/CRM)",
   "author": {
     "name": "Frédéric Auguste",
     "url": "https://github.com/fauguste/boondmanager-mcp-server"
@@ -34,7 +34,8 @@
         "BOOND_MCP_EXCLUDE_DOMAINS": "${user_config.mcp_exclude_domains}",
         "BOOND_MCP_OPERATIONS": "${user_config.mcp_operations}",
         "BOOND_MCP_READ_ONLY": "${user_config.mcp_read_only}",
-        "BOOND_MCP_CONFIRM_DELETE": "${user_config.confirm_delete}"
+        "BOOND_MCP_CONFIRM_DELETE": "${user_config.confirm_delete}",
+        "BOOND_DICTIONARY_OVERRIDES": "${user_config.dictionary_overrides}"
       }
     }
   },
@@ -117,6 +118,12 @@
       "title": "Confirmer les suppressions",
       "description": "Si activé (défaut), une confirmation est demandée avant chaque suppression lorsque le client MCP supporte l'élicitation. Désactiver pour retrouver le comportement historique (suppression directe).",
       "default": true,
+      "required": false
+    },
+    "dictionary_overrides": {
+      "type": "string",
+      "title": "Libellés personnalisés du dictionnaire",
+      "description": "Mapping libellé→ID pour les instances BoondManager aux dictionnaires personnalisés : JSON inline (commence par {) ou chemin vers un fichier JSON UTF-8. Ex: {\"action\":{\"contact\":{\"Call\":61}},\"state\":{\"candidate\":{\"Interviewed\":2}}}. Voir docs/dictionary-overrides.md.",
       "required": false
     }
   },
