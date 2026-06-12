@@ -2,6 +2,31 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ActionSearchSchema, ActionCreateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
+import { availableLabels, formatOverridesSummary, resolveLabel } from "../config/dictionary-overrides.js";
+
+/** Display labels for the five entities an action can be attached to. */
+const ACTION_ENTITY_LABELS: ReadonlyArray<readonly [string, string]> = [
+  ["Contact", "contact"],
+  ["Candidat", "candidate"],
+  ["Ressource", "resource"],
+  ["Opportunité", "opportunity"],
+  ["Projet", "project"],
+];
+
+/**
+ * Append the custom typeOf labels (BOOND_DICTIONARY_OVERRIDES) to the create
+ * tool description, as one compact block. Without overrides the base
+ * description is returned unchanged (byte-for-byte).
+ */
+function buildActionCreateDescription(base: string): string {
+  const parts: string[] = [];
+  for (const [label, entity] of ACTION_ENTITY_LABELS) {
+    const summary = formatOverridesSummary("action", entity);
+    if (summary !== null) parts.push(`${label} : ${summary}`);
+  }
+  if (parts.length === 0) return base;
+  return `${base}\nLibellés personnalisés acceptés pour typeOf (résolus automatiquement) : ${parts.join(" / ")}`;
+}
 
 export function registerActionTools(server: McpServer): void {
   // Search actions
@@ -61,7 +86,8 @@ Returns: Liste des actions correspondantes.`,
     "boond_actions_create",
     {
       title: "Créer une action",
-      description: `Crée une nouvelle action (appel, email, RDV, note) dans BoondManager, rattachée à un contact, candidat, ressource, opportunité ou projet (relation dependsOn, obligatoire).
+      description:
+        buildActionCreateDescription(`Crée une nouvelle action (appel, email, RDV, note) dans BoondManager, rattachée à un contact, candidat, ressource, opportunité ou projet (relation dependsOn, obligatoire).
 
 Args:
   - typeOf (number, requis): ID numérique du type d'action (dictionnaire setting.action.*, via boond_application_dictionary)
@@ -70,7 +96,7 @@ Args:
   - contactId | candidateId | resourceId | opportunityId | projectId (string, un requis): Entité de rattachement
   - companyId (string, optional): Société, uniquement en complément d'un contactId
 
-Returns: L'action créée avec son ID.`,
+Returns: L'action créée avec son ID.`),
       inputSchema: ActionCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -102,6 +128,29 @@ Returns: L'action créée avec son ID.`,
             },
           ],
         };
+      }
+      // Resolve a custom typeOf label (BOOND_DICTIONARY_OVERRIDES) to its
+      // numeric dictionary id. The labels are declared per attached entity
+      // (setting.action.<entity>), hence the resolution after dependsOn.
+      if (typeof attrs.typeOf === "string") {
+        const resolved = resolveLabel("action", dependsOn.type, attrs.typeOf);
+        if (resolved === undefined) {
+          const labels = availableLabels("action", dependsOn.type);
+          const hint =
+            labels.length > 0
+              ? `Libellés personnalisés disponibles pour ${dependsOn.type} : ${labels.join(", ")}. Sinon, utilisez l'ID numérique du dictionnaire (setting.action.*, via boond_application_dictionary).`
+              : `Aucun libellé personnalisé n'est configuré pour ${dependsOn.type} : utilisez l'ID numérique du dictionnaire (setting.action.*, via boond_application_dictionary), ou déclarez vos libellés via BOOND_DICTIONARY_OVERRIDES (voir docs/dictionary-overrides.md).`;
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `❌ Type d'action inconnu : "${attrs.typeOf}". ${hint}`,
+              },
+            ],
+          };
+        }
+        attrs.typeOf = resolved;
       }
       const body = buildJsonApiBody("action", attrs);
       const relationships: Record<string, unknown> = {

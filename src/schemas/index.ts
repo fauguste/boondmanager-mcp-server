@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
+import { appendOverridesToDescription, resolveLabel } from "../config/dictionary-overrides.js";
 
 // Common search schema
 export const SearchSchema = z
@@ -501,6 +502,25 @@ export const IdTabSchema = z
   })
   .strict();
 
+// ---- Dictionary-override-aware `state` field ----
+// Accepts the usual numeric dictionary id, plus a custom label when the
+// operator configured BOOND_DICTIONARY_OVERRIDES (see docs/dictionary-overrides.md).
+// IMPORTANT: the label is resolved inside `z.preprocess`, i.e. at PARSE time,
+// not at schema definition time -- so overrides injected after this module is
+// imported (tests, late env) are honoured. Unknown labels are left as-is so
+// the integer validation fails with an explicit error.
+export const stateField = (entity: string, baseDescription: string) =>
+  z
+    .preprocess((value) => {
+      if (typeof value === "string") {
+        const resolved = resolveLabel("state", entity, value);
+        if (resolved !== undefined) return resolved;
+      }
+      return value;
+    }, z.coerce.number().int())
+    .optional()
+    .describe(appendOverridesToDescription(baseDescription, "state", entity));
+
 // ---- Candidate schemas ----
 
 export const CandidateCreateSchema = z
@@ -512,7 +532,7 @@ export const CandidateCreateSchema = z
     city: z.string().optional().describe("Ville"),
     country: z.string().optional().describe("Pays"),
     title: z.string().optional().describe("Titre du poste / fonction"),
-    state: z.number().int().optional().describe("État du candidat (0=en cours, 1=placé, 2=archivé...)"),
+    state: stateField("candidate", "État du candidat (0=en cours, 1=placé, 2=archivé...)"),
     mainSkills: z.string().optional().describe("Compétences principales (texte libre)"),
     note: z.string().optional().describe("Notes / commentaires"),
   })
@@ -528,7 +548,7 @@ export const CandidateUpdateSchema = z
     city: z.string().optional().describe("Ville"),
     country: z.string().optional().describe("Pays"),
     title: z.string().optional().describe("Titre / fonction"),
-    state: z.number().int().optional().describe("État du candidat"),
+    state: stateField("candidate", "État du candidat"),
     mainSkills: z.string().optional().describe("Compétences principales"),
     note: z.string().optional().describe("Notes"),
   })
@@ -545,7 +565,7 @@ export const ResourceCreateSchema = z
     city: z.string().optional().describe("Ville"),
     country: z.string().optional().describe("Pays"),
     title: z.string().optional().describe("Titre / poste"),
-    state: z.number().int().optional().describe("État de la ressource"),
+    state: stateField("resource", "État de la ressource"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
@@ -560,7 +580,7 @@ export const ResourceUpdateSchema = z
     city: z.string().optional().describe("Ville"),
     country: z.string().optional().describe("Pays"),
     title: z.string().optional().describe("Titre / poste"),
-    state: z.number().int().optional().describe("État"),
+    state: stateField("resource", "État"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
@@ -721,7 +741,7 @@ export const CompanyCreateSchema = z
     country: z.string().optional().describe("Pays"),
     website: z.string().optional().describe("Site web"),
     siret: z.string().optional().describe("Numéro SIRET"),
-    state: z.number().int().optional().describe("État de la société"),
+    state: stateField("company", "État de la société"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
@@ -736,7 +756,7 @@ export const CompanyUpdateSchema = z
     country: z.string().optional().describe("Pays"),
     website: z.string().optional().describe("Site web"),
     siret: z.string().optional().describe("Numéro SIRET"),
-    state: z.number().int().optional().describe("État"),
+    state: stateField("company", "État"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
@@ -748,7 +768,7 @@ export const OpportunityCreateSchema = z
     name: z.string().min(1).describe("Nom / titre de l'opportunité"),
     companyId: z.string().optional().describe("ID de la société cliente"),
     contactId: z.string().optional().describe("ID du contact associé"),
-    state: z.number().int().optional().describe("État de l'opportunité"),
+    state: stateField("opportunity", "État de l'opportunité"),
     startDate: z.string().optional().describe("Date de début prévue (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin prévue (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes / description"),
@@ -759,7 +779,7 @@ export const OpportunityUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID de l'opportunité à modifier"),
     name: z.string().optional().describe("Nom / titre"),
-    state: z.number().int().optional().describe("État"),
+    state: stateField("opportunity", "État"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes"),
@@ -786,12 +806,11 @@ export const ActionSearchSchema = z
 // and `text` (not subject/content) — anything else triggers a 422.
 export const ActionCreateSchema = z
   .object({
-    typeOf: z.coerce
-      .number()
-      .int()
-      .min(0)
+    typeOf: z
+      .union([z.coerce.number().int().min(0), z.string().min(1)])
       .describe(
-        "Type d'action : ID numérique du dictionnaire BoondManager (setting.action.*, via boond_application_dictionary)"
+        "Type d'action : ID numérique du dictionnaire (setting.action.*, via boond_application_dictionary) " +
+          "ou libellé personnalisé si BOOND_DICTIONARY_OVERRIDES est configuré"
       ),
     title: z.string().optional().describe("Titre de l'action"),
     text: z.string().optional().describe("Contenu / notes de l'action"),
@@ -858,7 +877,7 @@ export const ProjectCreateSchema = z
     companyId: z.string().optional().describe("ID de la société cliente"),
     contactId: z.string().optional().describe("ID du contact associé"),
     opportunityId: z.string().optional().describe("ID de l'opportunité liée"),
-    state: z.number().int().optional().describe("État du projet (0=en cours, 1=terminé, 2=archivé...)"),
+    state: stateField("project", "État du projet (0=en cours, 1=terminé, 2=archivé...)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes / description du projet"),
@@ -869,7 +888,7 @@ export const ProjectUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID du projet à modifier"),
     name: z.string().optional().describe("Nom du projet"),
-    state: z.number().int().optional().describe("État du projet"),
+    state: stateField("project", "État du projet"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes"),

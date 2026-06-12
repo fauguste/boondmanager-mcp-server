@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { resetDictionaryOverridesForTests } from "../config/dictionary-overrides.js";
 import {
   SearchSchema,
   IdSchema,
@@ -292,8 +293,15 @@ describe("ActionCreateSchema", () => {
     }
   });
 
-  it("should reject a non-numeric typeOf", () => {
-    expect(ActionCreateSchema.safeParse({ typeOf: "call" }).success).toBe(false);
+  it("should accept a non-numeric typeOf as a custom label (resolved in the handler)", () => {
+    // Custom labels (BOOND_DICTIONARY_OVERRIDES) are resolved — or rejected
+    // with an explicit message — by the boond_actions_create handler, which
+    // knows the dependsOn entity. The schema only validates the shape.
+    const result = ActionCreateSchema.safeParse({ typeOf: "Call", contactId: "6695" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.typeOf).toBe("Call");
+    }
   });
 
   it("should require typeOf", () => {
@@ -651,5 +659,63 @@ describe("DictionaryGetSchema", () => {
 
   it("should reject missing dictionary type", () => {
     expect(DictionaryGetSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("state fields with dictionary overrides (stateField)", () => {
+  beforeEach(() => {
+    process.env.BOOND_DICTIONARY_OVERRIDES = JSON.stringify({
+      state: { candidate: { Interviewed: 2, Hired: 5 }, opportunity: { Won: 6 } },
+    });
+    resetDictionaryOverridesForTests();
+  });
+
+  afterEach(() => {
+    delete process.env.BOOND_DICTIONARY_OVERRIDES;
+    resetDictionaryOverridesForTests();
+  });
+
+  it("resolves a known label to its numeric id at parse time", () => {
+    const result = CandidateUpdateSchema.safeParse({ id: "1", state: "Interviewed" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.state).toBe(2);
+    }
+  });
+
+  it("is case-insensitive and trims whitespace", () => {
+    const result = CandidateCreateSchema.safeParse({
+      firstName: "Ada",
+      lastName: "Lovelace",
+      state: "  hired ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.state).toBe(5);
+    }
+  });
+
+  it("rejects an unknown label", () => {
+    expect(CandidateUpdateSchema.safeParse({ id: "1", state: "Telepathic" }).success).toBe(false);
+  });
+
+  it("does not leak labels across entities", () => {
+    // "Won" is declared for opportunities only.
+    expect(OpportunityUpdateSchema.safeParse({ id: "1", state: "Won" }).success).toBe(true);
+    expect(CandidateUpdateSchema.safeParse({ id: "1", state: "Won" }).success).toBe(false);
+  });
+
+  it("still accepts a numeric state unchanged", () => {
+    const result = CandidateUpdateSchema.safeParse({ id: "1", state: 1 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.state).toBe(1);
+    }
+  });
+
+  it("rejects a label when no overrides are configured", () => {
+    delete process.env.BOOND_DICTIONARY_OVERRIDES;
+    resetDictionaryOverridesForTests();
+    expect(CandidateUpdateSchema.safeParse({ id: "1", state: "Interviewed" }).success).toBe(false);
   });
 });
