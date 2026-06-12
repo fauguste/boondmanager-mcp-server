@@ -69,6 +69,7 @@ Args:
   - startDate, endDate (string, optional): Dates ISO avec timezone (ex: 2026-06-05T10:00:00+0200)
   - contactId | candidateId | resourceId | opportunityId | projectId (string, un requis): Entité de rattachement
   - companyId (string, optional): Société, uniquement en complément d'un contactId
+  - positioningId (string, optional): Positionnement à lier — requis par l'API pour les types d'action liés aux positionnements (ex. RQ)
 
 Returns: L'action créée avec son ID.`,
       inputSchema: ActionCreateSchema,
@@ -80,7 +81,8 @@ Returns: L'action créée avec son ID.`,
       },
     },
     async (params) => {
-      const { candidateId, resourceId, contactId, opportunityId, projectId, companyId, ...attrs } = params;
+      const { candidateId, resourceId, contactId, opportunityId, projectId, companyId, positioningId, ...attrs } =
+        params;
       // The API requires a polymorphic `dependsOn` relationship pointing to the
       // entity the action is attached to (422 "Missing required relationship"
       // otherwise). `company` is only accepted alongside a contact `dependsOn`.
@@ -109,6 +111,14 @@ Returns: L'action créée avec son ID.`,
       };
       if (companyId && dependsOn.type === "contact") {
         relationships.company = { data: { id: companyId, type: "company" } };
+      }
+      // Some action types (those bound to positionings in the Boond setup, e.g.
+      // "RQ"-style interviews) are rejected with a 422 "1002 - Wrong or missing
+      // attribute (/data/relationships/positioning)" unless a positioning
+      // relationship is sent. The official bodyPost.json schema does not
+      // document it, but the API enforces it for those types.
+      if (positioningId) {
+        relationships.positioning = { data: { id: positioningId, type: "positioning" } };
       }
       (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
       const response = await apiRequest("/actions", "POST", body);

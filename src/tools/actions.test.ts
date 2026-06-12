@@ -97,6 +97,30 @@ describe("registerActionTools", () => {
       });
     });
 
+    it("should send a positioning relationship when positioningId is provided", async () => {
+      const handler = getCreateHandler();
+      await handler({ typeOf: 52, opportunityId: "345", positioningId: "11130" });
+      const body = vi.mocked(apiRequest).mock.calls[0][2] as {
+        data: { relationships: Record<string, unknown>; attributes: Record<string, unknown> };
+      };
+      expect(body.data.relationships.dependsOn).toEqual({
+        data: { id: "345", type: "opportunity" },
+      });
+      expect(body.data.relationships.positioning).toEqual({
+        data: { id: "11130", type: "positioning" },
+      });
+      expect(body.data.attributes.positioningId).toBeUndefined();
+    });
+
+    it("should not send a positioning relationship when positioningId is absent", async () => {
+      const handler = getCreateHandler();
+      await handler({ typeOf: 1, contactId: "6695" });
+      const body = vi.mocked(apiRequest).mock.calls[0][2] as {
+        data: { relationships: Record<string, unknown> };
+      };
+      expect(body.data.relationships.positioning).toBeUndefined();
+    });
+
     it("should map candidateId to a candidate dependsOn", async () => {
       const handler = getCreateHandler();
       await handler({ typeOf: 2, candidateId: "99" });

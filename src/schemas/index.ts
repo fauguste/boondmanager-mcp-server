@@ -806,6 +806,12 @@ export const ActionCreateSchema = z
     opportunityId: z.string().optional().describe("ID de l'opportunité à laquelle rattacher l'action (dependsOn)"),
     projectId: z.string().optional().describe("ID du projet auquel rattacher l'action (dependsOn)"),
     companyId: z.string().optional().describe("ID de la société associée (uniquement en complément d'un contactId)"),
+    positioningId: z
+      .string()
+      .optional()
+      .describe(
+        "ID du positionnement à lier à l'action (relation positioning). Requis par l'API pour les types d'action liés aux positionnements (ex. RQ) — sans lui, erreur 422 « 1002 - Wrong or missing attribute (/data/relationships/positioning) »."
+      ),
   })
   .strict();
 
