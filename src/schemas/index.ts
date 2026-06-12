@@ -1082,11 +1082,36 @@ export const PositioningCreateSchema = z
 
 export const PositioningSearchSchema = z
   .object({
-    keywords: z.string().optional().describe("Mots-clés de recherche"),
-    candidateId: z.string().optional().describe("Filtrer par ID candidat"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
-    opportunityId: z.string().optional().describe("Filtrer par ID opportunité"),
+    keywords: z
+      .string()
+      .optional()
+      .describe(
+        "Mots-clés de recherche. L'API y accepte aussi des références d'entités (AO<id>, CAND<id>, COMP<id>...) — les filtres *Id ci-dessous sont convertis automatiquement en de telles références."
+      ),
+    candidateId: z
+      .string()
+      .optional()
+      .describe("Filtrer par ID candidat (envoyé à l'API comme référence keywords CAND<id>)"),
+    resourceId: z
+      .string()
+      .optional()
+      .describe("Filtrer par ID ressource (envoyé à l'API comme référence keywords COMP<id>)"),
+    opportunityId: z
+      .string()
+      .optional()
+      .describe("Filtrer par ID opportunité (envoyé à l'API comme référence keywords AO<id>)"),
+    companyId: z
+      .string()
+      .optional()
+      .describe("Filtrer par ID société (envoyé à l'API comme référence keywords CSOC<id>)"),
+    contactId: z
+      .string()
+      .optional()
+      .describe("Filtrer par ID contact (envoyé à l'API comme référence keywords CCON<id>)"),
+    productId: z
+      .string()
+      .optional()
+      .describe("Filtrer par ID produit (envoyé à l'API comme référence keywords PROD<id>)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
   })

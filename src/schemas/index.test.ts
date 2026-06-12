@@ -605,10 +605,17 @@ describe("PositioningSearchSchema", () => {
     const result = PositioningSearchSchema.safeParse({
       candidateId: "1",
       resourceId: "2",
-      projectId: "3",
       opportunityId: "4",
+      companyId: "5",
+      contactId: "6",
+      productId: "7",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("should reject projectId (not supported by the API)", () => {
+    const result = PositioningSearchSchema.safeParse({ projectId: "3" });
+    expect(result.success).toBe(false);
   });
 });
 

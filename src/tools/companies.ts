@@ -9,7 +9,7 @@ import {
   registerDeleteTool,
   buildJsonApiBody,
 } from "./crud-factory.js";
-import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
+import { apiRequest, formatTabResponse } from "../services/boond-client.js";
 
 const OPTS = {
   entityName: "société",
@@ -183,7 +183,7 @@ export function registerCompanyTools(server: McpServer): void {
       },
       async (params: IdInput) => {
         const response = await apiRequest(`/companies/${params.id}/${tab.tab}`);
-        const text = formatDetailResponse(response);
+        const text = formatTabResponse(response);
         return {
           content: [{ type: "text" as const, text }],
         };

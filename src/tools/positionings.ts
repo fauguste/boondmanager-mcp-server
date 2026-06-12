@@ -11,9 +11,11 @@ export function registerPositioningTools(server: McpServer): void {
       title: "Rechercher des positionnements",
       description: `Recherche des positionnements (placement de candidats/ressources sur des projets/opportunités) dans BoondManager.
 
+L'API ne propose pas de paramètres de filtre dédiés : le filtrage par entité liée passe par des références dans \`keywords\` (AO<id>=opportunité, CAND<id>=candidat, COMP<id>=ressource, CSOC<id>=société, CCON<id>=contact, PROD<id>=produit). Les filtres *Id ci-dessous sont convertis automatiquement en ces références.
+
 Args:
-  - keywords (string, optional): Termes de recherche
-  - candidateId, resourceId, projectId, opportunityId (string, optional): Filtrer par entité liée
+  - keywords (string, optional): Termes de recherche (références d'entités acceptées)
+  - candidateId, resourceId, opportunityId, companyId, contactId, productId (string, optional): Filtrer par entité liée (convertis en références keywords)
   - page, pageSize: Pagination
 
 Returns: Liste des positionnements correspondants.`,
@@ -26,7 +28,19 @@ Returns: Liste des positionnements correspondants.`,
       },
     },
     async (params) => {
-      const query = buildSearchQuery(params);
+      // L'API GET /positionings n'a pas de paramètres candidateId/resourceId/... :
+      // le filtrage par entité passe par des références dans `keywords`
+      // (cf. RAML officiel). Les paramètres bruts seraient silencieusement ignorés.
+      const { candidateId, resourceId, opportunityId, companyId, contactId, productId, keywords, ...rest } = params;
+      const tokens: string[] = [];
+      if (keywords) tokens.push(keywords);
+      if (opportunityId) tokens.push(`AO${opportunityId}`);
+      if (candidateId) tokens.push(`CAND${candidateId}`);
+      if (resourceId) tokens.push(`COMP${resourceId}`);
+      if (companyId) tokens.push(`CSOC${companyId}`);
+      if (contactId) tokens.push(`CCON${contactId}`);
+      if (productId) tokens.push(`PROD${productId}`);
+      const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
       const response = await apiRequest("/positionings", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "positionnement") }],
