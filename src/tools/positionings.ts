@@ -1,7 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { PositioningSearchSchema, PositioningCreateSchema, IdSchema } from "../schemas/index.js";
+import {
+  PositioningSearchSchema,
+  PositioningCreateSchema,
+  PositioningUpdateSchema,
+  IdSchema,
+} from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool, MutationOutputSchema } from "./crud-factory.js";
 
 export function registerPositioningTools(server: McpServer): void {
   // Search positionings
@@ -90,6 +95,59 @@ Returns: Liste des positionnements correspondants.`,
             text: `✅ Positionnement créé avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
           },
         ],
+      };
+    }
+  );
+
+  // Update positioning — registration dédiée : l'API officielle attend un PUT sur
+  // /positionings/{id} (schemas/positionings/bodyPut.json), là où la factory
+  // registerUpdateTool envoie un PATCH. Le reste du contrat (annotations,
+  // MutationOutputSchema, structuredContent) reproduit celui de la factory.
+  server.registerTool(
+    "boond_positionings_update",
+    {
+      title: "Modifier un positionnement",
+      description: `Met à jour un positionnement existant dans BoondManager (PUT /positionings/{id}). Seuls les champs fournis sont modifiés.
+
+Args:
+  - id (string): ID du positionnement
+  - state (number, optional): État du positionnement (ID du dictionnaire setting.state.positioning)
+  - stateReasonTypeOf, stateReasonDetail (optional): Motif d'état (repliés en stateReason {typeOf, detail})
+  - startDate, endDate (string, optional): Dates au format YYYY-MM-DD (chaîne vide pour effacer)
+  - informationComments (string, optional): Commentaires (max 250 caractères)
+
+Returns: Données mises à jour du positionnement.`,
+      inputSchema: PositioningUpdateSchema,
+      outputSchema: MutationOutputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      const { id, stateReasonTypeOf, stateReasonDetail, ...rest } = params;
+      const attrs: Record<string, unknown> = { ...rest };
+      if (stateReasonTypeOf !== undefined || stateReasonDetail !== undefined) {
+        attrs.stateReason = {
+          ...(stateReasonTypeOf !== undefined ? { typeOf: stateReasonTypeOf } : {}),
+          ...(stateReasonDetail !== undefined ? { detail: stateReasonDetail } : {}),
+        };
+      }
+      const body = buildJsonApiBody("positioning", attrs, id);
+      const response = await apiRequest(`/positionings/${id}`, "PUT", body);
+      const entity = Array.isArray(response.data) ? response.data[0] : response.data;
+      const ref: { id: string; type?: string } = { id };
+      if (entity?.type !== undefined) ref.type = String(entity.type);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Positionnement #${id} mis à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
+        structuredContent: ref,
       };
     }
   );

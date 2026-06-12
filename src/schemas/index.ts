@@ -518,6 +518,27 @@ export const CandidateCreateSchema = z
   })
   .strict();
 
+export const PositioningUpdateSchema = z
+  .object({
+    id: z.string().min(1).describe("ID du positionnement \u00e0 modifier"),
+    state: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("\u00c9tat du positionnement : ID num\u00e9rique du dictionnaire setting.state.positioning"),
+    stateReasonTypeOf: z
+      .number()
+      .int()
+      .optional()
+      .describe("Motif d'\u00e9tat : ID num\u00e9rique du type de motif (stateReason.typeOf)"),
+    stateReasonDetail: z.string().optional().describe("Motif d'\u00e9tat : d\u00e9tail libre (stateReason.detail)"),
+    startDate: z.string().optional().describe("Date de d\u00e9but (YYYY-MM-DD, ou cha\u00eene vide pour effacer)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD, ou cha\u00eene vide pour effacer)"),
+    informationComments: z.string().max(250).optional().describe("Commentaires (max 250 caract\u00e8res)"),
+  })
+  .strict();
+
 export const CandidateUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID du candidat à modifier"),
