@@ -862,6 +862,33 @@ export function formatListResponse(response: JsonApiResponse, entityType: string
   return result;
 }
 
+/**
+ * Formate la réponse d'un endpoint d'onglet (ex: /resources/{id}/positionings).
+ * Contrairement à formatDetailResponse, un tableau est restitué en entier :
+ * certains onglets renvoient plusieurs entités (positionnements, contacts...)
+ * et n'afficher que la première masquait les autres.
+ */
+export function formatTabResponse(response: JsonApiResponse): string {
+  if (!Array.isArray(response.data)) {
+    return formatDetailResponse(response);
+  }
+
+  const entities = response.data.map((entity) => ({
+    id: entity.id,
+    type: entity.type,
+    attributes: entity.attributes,
+    relationships: entity.relationships,
+  }));
+
+  let result = `${entities.length} élément(s)\n\n` + JSON.stringify(entities, null, 2);
+
+  if (result.length > CHARACTER_LIMIT) {
+    result = result.substring(0, CHARACTER_LIMIT) + "\n\n[Résultat tronqué...]";
+  }
+
+  return result;
+}
+
 export function formatDetailResponse(response: JsonApiResponse): string {
   const entity = Array.isArray(response.data) ? response.data[0] : response.data;
   if (!entity) return "Entité non trouvée.";

@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiRequest } from "../services/boond-client.js";
 import { getDictionary, resolveDictionaryPath } from "../services/dictionary.js";
+import { getDictionaryOverrides } from "../config/dictionary-overrides.js";
 
 /**
  * MCP resources for BoondManager reference data.
@@ -161,6 +162,8 @@ const DICTIONARIES: DictionaryEntry[] = [
 const DICTIONARY_URI_PREFIX = "boond://dictionary/";
 /** URI of the cached identity resource. */
 const CURRENT_USER_URI = "boond://application/current-user";
+/** URI of the static dictionary-overrides resource (no API call behind it). */
+const OVERRIDES_URI = "boond://dictionary/overrides";
 
 function buildResourceUri(slug: string): string {
   return `${DICTIONARY_URI_PREFIX}${slug}`;
@@ -173,6 +176,7 @@ export const REGISTERED_RESOURCES = [
     uri: buildResourceUri(d.slug),
     title: d.title,
   })),
+  { name: "dictionary/overrides", uri: OVERRIDES_URI, title: "Libellés personnalisés (overrides)" },
   { name: "application/current-user", uri: CURRENT_USER_URI, title: "Utilisateur courant" },
 ];
 
@@ -208,6 +212,34 @@ export function registerAllResources(server: McpServer): void {
       }
     );
   }
+
+  // Static resource: the label→id overrides configured by the operator via
+  // BOOND_DICTIONARY_OVERRIDES (see docs/dictionary-overrides.md). No API call:
+  // the body reflects exactly what the server resolved at startup, so the
+  // model (and the user) can check which custom labels are usable.
+  server.registerResource(
+    "dictionary/overrides",
+    OVERRIDES_URI,
+    {
+      title: "Libellés personnalisés (overrides)",
+      description:
+        "Mapping libellé→ID configuré via BOOND_DICTIONARY_OVERRIDES (types d'action et états). " +
+        'Renvoie { "configured": false } si aucun override n\'est configuré.',
+      mimeType: "application/json",
+    },
+    () => {
+      const overrides = getDictionaryOverrides();
+      return Promise.resolve({
+        contents: [
+          {
+            uri: OVERRIDES_URI,
+            mimeType: "application/json",
+            text: JSON.stringify(overrides ?? { configured: false }, null, 2),
+          },
+        ],
+      });
+    }
+  );
 
   // The current-user resource is a convenience for prompts/tools that need
   // the caller's userId without first issuing a tool call. The body is the

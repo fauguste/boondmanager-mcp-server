@@ -25,7 +25,7 @@ import {
   buildJsonApiBody,
   confirmDeletion,
 } from "./crud-factory.js";
-import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
+import { apiRequest, formatDetailResponse, formatTabResponse } from "../services/boond-client.js";
 
 const OPTS = {
   entityName: "ressource",
@@ -356,7 +356,7 @@ export function registerResourceTools(server: McpServer): void {
       },
       async (params: IdInput) => {
         const response = await apiRequest(`/resources/${params.id}/${tab.tab}`);
-        const text = formatDetailResponse(response);
+        const text = formatTabResponse(response);
         return {
           content: [{ type: "text" as const, text }],
         };
