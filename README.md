@@ -22,7 +22,7 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claud
 | Domaine | Outils | Operations |
 |---------|--------|------------|
 | **Candidats** | 10 | CRUD + information, technical-data, administrative, actions, positionings |
-| **Ressources** | 15 | CRUD + information, technical-data, administrative, advantages, actions, positionings, projects, times-reports, expenses-reports, absences-reports |
+| **Ressources** | 20 | CRUD + information, technical-data (+ update), administrative, advantages, actions, positionings, projects, times-reports, expenses-reports, absences-reports, timesheets, references (create/update/delete) |
 | **Contacts** | 11 | CRUD + information, actions, opportunities, projects, orders, invoices |
 | **Societes** | 14 | CRUD + information, contacts, actions, opportunities, projects, orders, invoices, purchases, provider-invoices |
 | **Opportunites** | 10 | CRUD + information, actions, positionings, projects, simulation |
@@ -90,6 +90,7 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claud
 | **Logs d'audit** | 2 | search, get |
 | **Notifications** | 2 | search, get |
 | **Fils de discussion** | 2 | search, get |
+| **Documents / CV** | 3 | get (telechargement), create (upload par URL + parsing CV), delete |
 | **Application** | 2 | dictionnaire, utilisateur courant |
 
 ### Detail des onglets par entite
@@ -653,7 +654,7 @@ boondmanager-mcp-server/
 │       ├── index.ts          # Barrel export de tous les domaines
 │       ├── crud-factory.ts   # Factory generique CRUD (DRY)
 │       ├── candidates.ts     # 10 outils (CRUD + 5 onglets)
-│       ├── resources.ts      # 15 outils (CRUD + 10 onglets)
+│       ├── resources.ts      # 20 outils (CRUD + 10 onglets + references/timesheets)
 │       ├── contacts.ts       # 11 outils (CRUD + 6 onglets)
 │       ├── companies.ts      # 14 outils (CRUD + 9 onglets)
 │       ├── opportunities.ts  # 10 outils (CRUD + 5 onglets)
@@ -719,7 +720,7 @@ npm run build
 npm start
 
 # Tests
-npm test               # 255 tests
+npm test               # 645 tests
 npm run test:coverage  # Avec couverture
 
 # Qualite
