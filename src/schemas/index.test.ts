@@ -41,6 +41,11 @@ import {
   PaymentSearchSchema,
   AdvantageSearchSchema,
   DictionaryGetSchema,
+  ReportingCompaniesSchema,
+  ReportingProjectsSchema,
+  ReportingResourcesSchema,
+  ReportingSynthesisSchema,
+  ReportingProductionPlansSchema,
 } from "./index.js";
 
 describe("SearchSchema", () => {
@@ -724,5 +729,68 @@ describe("state fields with dictionary overrides (stateField)", () => {
     delete process.env.BOOND_DICTIONARY_OVERRIDES;
     resetDictionaryOverridesForTests();
     expect(CandidateUpdateSchema.safeParse({ id: "1", state: "Interviewed" }).success).toBe(false);
+  });
+});
+
+describe("Reporting schemas", () => {
+  it("requires startDate + endDate for companies", () => {
+    expect(ReportingCompaniesSchema.safeParse({}).success).toBe(false);
+    expect(ReportingCompaniesSchema.safeParse({ startDate: "2026-01-01", endDate: "2026-03-31" }).success).toBe(true);
+  });
+
+  it("accepts companies-specific filters and perimeter", () => {
+    const result = ReportingCompaniesSchema.safeParse({
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+      companiesStates: [1, 2],
+      maxCompanies: 5,
+      showPercentage: true,
+      perimeterDynamic: ["agencies"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown filter name (strict) — guards against silent drops", () => {
+    // `agencies` is the WRONG name; the correct perimeter filter is `perimeterAgencies`.
+    expect(
+      ReportingCompaniesSchema.safeParse({ startDate: "2026-01-01", endDate: "2026-03-31", agencies: [1] }).success
+    ).toBe(false);
+  });
+
+  it("rejects maxCompanies / maxResources / maxProjects above 10", () => {
+    expect(
+      ReportingCompaniesSchema.safeParse({ startDate: "2026-01-01", endDate: "2026-03-31", maxCompanies: 11 }).success
+    ).toBe(false);
+    expect(ReportingResourcesSchema.safeParse({ maxResources: 11 }).success).toBe(false);
+    expect(ReportingProjectsSchema.safeParse({ maxProjects: 11 }).success).toBe(false);
+  });
+
+  it("treats dates as optional for resources and projects", () => {
+    expect(ReportingResourcesSchema.safeParse({ resourceStates: [3], period: "monthly" }).success).toBe(true);
+    expect(ReportingProjectsSchema.safeParse({ projectTypes: [1], projects: [42] }).success).toBe(true);
+  });
+
+  it("constrains reportingCategory enums per endpoint", () => {
+    expect(ReportingResourcesSchema.safeParse({ reportingCategory: "showByPeriods" }).success).toBe(true);
+    expect(ReportingResourcesSchema.safeParse({ reportingCategory: "globalSynthesis" }).success).toBe(false);
+    expect(
+      ReportingSynthesisSchema.safeParse({ startDate: "2026-01-01", reportingCategory: "billingSynthesis" }).success
+    ).toBe(true);
+    expect(ReportingSynthesisSchema.safeParse({ startDate: "2026-01-01", reportingType: "targetsData" }).success).toBe(
+      true
+    );
+  });
+
+  it("accepts production-plan filters with required dates", () => {
+    expect(
+      ReportingProductionPlansSchema.safeParse({
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+        positioningStates: [1],
+        positioningPeriod: "running",
+        showContracts: true,
+      }).success
+    ).toBe(true);
+    expect(ReportingProductionPlansSchema.safeParse({ positioningStates: [1] }).success).toBe(false);
   });
 });

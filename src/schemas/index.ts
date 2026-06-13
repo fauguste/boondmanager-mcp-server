@@ -1259,52 +1259,185 @@ export const NotificationSearchSchema = z
   .strict();
 
 // ---- Reporting schemas ----
-// `/reporting-companies` and `/reporting-resources` require `startDate` +
-// `endDate` (YYYY-MM-DD); the others tolerate omission but still benefit from
-// a period filter.
-export const ReportingDateRequiredSchema = z
+// Sources (one search.raml per endpoint):
+//   https://doc.boondmanager.com/api-externe/raml-build/resources/reportingCompanies/search.raml
+//   .../reportingProjects/search.raml  .../reportingResources/search.raml
+//   .../reportingSynthesis/search.raml .../reportingProductionPlans/search.raml
+// Every reporting endpoint carries the `searchable` trait (perimeter filters)
+// plus endpoint-specific filters. These were previously dropped — only
+// startDate/endDate/keywords were forwarded — so a "filtered" reporting query
+// silently returned the full perimeter. Each tool now exposes its real filters.
+//
+// `period`/`periodDynamic` value sets are large and differ slightly per endpoint,
+// so they stay `z.string()` (documented in the description) rather than a strict
+// enum that could reject a value the API actually accepts. The small, stable
+// enums (reportingCategory, reportingType, positioningPeriod, useCache) are typed.
+const reportingPeriodField = z
+  .string()
+  .optional()
+  .describe(
+    "Découpage temporel : 'onePeriod' (unique, entre startDate/endDate), 'dynamicPeriod' (selon periodDynamic), " +
+      "'monthly' (6 mois depuis startDate), 'quarterly', 'semiAnnual', 'annual'. La synthèse accepte aussi 'weekly'."
+  );
+const reportingPeriodDynamicField = z
+  .string()
+  .optional()
+  .describe(
+    "Période dynamique relative à aujourd'hui (avec period='dynamicPeriod') : today, thisWeek, thisMonth, " +
+      "thisTrimester, thisSemester, thisYear, thisFiscalYear, yesterday, lastWeek, lastMonth, lastTrimester, " +
+      "lastSemester, lastYear, lastFiscalYear, tomorrow, nextWeek, nextMonth, nextTrimester, nextSemester, " +
+      "nextYear, nextFiscalYear, lastCustomPeriod, nextCustomPeriod."
+  );
+const reportingPeriodDynamicParametersField = z
+  .string()
+  .optional()
+  .describe("Paramètres de la période personnalisée (utilisé avec periodDynamic=lastCustomPeriod/nextCustomPeriod).");
+const reportingScorecardsField = strArray("IDs des scorecards (indicateurs) à retourner.");
+const reportingUseCacheField = z
+  .enum(["withCache", "withoutCache"])
+  .optional()
+  .describe("Cache de reporting : 'withCache' (valeurs mises en cache) ou 'withoutCache' (recalcul, défaut).");
+const reportingResourcesField = intArray("Filtrer sur ces IDs de ressources.");
+const reportingProjectsField = intArray("Filtrer sur ces IDs de projets.");
+const reportingContactsField = intArray("Filtrer sur ces IDs de contacts.");
+const reportingCompaniesField = intArray("Filtrer sur ces IDs de sociétés.");
+const reportingMaxField = (entity: string) =>
+  z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .optional()
+    .describe(`Nombre de ${entity} par page (1-10, défaut 1). Le nombre de résultats = ${entity} × indicateurs.`);
+
+// Perimeter + period filters shared by every reporting endpoint (searchable trait).
+const reportingCommonFields = {
+  keywords: z.string().optional().describe("Mots-clés."),
+  perimeterManagers: perimeterManagersField,
+  perimeterAgencies: perimeterAgenciesField,
+  perimeterPoles: perimeterPolesField,
+  perimeterBusinessUnits: perimeterBusinessUnitsField,
+  perimeterDynamic: perimeterDynamicField,
+  narrowPerimeter: narrowPerimeterField,
+  periodDynamic: reportingPeriodDynamicField,
+  periodDynamicParameters: reportingPeriodDynamicParametersField,
+  scorecards: reportingScorecardsField,
+  useCache: reportingUseCacheField,
+  page: pageField,
+  pageSize: pageSizeField,
+};
+
+const requiredDate = (label: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .describe(`${label} (YYYY-MM-DD). Requis par l'API.`);
+const optionalDate = (label: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe(`${label} (YYYY-MM-DD).`);
+
+export const ReportingCompaniesSchema = z
   .object({
-    startDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .describe("Date de début YYYY-MM-DD. Requis."),
-    endDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .describe("Date de fin YYYY-MM-DD. Requis."),
-    keywords: z.string().optional().describe("Mots-clés."),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_PAGE_SIZE)
-      .default(DEFAULT_PAGE_SIZE)
-      .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
+    ...reportingCommonFields,
+    startDate: requiredDate("Date de début"),
+    endDate: requiredDate("Date de fin"),
+    companiesStates: intArray("IDs d'états de sociétés (dictionnaire setting.state.company)."),
+    maxCompanies: reportingMaxField("sociétés"),
+    showPercentage: z.boolean().optional().describe("Afficher les valeurs en pourcentage plutôt qu'en valeur réelle."),
+    companies: reportingCompaniesField,
   })
   .strict();
 
-export const ReportingDateOptionalSchema = z
+export const ReportingProjectsSchema = z
   .object({
-    startDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
+    ...reportingCommonFields,
+    startDate: optionalDate("Date de début"),
+    endDate: optionalDate("Date de fin"),
+    projectTypes: intArray("IDs de types de projets (dictionnaire setting.typeOf.project)."),
+    projectStates: intArray("IDs d'états de projets (dictionnaire setting.state.project)."),
+    maxProjects: reportingMaxField("projets"),
+    resources: reportingResourcesField,
+    projects: reportingProjectsField,
+    contacts: reportingContactsField,
+    companies: reportingCompaniesField,
+  })
+  .strict();
+
+export const ReportingResourcesSchema = z
+  .object({
+    ...reportingCommonFields,
+    startDate: optionalDate("Date de début"),
+    endDate: optionalDate("Date de fin"),
+    reportingCategory: z
+      .enum(["showByResources", "showByPeriods"])
       .optional()
-      .describe("Date de début YYYY-MM-DD."),
-    endDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe("Vue : 'showByResources' (défaut, sans returnedPeriod) ou 'showByPeriods' (returnedPeriod requis)."),
+    maxResources: reportingMaxField("ressources"),
+    resourceTypes: intArray("IDs de types de ressources (dictionnaire setting.typeOf.resource)."),
+    resourceStates: intArray("IDs d'états de ressources (dictionnaire setting.state.resource)."),
+    period: reportingPeriodField,
+    resources: reportingResourcesField,
+    projects: reportingProjectsField,
+    contacts: reportingContactsField,
+    companies: reportingCompaniesField,
+  })
+  .strict();
+
+export const ReportingSynthesisSchema = z
+  .object({
+    ...reportingCommonFields,
+    startDate: requiredDate("Date de début"),
+    endDate: optionalDate("Date de fin"),
+    reportingType: z
+      .enum(["realData", "targetsData"])
       .optional()
-      .describe("Date de fin YYYY-MM-DD."),
-    keywords: z.string().optional().describe("Mots-clés."),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_PAGE_SIZE)
-      .default(DEFAULT_PAGE_SIZE)
-      .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
+      .describe("Type de données : 'realData' (défaut, réel) ou 'targetsData' (objectifs)."),
+    reportingCategory: z
+      .enum([
+        "commercialSynthesis",
+        "humanResourcesSynthesis",
+        "recruitmentSynthesis",
+        "activityExpensesSynthesis",
+        "billingSynthesis",
+        "globalSynthesis",
+      ])
+      .optional()
+      .describe(
+        "Catégorie de synthèse (défaut 'commercialSynthesis') : commercial, RH, recrutement, activité & frais, " +
+          "facturation, ou globale. `resources` n'est pas disponible hors d'une vue par ressources."
+      ),
+    period: reportingPeriodField,
+    resources: reportingResourcesField,
+    projects: reportingProjectsField,
+    contacts: reportingContactsField,
+    companies: reportingCompaniesField,
+    compareIndicators: strArray("Indicateurs à comparer entre deux périodes."),
+    compareIndicatorsPeriod: z
+      .string()
+      .optional()
+      .describe("Période de comparaison des indicateurs (défaut 'period')."),
+  })
+  .strict();
+
+export const ReportingProductionPlansSchema = z
+  .object({
+    ...reportingCommonFields,
+    startDate: requiredDate("Date de début"),
+    endDate: requiredDate("Date de fin"),
+    resourceTypes: intArray("IDs de types de ressources (dictionnaire setting.typeOf.resource)."),
+    resourceStates: intArray("IDs d'états de ressources (dictionnaire setting.state.resource)."),
+    positioningStates: intArray("IDs d'états de positionnement (dictionnaire setting.state.positioning)."),
+    positioningPeriod: z
+      .enum(["created", "running"])
+      .optional()
+      .describe("'created' (positionnements créés entre les dates, défaut) ou 'running' (en cours sur la période)."),
+    showContracts: z.boolean().optional().describe("Afficher les contrats associés."),
+    projects: reportingProjectsField,
+    contacts: reportingContactsField,
+    companies: reportingCompaniesField,
   })
   .strict();
 
@@ -1388,3 +1521,8 @@ export type ReferenceCreateInput = z.infer<typeof ReferenceCreateSchema>;
 export type ReferenceUpdateInput = z.infer<typeof ReferenceUpdateSchema>;
 export type ReferenceIdInput = z.infer<typeof ReferenceIdSchema>;
 export type DocumentCreateInput = z.infer<typeof DocumentCreateSchema>;
+export type ReportingCompaniesInput = z.infer<typeof ReportingCompaniesSchema>;
+export type ReportingProjectsInput = z.infer<typeof ReportingProjectsSchema>;
+export type ReportingResourcesInput = z.infer<typeof ReportingResourcesSchema>;
+export type ReportingSynthesisInput = z.infer<typeof ReportingSynthesisSchema>;
+export type ReportingProductionPlansInput = z.infer<typeof ReportingProductionPlansSchema>;
