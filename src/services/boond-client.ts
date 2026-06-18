@@ -487,6 +487,25 @@ export function assertSafeApiPath(path: string): void {
   }
 }
 
+/**
+ * Validates `path` and resolves it against `baseUrl`, returning the
+ * constructed URL. Throws if the path is unsafe (see `assertSafeApiPath`) or
+ * if the resolved URL escapes the configured API base origin/path. Centralises
+ * the guard shared by apiRequest / apiDownload / apiUploadForm. Exported for
+ * unit testing.
+ */
+export function resolveApiUrl(baseUrl: string, path: string): URL {
+  assertSafeApiPath(path);
+  const url = new URL(`${baseUrl}${path}`);
+  // Belt-and-braces: confirm the constructed URL did not escape the API base
+  // origin/path despite the textual guard above.
+  const base = new URL(baseUrl);
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new Error(`API path escaped the configured base URL: ${path}`);
+  }
+  return url;
+}
+
 export async function apiRequest(
   path: string,
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "GET",
@@ -495,16 +514,7 @@ export async function apiRequest(
 ): Promise<JsonApiResponse> {
   const { baseUrl, auth } = getConfig();
 
-  assertSafeApiPath(path);
-
-  const url = new URL(`${baseUrl}${path}`);
-
-  // Belt-and-braces: confirm the constructed URL did not escape the API base
-  // origin/path despite the textual guard above.
-  const base = new URL(baseUrl);
-  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
-    throw new Error(`API path escaped the configured base URL: ${path}`);
-  }
+  const url = resolveApiUrl(baseUrl, path);
 
   if (queryParams) {
     for (const [key, value] of Object.entries(queryParams)) {
@@ -662,13 +672,7 @@ export interface DownloadedDocument {
  */
 export async function apiDownload(path: string): Promise<DownloadedDocument> {
   const { baseUrl, auth } = getConfig();
-  assertSafeApiPath(path);
-
-  const url = new URL(`${baseUrl}${path}`);
-  const base = new URL(baseUrl);
-  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
-    throw new Error(`API path escaped the configured base URL: ${path}`);
-  }
+  const url = resolveApiUrl(baseUrl, path);
 
   const limiter = getRateLimiter();
   if (limiter) await limiter.acquire();
@@ -717,13 +721,7 @@ export async function apiDownload(path: string): Promise<DownloadedDocument> {
  */
 export async function apiUploadForm(path: string, fields: Record<string, string>): Promise<JsonApiResponse> {
   const { baseUrl, auth } = getConfig();
-  assertSafeApiPath(path);
-
-  const url = new URL(`${baseUrl}${path}`);
-  const base = new URL(baseUrl);
-  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
-    throw new Error(`API path escaped the configured base URL: ${path}`);
-  }
+  const url = resolveApiUrl(baseUrl, path);
 
   const limiter = getRateLimiter();
   if (limiter) await limiter.acquire();

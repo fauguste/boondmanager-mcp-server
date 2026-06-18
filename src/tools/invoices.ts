@@ -1,10 +1,36 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { InvoiceSearchSchema, InvoiceCreateSchema, InvoiceUpdateSchema, IdSchema } from "../schemas/index.js";
-import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
+import { InvoiceSearchSchema, InvoiceCreateSchema, InvoiceUpdateSchema } from "../schemas/index.js";
+import { apiRequest, buildSearchQuery, formatListResponse } from "../services/boond-client.js";
+import {
+  buildJsonApiBody,
+  buildListStructured,
+  SearchOutputSchema,
+  registerGetTool,
+  registerCreateTool,
+  registerUpdateTool,
+  registerDeleteTool,
+} from "./crud-factory.js";
+
+const OPTS = {
+  entityName: "facture",
+  entityNamePlural: "factures",
+  apiPath: "/invoices",
+  prefix: "boond_invoices",
+};
+
+/** Maps the companyId/projectId convenience inputs to JSON:API relationships. */
+function buildInvoiceBody(params: Record<string, unknown>): unknown {
+  const { id, companyId, projectId, ...attrs } = params;
+  return buildJsonApiBody("invoice", attrs, id as string | undefined, {
+    company: companyId ? { id: String(companyId), type: "company" } : undefined,
+    project: projectId ? { id: String(projectId), type: "project" } : undefined,
+  });
+}
 
 export function registerInvoiceTools(server: McpServer): void {
-  // Search invoices
+  // Search invoices — kept hand-rolled: it applies a `period` default and
+  // forwards the startDate/endDate period window, which the generic factory
+  // search does not model.
   server.registerTool(
     "boond_invoices_search",
     {
@@ -19,6 +45,7 @@ Args:
 
 Returns: Liste des factures correspondantes.`,
       inputSchema: InvoiceSearchSchema,
+      outputSchema: SearchOutputSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -34,104 +61,16 @@ Returns: Liste des factures correspondantes.`,
       const response = await apiRequest("/invoices", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "facture") }],
+        structuredContent: buildListStructured(response),
       };
     }
   );
 
-  // Get invoice details
-  server.registerTool(
-    "boond_invoices_get",
-    {
-      title: "Détails d'une facture",
-      description: `Récupère les informations détaillées d'une facture par son ID.`,
-      inputSchema: IdSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      const response = await apiRequest(`/invoices/${params.id}`);
-      return {
-        content: [{ type: "text" as const, text: formatDetailResponse(response) }],
-      };
-    }
-  );
-
-  // Create invoice
-  server.registerTool(
-    "boond_invoices_create",
-    {
-      title: "Créer une facture",
-      description: `Crée une nouvelle facture dans BoondManager, optionnellement liée à une société et un projet.`,
-      inputSchema: InvoiceCreateSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      const { companyId, projectId, ...attrs } = params;
-      const body = buildJsonApiBody("invoice", attrs);
-      const relationships: Record<string, unknown> = {};
-      if (companyId) relationships.company = { data: { id: companyId, type: "company" } };
-      if (projectId) relationships.project = { data: { id: projectId, type: "project" } };
-      if (Object.keys(relationships).length > 0) {
-        (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
-      }
-      const response = await apiRequest("/invoices", "POST", body);
-      const entity = Array.isArray(response.data) ? response.data[0] : response.data;
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `✅ Facture créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
-          },
-        ],
-      };
-    }
-  );
-
-  // Update invoice
-  server.registerTool(
-    "boond_invoices_update",
-    {
-      title: "Modifier une facture",
-      description: `Met à jour une facture existante. Seuls les champs fournis sont modifiés.`,
-      inputSchema: InvoiceUpdateSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      const { id, ...attrs } = params;
-      const body = buildJsonApiBody("invoice", attrs, id);
-      const response = await apiRequest(`/invoices/${id}`, "PATCH", body);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `✅ Facture #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
-          },
-        ],
-      };
-    }
-  );
-
-  // Delete invoice — via la factory pour l'élicitation de confirmation + structuredContent
-  registerDeleteTool(
-    server,
-    { entityName: "facture", entityNamePlural: "factures", apiPath: "/invoices", prefix: "boond_invoices" },
-    {
-      title: "Supprimer une facture",
-      description: `Supprime une facture de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
-    }
-  );
+  registerGetTool(server, OPTS, { withTab: false });
+  registerCreateTool(server, OPTS, InvoiceCreateSchema, buildInvoiceBody);
+  registerUpdateTool(server, OPTS, InvoiceUpdateSchema, buildInvoiceBody);
+  registerDeleteTool(server, OPTS, {
+    title: "Supprimer une facture",
+    description: `Supprime une facture de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+  });
 }
