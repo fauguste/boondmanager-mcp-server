@@ -16,13 +16,11 @@
 [![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-000000?logo=cursor&logoColor=white)](https://cursor.com/install-mcp?name=boondmanager&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJvb25kbWFuYWdlci1tY3Atc2VydmVyIl19)
 [![Install in VS Code](https://img.shields.io/badge/Install-VS%20Code-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install-VS%20Code%20Insiders-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D&quality=insiders)
-[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](lmstudio://add_mcp?name=boondmanager&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJvb25kbWFuYWdlci1tY3Atc2VydmVyIl19)
-[![Add to Goose](https://img.shields.io/badge/Add%20to-Goose-26B5A4)](goose://extension?cmd=npx&arg=-y&arg=boondmanager-mcp-server&id=boondmanager&name=BoondManager&description=Serveur%20MCP%20BoondManager%20%28ERP%2FCRM%20ESN%29)
 
-[![Smithery](https://smithery.ai/badge/@fauguste/boondmanager-mcp-server)](https://smithery.ai/server/@fauguste/boondmanager-mcp-server)
+[![Smithery](https://img.shields.io/badge/Smithery-listing-ea580c)](https://smithery.ai/server/@fauguste/boondmanager-mcp-server)
 [![Glama](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server/badge)](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server)
 
-> Les boutons **LM Studio** et **Goose** utilisent leurs schémas d'application natifs (`lmstudio://`, `goose://`). GitHub n'autorise pas les liens à schéma non-HTTP : l'image s'affiche mais le clic peut être inopérant depuis github.com. Utilisez alors la configuration copier-coller des sections [Installation](#installation) ci-dessous.
+> **LM Studio**, **Goose** et **Gemini CLI** s'installent via leur procédure dédiée (deeplink natif ou commande) — voir la section [Installation](#installation). GitHub ne rend pas cliquables les liens à schéma non-HTTP (`lmstudio://`, `goose://`), c'est pourquoi ils n'ont pas de bouton 1-clic ici.
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
@@ -409,7 +407,7 @@ Cliquez sur le badge **[Install in VS Code](https://insiders.vscode.dev/redirect
 
 ### LM Studio
 
-Cliquez sur le badge **Add to LM Studio** en haut du README, ou dans LM Studio : **Program > Install > Edit `mcp.json`** et ajoutez :
+Dans LM Studio : **Program > Install > Edit `mcp.json`** et ajoutez :
 
 ```json
 {
@@ -427,7 +425,7 @@ Cliquez sur le badge **Add to LM Studio** en haut du README, ou dans LM Studio :
 
 ### Goose
 
-Cliquez sur le badge **Add to Goose** en haut du README (deeplink `goose://`), ou ajoutez une extension de type **STDIO** dans **Settings > Extensions > Add** avec la commande `npx -y boondmanager-mcp-server` et la variable d'environnement `BOOND_API_TOKEN`. En CLI :
+Ajoutez une extension de type **STDIO** dans **Settings > Extensions > Add** avec la commande `npx -y boondmanager-mcp-server` et la variable d'environnement `BOOND_API_TOKEN`. En CLI :
 
 ```bash
 goose session --with-extension "npx -y boondmanager-mcp-server"
