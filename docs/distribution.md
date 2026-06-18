@@ -15,6 +15,8 @@ the reference for what gets pushed where on each release.
 | **GitHub Container Registry** | `ghcr.io/fauguste/boondmanager-mcp-server` | `docker/build-push-action@v6` in `release.yml`; multi-arch (amd64+arm64), tags `:latest`, `:X`, `:X.Y`, `:X.Y.Z` | every `v*` tag |
 | **LobeHub MCP marketplace** | [fauguste-boondmanager-mcp-server](https://lobehub.com/mcp/fauguste-boondmanager-mcp-server) | mirrors the MCP Registry (auto, ~24-48 h delay) | per release |
 | **Smithery** | [smithery.ai listing](https://smithery.ai/server/@fauguste/boondmanager-mcp-server) | reads `smithery.yaml` from this repo | per push to `main` |
+| **Gemini CLI extension** | `gemini extensions install https://github.com/fauguste/boondmanager-mcp-server` | reads `gemini-extension.json` from repo root | on install (reads the default branch) |
+| **Cursor / VS Code (install badges)** | deeplinks in `README.md` (no package) | static base64/url-encoded `npx` config baked into the badge URLs | manual (only if the `npx` invocation changes) |
 
 ## One-time setup (manual)
 

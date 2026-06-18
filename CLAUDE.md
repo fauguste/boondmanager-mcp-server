@@ -539,7 +539,7 @@ Behavior notes:
 ## Releasing
 
 1. Update `CHANGELOG.md` — add a new `## [X.Y.Z] - YYYY-MM-DD` section at the top with the human-written notes (in French if matching the rest of the changelog). The release body is auto-extracted from this section by `release.yml`.
-2. Bump versions consistently: `package.json` + `manifest.json` + `server.json` (CI fails if any drift). Also bump the example URL inside `server.json.packages[1].identifier`.
+2. Bump versions consistently: `package.json` + `manifest.json` + `server.json` + `gemini-extension.json` (CI fails if any drift). Also bump the example URL inside `server.json.packages[1].identifier`.
 3. Sync `package-lock.json`: `npm install --package-lock-only`.
 4. Commit + tag + push: `git tag vX.Y.Z && git push origin main vX.Y.Z`. The `Release` workflow takes over.
 5. Post-tag, run the 6-point verification checklist in `docs/distribution.md` (npm version, MCP Registry, GitHub Release body, GHCR multi-arch pull, LobeHub mirror, Smithery refresh).

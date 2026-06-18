@@ -11,6 +11,9 @@
 [![GHCR](https://img.shields.io/badge/GHCR-fauguste%2Fboondmanager--mcp--server-181717?logo=github)](https://github.com/fauguste/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
+[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-000000?logo=cursor&logoColor=white)](https://cursor.com/install-mcp?name=boondmanager&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJvb25kbWFuYWdlci1tY3Atc2VydmVyIl19)
+[![Install in VS Code](https://img.shields.io/badge/Install-VS%20Code-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D)
+
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
 **175 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
@@ -356,6 +359,59 @@ Le serveur est listé sur le [marketplace MCP de LobeHub](https://lobehub.com/mc
 ```
 
 Ou utiliser le transport HTTP (voir section [Transports](#transports)) pour un deploiement partage en mode gateway.
+
+### Cursor
+
+Cliquez sur le badge **[Add to Cursor](https://cursor.com/install-mcp?name=boondmanager&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJvb25kbWFuYWdlci1tY3Atc2VydmVyIl19)** en haut du README (ou ajoutez le serveur manuellement dans **Settings > MCP > Add new MCP server**). Renseignez ensuite l'authentification en ajoutant un bloc `env` au serveur dans `~/.cursor/mcp.json` :
+
+```json
+{
+  "mcpServers": {
+    "boondmanager": {
+      "command": "npx",
+      "args": ["-y", "boondmanager-mcp-server"],
+      "env": {
+        "BOOND_API_TOKEN": "votre_token_jwt"
+      }
+    }
+  }
+}
+```
+
+### VS Code (GitHub Copilot / agent MCP)
+
+Cliquez sur le badge **[Install in VS Code](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D)** en haut du README, ou ajoutez le serveur a `.vscode/mcp.json` (par projet) ou a votre `settings.json` utilisateur :
+
+```json
+{
+  "servers": {
+    "boondmanager": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "boondmanager-mcp-server"],
+      "env": {
+        "BOOND_API_TOKEN": "${input:boond_api_token}"
+      }
+    }
+  }
+}
+```
+
+### Gemini CLI
+
+Le depot embarque un manifeste d'extension Gemini CLI (`gemini-extension.json`). Installez l'extension directement depuis GitHub :
+
+```bash
+gemini extensions install https://github.com/fauguste/boondmanager-mcp-server
+```
+
+Definissez ensuite l'authentification dans votre environnement (Gemini interpole `${VAR}` au demarrage) :
+
+```bash
+export BOOND_API_TOKEN="votre_token_jwt"
+# ou le trio JWT auto :
+export BOOND_USER_TOKEN="..." BOOND_CLIENT_TOKEN="..." BOOND_CLIENT_KEY="..."
+```
 
 ## Configuration
 

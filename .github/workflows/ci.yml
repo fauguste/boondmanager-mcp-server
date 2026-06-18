@@ -57,11 +57,13 @@ jobs:
           PKG_VERSION=$(node -p "require('./package.json').version")
           MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
           SERVER_VERSION=$(node -p "require('./server.json').version")
-          echo "package.json:  $PKG_VERSION"
-          echo "manifest.json: $MANIFEST_VERSION"
-          echo "server.json:   $SERVER_VERSION"
-          if [ "$PKG_VERSION" != "$MANIFEST_VERSION" ] || [ "$PKG_VERSION" != "$SERVER_VERSION" ]; then
-            echo "ERROR: Version mismatch between package.json, manifest.json and server.json"
+          GEMINI_VERSION=$(node -p "require('./gemini-extension.json').version")
+          echo "package.json:         $PKG_VERSION"
+          echo "manifest.json:        $MANIFEST_VERSION"
+          echo "server.json:          $SERVER_VERSION"
+          echo "gemini-extension.json: $GEMINI_VERSION"
+          if [ "$PKG_VERSION" != "$MANIFEST_VERSION" ] || [ "$PKG_VERSION" != "$SERVER_VERSION" ] || [ "$PKG_VERSION" != "$GEMINI_VERSION" ]; then
+            echo "ERROR: Version mismatch between package.json, manifest.json, server.json and gemini-extension.json"
             exit 1
           fi
 
