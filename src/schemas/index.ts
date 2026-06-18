@@ -54,6 +54,23 @@ const fieldsField = z
   );
 const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
 
+// Shared `tools` (technologies/skills) filter. Centralised so every entity
+// search exposes the same `#AND#` semantics to the model — previously the
+// description ranged from the full explanation (resources) to a bare
+// "IDs d'outils." (opportunities), so the model only learned about `#AND#`
+// on some endpoints.
+const toolsFilterField = strArray(
+  "IDs d'outils/technos (dictionnaire setting.tool). Logique OU par défaut. " +
+    "Pour ET, ajouter '#AND#' en 1er élément: tools=['#AND#','12','34']."
+);
+
+// Action timestamps: ISO 8601 with timezone, e.g. 2026-06-05T10:00:00+0200.
+// Accepts the colon-less (+0200) and colon (+02:00) offset styles, an optional
+// fractional-seconds part, and a trailing Z. The timezone is optional so the
+// API can apply the account default. Surfaces a malformed value at the schema
+// boundary instead of as an opaque 422.
+const actionDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:?\d{2}|Z)?$/;
+
 // Shared "perimeter" filters available on every entity search (from RAML trait `searchable`).
 // These are the CORRECT filters for "my team / my agency / my N-1" — NOT the old `mainManagers`.
 const perimeterManagersField = intArray(
@@ -135,10 +152,7 @@ export const ResourceSearchSchema = z
     excludeResourceTypes: intArray("IDs de types de ressource à EXCLURE."),
     activityAreas: strArray("IDs de secteurs d'activité (dictionnaire setting.activityArea)."),
     expertiseAreas: strArray("IDs de domaines d'expertise (dictionnaire setting.expertiseArea)."),
-    tools: strArray(
-      "IDs d'outils/technos (dictionnaire setting.tool). Logique OU par défaut. " +
-        "Pour ET, ajouter '#AND#' en 1er élément: tools=['#AND#','12','34']."
-    ),
+    tools: toolsFilterField,
     experiences: intArray("IDs de niveaux d'expérience (dictionnaire setting.experience)."),
     trainings: strArray("IDs de formations (dictionnaire setting.training)."),
     mobilityAreas: strArray("IDs de zones de mobilité (dictionnaire setting.mobilityArea)."),
@@ -232,7 +246,7 @@ export const CandidateSearchSchema = z
     availabilityTypes: intArray("IDs de types de disponibilité (dictionnaire setting.availability)."),
     activityAreas: strArray("IDs de secteurs d'activité (dictionnaire setting.activityArea)."),
     expertiseAreas: strArray("IDs de domaines d'expertise."),
-    tools: strArray("IDs d'outils/technos. Logique OU par défaut. Pour ET, ajouter '#AND#' en 1er élément."),
+    tools: toolsFilterField,
     experiences: intArray("IDs de niveaux d'expérience."),
     trainings: strArray("IDs de formations."),
     mobilityAreas: strArray("IDs de zones de mobilité."),
@@ -308,7 +322,7 @@ export const ContactSearchSchema = z
     origins: strArray("IDs d'origines (dictionnaire setting.origin)."),
     activityAreas: strArray("IDs de secteurs d'activité de la société."),
     expertiseAreas: strArray("IDs de domaines d'expertise de la société."),
-    tools: strArray("IDs d'outils. Logique OU par défaut, '#AND#' en 1er pour ET."),
+    tools: toolsFilterField,
     influencers: intArray("IDs de contacts influenceurs."),
     flags: intArray("IDs de tags."),
     period: z
@@ -407,7 +421,7 @@ export const OpportunitySearchSchema = z
     positioningStates: strArray("IDs d'états de positionnement, ou 'none' pour les opportunités sans positionnement."),
     expertiseAreas: strArray("IDs de domaines d'expertise."),
     activityAreas: strArray("IDs de secteurs d'activité."),
-    tools: strArray("IDs d'outils."),
+    tools: toolsFilterField,
     places: strArray("IDs de zones (dictionnaire setting.mobilityArea)."),
     durations: intArray("IDs de durées (dictionnaire setting.duration)."),
     origins: strArray("IDs d'origines."),
@@ -837,9 +851,10 @@ export const ActionCreateSchema = z
     text: z.string().optional().describe("Contenu / notes de l'action"),
     startDate: z
       .string()
+      .regex(actionDateTimeRegex)
       .optional()
-      .describe("Date de début au format ISO avec timezone (ex: 2026-06-05T10:00:00+0200)"),
-    endDate: z.string().optional().describe("Date de fin (même format que startDate)"),
+      .describe("Date de début au format ISO 8601 avec timezone (ex: 2026-06-05T10:00:00+0200)"),
+    endDate: z.string().regex(actionDateTimeRegex).optional().describe("Date de fin (même format que startDate)"),
     candidateId: z.string().optional().describe("ID du candidat auquel rattacher l'action (dependsOn)"),
     resourceId: z.string().optional().describe("ID de la ressource à laquelle rattacher l'action (dependsOn)"),
     contactId: z.string().optional().describe("ID du contact auquel rattacher l'action (dependsOn)"),

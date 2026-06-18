@@ -14,6 +14,10 @@ import {
   CompanyUpdateSchema,
   OpportunityCreateSchema,
   OpportunityUpdateSchema,
+  ResourceSearchSchema,
+  CandidateSearchSchema,
+  ContactSearchSchema,
+  OpportunitySearchSchema,
   ActionSearchSchema,
   ActionCreateSchema,
   ResourceTimesheetSchema,
@@ -47,6 +51,45 @@ import {
   ReportingSynthesisSchema,
   ReportingProductionPlansSchema,
 } from "./index.js";
+
+describe("shared tools filter", () => {
+  const schemas = {
+    ResourceSearchSchema,
+    CandidateSearchSchema,
+    ContactSearchSchema,
+    OpportunitySearchSchema,
+  };
+
+  for (const [name, schema] of Object.entries(schemas)) {
+    it(`${name} accepts the #AND# tools syntax`, () => {
+      expect(schema.safeParse({ tools: ["#AND#", "12", "34"] }).success).toBe(true);
+      expect(schema.safeParse({ tools: ["12"] }).success).toBe(true);
+    });
+  }
+
+  it("exposes the same tools description on every entity (centralised field)", () => {
+    const descriptions = Object.values(schemas).map(
+      (schema) => (schema as unknown as { shape: Record<string, { description?: string }> }).shape.tools?.description
+    );
+    expect(new Set(descriptions).size).toBe(1);
+    expect(descriptions[0]).toContain("#AND#");
+  });
+});
+
+describe("ActionCreateSchema date validation", () => {
+  it("accepts ISO 8601 datetimes with a timezone offset", () => {
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, startDate: "2026-06-05T10:00:00+0200" }).success).toBe(true);
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, startDate: "2026-06-05T10:00:00+02:00" }).success).toBe(true);
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, endDate: "2026-06-05T10:00:00Z" }).success).toBe(true);
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, startDate: "2026-06-05T10:00:00" }).success).toBe(true);
+  });
+
+  it("rejects a date-only or malformed value", () => {
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, startDate: "2026-06-05" }).success).toBe(false);
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, startDate: "not-a-date" }).success).toBe(false);
+    expect(ActionCreateSchema.safeParse({ typeOf: 1, endDate: "05/06/2026" }).success).toBe(false);
+  });
+});
 
 describe("SearchSchema", () => {
   it("should accept valid input with all fields", () => {
