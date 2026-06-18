@@ -213,16 +213,25 @@ interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   server: McpServer;
   lastActivityAt: number;
+  /** Memoised teardown — set on first destroy so concurrent callers share it. */
+  closing?: Promise<void>;
 }
 
-async function destroySession(entry: SessionEntry): Promise<void> {
-  // Close transport and server independently so a failure in one still lets
-  // the other release its resources. We swallow errors because the caller
-  // already lost interest in this session.
-  await Promise.allSettled([
+/**
+ * Tear down a session's transport + server exactly once. Several paths can race
+ * to dispose the same entry (idle sweep, the transport's own `onclose`, the
+ * SDK's `onsessionclosed`, and server shutdown); memoising the teardown promise
+ * on the entry makes `transport.close()` / `server.close()` fire at most once
+ * and lets every caller await the same completion. Errors are swallowed because
+ * the caller has already lost interest in the session.
+ */
+function destroySession(entry: SessionEntry): Promise<void> {
+  if (entry.closing) return entry.closing;
+  entry.closing = Promise.allSettled([
     Promise.resolve().then(() => entry.transport.close()),
     Promise.resolve().then(() => entry.server.close()),
-  ]);
+  ]).then(() => undefined);
+  return entry.closing;
 }
 
 export async function startHttpTransport(
@@ -458,9 +467,10 @@ export async function startHttpTransport(
           const entry = sessions.get(id);
           if (entry) {
             sessions.delete(id);
-            // Server is closed by destroySession — but if the transport's own
-            // close path already disposed it, the second call is a no-op.
-            void entry.server.close().catch(() => undefined);
+            // Idempotent: if the sweep / onsessionclosed already started the
+            // teardown, this shares the same memoised promise rather than
+            // re-closing.
+            void destroySession(entry);
           }
         };
 
