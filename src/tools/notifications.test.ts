@@ -1,36 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { vi } from "vitest";
+import { describeSearchGetTools } from "./test-helpers.js";
 import { registerNotificationTools } from "./notifications.js";
 
-function createMockServer() {
-  return {
-    registerTool: vi.fn(),
-  } as unknown as McpServer;
-}
+vi.mock("../services/boond-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/boond-client.js")>();
+  return { ...actual, apiRequest: vi.fn() };
+});
 
-describe("registerNotificationTools", () => {
-  let server: McpServer;
-
-  beforeEach(() => {
-    server = createMockServer();
-  });
-
-  it("should register 2 notification tools", () => {
-    registerNotificationTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(2);
-  });
-
-  it("should register all expected tool names", () => {
-    registerNotificationTools(server);
-    const names = vi.mocked(server.registerTool).mock.calls.map((c) => c[0]);
-    expect(names).toContain("boond_notifications_search");
-    expect(names).toContain("boond_notifications_get");
-  });
-
-  it("should register all tools as readOnly", () => {
-    registerNotificationTools(server);
-    for (const call of vi.mocked(server.registerTool).mock.calls) {
-      expect(call[1].annotations?.readOnlyHint).toBe(true);
-    }
-  });
+describeSearchGetTools("registerNotificationTools", {
+  registrar: registerNotificationTools,
+  namePrefix: "boond_notifications",
+  searchPath: "/notifications",
 });
