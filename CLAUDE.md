@@ -503,7 +503,7 @@ Behavior notes:
 
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 20 + 22. Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **version consistency** between `package.json` / `manifest.json` / `server.json`, coverage upload.
+- **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 20 + 22 + 24. Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **version consistency** between `package.json` / `manifest.json` / `server.json`, coverage upload.
 - **Release** (`.github/workflows/release.yml`): Triggered on `v*` tags. Publishes to:
   - **npm** with `--provenance --access public`
   - **GitHub Releases** with `.mcpb` bundle attached; release body extracted from the matching `## [X.Y.Z]` section of `CHANGELOG.md`
