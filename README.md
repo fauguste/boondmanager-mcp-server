@@ -17,8 +17,7 @@
 [![Install in VS Code](https://img.shields.io/badge/Install-VS%20Code-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install-VS%20Code%20Insiders-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D&quality=insiders)
 
-[![Smithery](https://img.shields.io/badge/Smithery-listing-ea580c)](https://smithery.ai/server/@fauguste/boondmanager-mcp-server)
-[![Glama](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server/badge)](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server)
+<a href="https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server"><img src="https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server/badge" alt="Glama" width="180" /></a>
 
 > **LM Studio**, **Goose** et **Gemini CLI** s'installent via leur procédure dédiée (deeplink natif ou commande) — voir la section [Installation](#installation). GitHub ne rend pas cliquables les liens à schéma non-HTTP (`lmstudio://`, `goose://`), c'est pourquoi ils n'ont pas de bouton 1-clic ici.
 

@@ -18,7 +18,7 @@ the reference for what gets pushed where on each release.
 | **Gemini CLI extension** | `gemini extensions install https://github.com/fauguste/boondmanager-mcp-server` | reads `gemini-extension.json` from repo root | on install (reads the default branch) |
 | **One-click badges (Cursor, VS Code, VS Code Insiders)** | deeplinks in `README.md` (no package) | hosted HTTPS redirects (`cursor.com/install-mcp`, `insiders.vscode.dev/redirect/mcp/install`) with base64/url-encoded `npx` config — clickable on github.com | manual (only if the `npx` invocation changes) |
 | **LM Studio / Goose** | install sections in `README.md` (no package) | native `lmstudio://` / `goose://` deeplinks are stripped by GitHub, so these are documented as copy-paste config instead of badges | manual |
-| **Glama / Smithery listing badges** | [Glama](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server) · [Smithery](https://smithery.ai/server/@fauguste/boondmanager-mcp-server) | Glama serves a live `/badge` image; Smithery uses a static shields.io badge (their own badge endpoint is WAF-gated) | auto |
+| **Glama listing badge** | [Glama](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server) | live `/badge` PNG, embedded via `<img width>` to keep it compact. Smithery has no usable README badge (their badge endpoint is WAF-gated), so only the listing channel row above is kept | auto |
 
 ## One-time setup (manual)
 
