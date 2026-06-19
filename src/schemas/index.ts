@@ -798,15 +798,59 @@ export const CompanyUpdateSchema = z
 
 // ---- Opportunity schemas ----
 
+// Writable fields shared by create and update. The attribute/relationship
+// names mirror the official RAML (schemas/opportunities/information.json):
+//  - `note` → /data/attributes/description (the API has no `note` attribute,
+//    so the old direct pass-through was silently dropped — see issue #124)
+//  - `typeOf`, `criteria`, `expertiseArea`, `turnoverEstimatedExcludingTax`
+//    are plain attributes
+//  - `companyId`/`contactId`/`poleId`/`hrManagerId`/`mainManagerId`/`agencyId`
+//    become JSON:API relationships (resource types: company, contact, pole,
+//    resource, resource, agency)
+const opportunityWritableShape = {
+  typeOf: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      "Type d'opportunité : ID numérique du dictionnaire setting.typeOf.project (ex: 1, 3), via boond_application_dictionary"
+    ),
+  companyId: z.string().optional().describe("ID de la société cliente (relation company)"),
+  contactId: z.string().optional().describe("ID du contact associé (relation contact)"),
+  state: stateField("opportunity", "État de l'opportunité"),
+  startDate: z.string().optional().describe("Date de début prévue (YYYY-MM-DD ou 'immediate')"),
+  endDate: z.string().optional().describe("Date de fin prévue (YYYY-MM-DD)"),
+  note: z
+    .string()
+    .max(65000)
+    .optional()
+    .describe("Description de l'opportunité (mappée sur /data/attributes/description)"),
+  criteria: z
+    .string()
+    .max(5000)
+    .optional()
+    .describe(
+      "Critères / compétences recherchées (texte libre). Alimente le matching de boond_workflow_candidats_pour_opportunite."
+    ),
+  expertiseArea: z
+    .string()
+    .optional()
+    .describe("Domaine d'expertise : ID du dictionnaire setting.expertiseArea (via boond_application_dictionary)"),
+  turnoverEstimatedExcludingTax: z.coerce.number().optional().describe("Chiffre d'affaires estimé HT (montant)"),
+  poleId: z.string().optional().describe("ID du pôle (relation pole)"),
+  hrManagerId: z.string().optional().describe("ID de la ressource responsable RH (relation hrManager)"),
+  mainManagerId: z
+    .string()
+    .optional()
+    .describe("ID de la ressource responsable principal / commercial (relation mainManager)"),
+  agencyId: z.string().optional().describe("ID de l'agence (relation agency)"),
+} as const;
+
 export const OpportunityCreateSchema = z
   .object({
     name: z.string().min(1).describe("Nom / titre de l'opportunité"),
-    companyId: z.string().optional().describe("ID de la société cliente"),
-    contactId: z.string().optional().describe("ID du contact associé"),
-    state: stateField("opportunity", "État de l'opportunité"),
-    startDate: z.string().optional().describe("Date de début prévue (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin prévue (YYYY-MM-DD)"),
-    note: z.string().optional().describe("Notes / description"),
+    ...opportunityWritableShape,
   })
   .strict();
 
@@ -814,10 +858,7 @@ export const OpportunityUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID de l'opportunité à modifier"),
     name: z.string().optional().describe("Nom / titre"),
-    state: stateField("opportunity", "État"),
-    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    note: z.string().optional().describe("Notes"),
+    ...opportunityWritableShape,
   })
   .strict();
 

@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.3] - 2026-06-19
+
+Suite de la correction d'`boond_opportunities_create`/`update` : exposition des champs métier manquants et correction du `405` à la mise à jour ([#124](https://github.com/fauguste/boondmanager-mcp-server/issues/124)). Aucun changement de catalogue — toujours **175 outils, 11 prompts, 22 ressources**.
+
+### Fixed
+
+- **`boond_opportunities_update` renvoyait systématiquement `405 Method Not Allowed` (PATCH /opportunities/{id})** ([#124](https://github.com/fauguste/boondmanager-mcp-server/issues/124)) : l'API BoondManager n'accepte pas `PATCH` sur la ressource de base. La mise à jour cible désormais `PUT /opportunities/{id}/information` (endpoint documenté dans la RAML). Le corps reste partiel — seuls les champs fournis sont envoyés. Le `crud-factory` gagne une option `pathSuffix` pour router une mise à jour vers une sous-ressource.
+- **`note` ne renseignait pas la description de l'opportunité** ([#124](https://github.com/fauguste/boondmanager-mcp-server/issues/124)) : l'API n'a pas d'attribut `note` ; le paramètre était silencieusement ignoré et `description` restait vide. `note` est désormais mappé sur `/data/attributes/description`.
+
+### Added
+
+- **`boond_opportunities_create` / `boond_opportunities_update` exposent les champs métier principaux** ([#124](https://github.com/fauguste/boondmanager-mcp-server/issues/124)), mappés sur les attributs/relations exacts de la RAML :
+  - Attributs : `typeOf` (type d'opportunité, dictionnaire `setting.typeOf.project`), `criteria` (critères / compétences recherchées — alimente le matching de `boond_workflow_candidats_pour_opportunite`), `expertiseArea` (dictionnaire `setting.expertiseArea`), `turnoverEstimatedExcludingTax` (CA estimé HT).
+  - Relations : `poleId` (pole), `hrManagerId` (resource), `mainManagerId` (resource), `agencyId` (agency) — en complément de `companyId`/`contactId`.
+
 ## [2.6.2] - 2026-06-18
 
 Correctif de l'outil `boond_opportunities_create` (et `boond_opportunities_update`) qui échouait systématiquement. Aucun changement de catalogue — toujours **175 outils, 11 prompts, 22 ressources**.

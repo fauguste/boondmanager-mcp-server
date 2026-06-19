@@ -112,6 +112,40 @@ Pagination : \`page\`, \`pageSize\` (max 500). Tri : \`sort: "creationDate"|"tit
 
 Returns : liste paginée des opportunités. Utiliser \`boond_opportunities_get\` ou les outils d'onglets pour le détail.`;
 
+/**
+ * Builds the JSON:API body for create (no id) and update (with id) of an
+ * opportunity. Maps the friendly schema field names to the API's attribute /
+ * relationship names (see issues #113 and #124):
+ *   - `name` → /data/attributes/title
+ *   - `note` → /data/attributes/description (the API has no `note` attribute)
+ *   - `{company,contact,pole,hrManager,mainManager,agency}Id` → relationships
+ * `buildJsonApiBody` strips undefined attributes and relationships, so partial
+ * updates only touch the supplied fields.
+ */
+function buildOpportunityBody(params: Record<string, unknown>): unknown {
+  const { id, name, note, companyId, contactId, poleId, hrManagerId, mainManagerId, agencyId, ...attributes } =
+    params as {
+      id?: string;
+      name?: string;
+      note?: string;
+      companyId?: string;
+      contactId?: string;
+      poleId?: string;
+      hrManagerId?: string;
+      mainManagerId?: string;
+      agencyId?: string;
+    } & Record<string, unknown>;
+
+  return buildJsonApiBody("opportunity", { ...attributes, title: name, description: note }, id, {
+    company: companyId ? { id: companyId, type: "company" } : undefined,
+    contact: contactId ? { id: contactId, type: "contact" } : undefined,
+    pole: poleId ? { id: poleId, type: "pole" } : undefined,
+    hrManager: hrManagerId ? { id: hrManagerId, type: "resource" } : undefined,
+    mainManager: mainManagerId ? { id: mainManagerId, type: "resource" } : undefined,
+    agency: agencyId ? { id: agencyId, type: "agency" } : undefined,
+  });
+}
+
 export function registerOpportunityTools(server: McpServer): void {
   registerSearchTool(server, OPTS, {
     schema: OpportunitySearchSchema,
@@ -119,25 +153,14 @@ export function registerOpportunityTools(server: McpServer): void {
   });
   registerGetTool(server, OPTS);
 
-  registerCreateTool(server, OPTS, OpportunityCreateSchema, (params) => {
-    // The Boond API expects the opportunity name under `/data/attributes/title`,
-    // so the schema's `name` field must be mapped to `title` (see issue #113).
-    const { companyId, contactId, name, ...rest } = params;
-    const body = buildJsonApiBody("opportunity", { title: name, ...rest });
-    const relationships: Record<string, unknown> = {};
-    if (companyId) relationships.company = { data: { id: companyId, type: "company" } };
-    if (contactId) relationships.contact = { data: { id: contactId, type: "contact" } };
-    if (Object.keys(relationships).length > 0) {
-      (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
-    }
-    return body;
-  });
+  registerCreateTool(server, OPTS, OpportunityCreateSchema, buildOpportunityBody);
 
-  registerUpdateTool(server, OPTS, OpportunityUpdateSchema, (params) => {
-    // Same `name` → `title` mapping as create (issue #113). `title` stays
-    // undefined when `name` is omitted, so buildJsonApiBody drops it.
-    const { id, name, ...rest } = params;
-    return buildJsonApiBody("opportunity", { title: name, ...rest }, id as string);
+  // Updates go through PUT /opportunities/{id}/information — the base resource
+  // returns 405 on PATCH (issue #124). buildJsonApiBody drops undefined values,
+  // so PUT still only touches the fields the caller supplied.
+  registerUpdateTool(server, OPTS, OpportunityUpdateSchema, buildOpportunityBody, {
+    method: "PUT",
+    pathSuffix: "information",
   });
 
   registerDeleteTool(server, OPTS);

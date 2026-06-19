@@ -290,6 +290,11 @@ interface UpdateToolOverrides {
   /** HTTP verb for the update call. A few BoondManager endpoints expect PUT
    * (e.g. /expenses-reports) rather than the JSON:API-conventional PATCH. */
   method?: "PATCH" | "PUT";
+  /** Sub-resource segment appended to `${apiPath}/${id}` for the update call
+   * (e.g. "information" → PUT /opportunities/{id}/information). Some entities
+   * only accept updates on their `/information` sub-resource and return 405 on
+   * PATCH/PUT against the base resource (see issue #124). */
+  pathSuffix?: string;
 }
 
 export function registerUpdateTool(
@@ -300,6 +305,7 @@ export function registerUpdateTool(
   overrides: UpdateToolOverrides = {}
 ): void {
   const method = overrides.method ?? "PATCH";
+  const pathSuffix = overrides.pathSuffix ? `/${overrides.pathSuffix}` : "";
   server.registerTool(
     `${opts.prefix}_update`,
     {
@@ -320,7 +326,7 @@ Returns: Données mises à jour du/de la ${opts.entityName}.`,
       const p = params as Record<string, unknown>;
       const id = p.id as string;
       const body = buildBody(p);
-      const response = await apiRequest(`${opts.apiPath}/${id}`, method, body);
+      const response = await apiRequest(`${opts.apiPath}/${id}${pathSuffix}`, method, body);
       return {
         content: [
           {

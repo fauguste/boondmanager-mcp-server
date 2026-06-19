@@ -105,7 +105,7 @@ describe("registerOpportunityTools", () => {
       expect(data.relationships.contact).toEqual({ data: { id: "34", type: "contact" } });
     });
 
-    it("maps `name` to `title` on update", async () => {
+    it("maps `name` to `title` on update via PUT /opportunities/{id}/information (issue #124)", async () => {
       registerOpportunityTools(server);
       const apiSpy = vi
         .spyOn(boondClient, "apiRequest")
@@ -115,8 +115,10 @@ describe("registerOpportunityTools", () => {
       await handler({ id: "7", name: "Renamed" });
 
       const [path, method, body] = apiSpy.mock.calls[0];
-      expect(path).toBe("/opportunities/7");
-      expect(method).toBe("PATCH");
+      // The base resource returns 405 on PATCH; updates target the
+      // /information sub-resource with PUT.
+      expect(path).toBe("/opportunities/7/information");
+      expect(method).toBe("PUT");
       const attrs = (body as { data: { attributes: Record<string, unknown> } }).data.attributes;
       expect(attrs.title).toBe("Renamed");
       expect(attrs.name).toBeUndefined();
@@ -134,7 +136,88 @@ describe("registerOpportunityTools", () => {
       const [, , body] = apiSpy.mock.calls[0];
       const attrs = (body as { data: { attributes: Record<string, unknown> } }).data.attributes;
       expect(attrs).not.toHaveProperty("title");
-      expect(attrs.note).toBe("just a note");
+    });
+  });
+
+  // Regression for issue #124: create/update must expose the main opportunity
+  // fields and map them to the correct API attributes / relationships.
+  describe("extended fields (issue #124)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function bodyOf(call: unknown[]): {
+      attributes: Record<string, unknown>;
+      relationships: Record<string, unknown>;
+    } {
+      return (call[2] as { data: { attributes: Record<string, unknown>; relationships: Record<string, unknown> } })
+        .data;
+    }
+
+    it("maps typeOf/criteria/expertiseArea/turnover attributes and note→description on create", async () => {
+      registerOpportunityTools(server);
+      const apiSpy = vi
+        .spyOn(boondClient, "apiRequest")
+        .mockResolvedValue({ data: { id: "9", type: "opportunity", attributes: {} } } as never);
+
+      const handler = getHandler(server, "boond_opportunities_create");
+      await handler({
+        name: "Full opp",
+        typeOf: 3,
+        note: "Mission description",
+        criteria: "React, 5 ans",
+        expertiseArea: "developpementweb",
+        turnoverEstimatedExcludingTax: 120000,
+      });
+
+      const { attributes } = bodyOf(apiSpy.mock.calls[0]);
+      expect(attributes.title).toBe("Full opp");
+      expect(attributes.typeOf).toBe(3);
+      expect(attributes.description).toBe("Mission description");
+      expect(attributes.note).toBeUndefined();
+      expect(attributes.criteria).toBe("React, 5 ans");
+      expect(attributes.expertiseArea).toBe("developpementweb");
+      expect(attributes.turnoverEstimatedExcludingTax).toBe(120000);
+    });
+
+    it("maps pole/hrManager/mainManager/agency ids to relationships on create", async () => {
+      registerOpportunityTools(server);
+      const apiSpy = vi
+        .spyOn(boondClient, "apiRequest")
+        .mockResolvedValue({ data: { id: "9", type: "opportunity", attributes: {} } } as never);
+
+      const handler = getHandler(server, "boond_opportunities_create");
+      await handler({
+        name: "Rel opp",
+        poleId: "5",
+        hrManagerId: "11",
+        mainManagerId: "12",
+        agencyId: "2",
+      });
+
+      const { relationships } = bodyOf(apiSpy.mock.calls[0]);
+      expect(relationships.pole).toEqual({ data: { id: "5", type: "pole" } });
+      expect(relationships.hrManager).toEqual({ data: { id: "11", type: "resource" } });
+      expect(relationships.mainManager).toEqual({ data: { id: "12", type: "resource" } });
+      expect(relationships.agency).toEqual({ data: { id: "2", type: "agency" } });
+    });
+
+    it("forwards extended fields on update (PUT /information)", async () => {
+      registerOpportunityTools(server);
+      const apiSpy = vi
+        .spyOn(boondClient, "apiRequest")
+        .mockResolvedValue({ data: { id: "7", type: "opportunity", attributes: {} } } as never);
+
+      const handler = getHandler(server, "boond_opportunities_update");
+      await handler({ id: "7", typeOf: 2, criteria: "Java", poleId: "8" });
+
+      const [path, method] = apiSpy.mock.calls[0];
+      expect(path).toBe("/opportunities/7/information");
+      expect(method).toBe("PUT");
+      const { attributes, relationships } = bodyOf(apiSpy.mock.calls[0]);
+      expect(attributes.typeOf).toBe(2);
+      expect(attributes.criteria).toBe("Java");
+      expect(relationships.pole).toEqual({ data: { id: "8", type: "pole" } });
     });
   });
 });

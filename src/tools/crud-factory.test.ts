@@ -398,4 +398,17 @@ describe("registerCreateTool / registerUpdateTool handlers", () => {
     const result = await registeredHandler(server)({ id: "99" });
     expect(result.structuredContent).toEqual({ id: "99", type: "test" });
   });
+
+  it("update honours method + pathSuffix overrides (PUT /{id}/information)", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "99", type: "test", attributes: {} } });
+    const server = createMockServer();
+    registerUpdateTool(server, OPTS, z.object({ id: z.string() }), (p) => buildJsonApiBody("test", p), {
+      method: "PUT",
+      pathSuffix: "information",
+    });
+    await registeredHandler(server)({ id: "99" });
+    const [path, method] = vi.mocked(apiRequest).mock.calls[0];
+    expect(path).toBe("/tests/99/information");
+    expect(method).toBe("PUT");
+  });
 });
