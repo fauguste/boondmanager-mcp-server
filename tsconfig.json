@@ -16,5 +16,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "vitest.config.ts"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/tools/test-helpers.ts", "vitest.config.ts"]
 }

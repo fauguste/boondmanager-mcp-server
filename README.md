@@ -17,14 +17,15 @@
 [![Install in VS Code](https://img.shields.io/badge/Install-VS%20Code-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install-VS%20Code%20Insiders-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=boondmanager&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22boondmanager-mcp-server%22%5D%7D&quality=insiders)
 
-[![Smithery](https://img.shields.io/badge/Smithery-listing-ea580c)](https://smithery.ai/server/@fauguste/boondmanager-mcp-server)
-[![Glama](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server/badge)](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server)
+<a href="https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server"><img src="https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server/badge" alt="Glama" width="180" /></a>
 
 > **LM Studio**, **Goose** et **Gemini CLI** s'installent via leur procédure dédiée (deeplink natif ou commande) — voir la section [Installation](#installation). GitHub ne rend pas cliquables les liens à schéma non-HTTP (`lmstudio://`, `goose://`), c'est pourquoi ils n'ont pas de bouton 1-clic ici.
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
 **175 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
+
+> **Sorties structurées.** En plus du texte lisible, les outils `search`, `create`, `update` et `delete` renvoient un `structuredContent` conforme à un `outputSchema` MCP : `search` → `{ total?, count, items[] }` (résumés compacts, pas les ressources JSON:API complètes), `create`/`update` → `{ id?, type? }`, `delete` → `{ id, deleted, reason? }`. Les clients MCP qui exploitent les sorties structurées obtiennent une référence d'entité fiable pour chaîner les appels. Les outils `get` restent en texte seul (leur texte est déjà du JSON exploitable).
 
 ## Domaines couverts
 
@@ -513,6 +514,14 @@ Pour eviter qu'une boucle d'outils emballee n'inonde l'API (et n'enchaine les `4
 |----------|--------|-------------|
 | `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Debit soutenu (requetes/seconde). `0` desactive completement. |
 | `BOOND_HTTP_RATE_LIMIT_BURST` | `20` | Capacite du bucket = taille maximale de rafale immediate. |
+
+### Cache du dictionnaire
+
+L'API BoondManager n'expose qu'un seul endpoint `/application/dictionary` qui renvoie l'intégralité des libellés (états, types, pays…). Le serveur le met en cache en mémoire pour éviter de le re-télécharger à chaque résolution état/type → libellé.
+
+| Variable | Defaut | Description |
+|----------|--------|-------------|
+| `BOOND_DICTIONARY_TTL_MS` | `3600000` (1 h) | Durée de vie du cache du dictionnaire, en millisecondes. Une valeur non numérique ou ≤ 0 retombe sur le défaut. |
 
 ### Restriction d'accès (domaines / lecture seule)
 
