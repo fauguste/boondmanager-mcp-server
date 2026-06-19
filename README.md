@@ -25,6 +25,8 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claud
 
 **175 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
 
+> **Sorties structurées.** En plus du texte lisible, les outils `search`, `create`, `update` et `delete` renvoient un `structuredContent` conforme à un `outputSchema` MCP : `search` → `{ total?, count, items[] }` (résumés compacts, pas les ressources JSON:API complètes), `create`/`update` → `{ id?, type? }`, `delete` → `{ id, deleted, reason? }`. Les clients MCP qui exploitent les sorties structurées obtiennent une référence d'entité fiable pour chaîner les appels. Les outils `get` restent en texte seul (leur texte est déjà du JSON exploitable).
+
 ## Domaines couverts
 
 ### CRM & Commercial
@@ -512,6 +514,14 @@ Pour eviter qu'une boucle d'outils emballee n'inonde l'API (et n'enchaine les `4
 |----------|--------|-------------|
 | `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Debit soutenu (requetes/seconde). `0` desactive completement. |
 | `BOOND_HTTP_RATE_LIMIT_BURST` | `20` | Capacite du bucket = taille maximale de rafale immediate. |
+
+### Cache du dictionnaire
+
+L'API BoondManager n'expose qu'un seul endpoint `/application/dictionary` qui renvoie l'intégralité des libellés (états, types, pays…). Le serveur le met en cache en mémoire pour éviter de le re-télécharger à chaque résolution état/type → libellé.
+
+| Variable | Defaut | Description |
+|----------|--------|-------------|
+| `BOOND_DICTIONARY_TTL_MS` | `3600000` (1 h) | Durée de vie du cache du dictionnaire, en millisecondes. Une valeur non numérique ou ≤ 0 retombe sur le défaut. |
 
 ### Restriction d'accès (domaines / lecture seule)
 

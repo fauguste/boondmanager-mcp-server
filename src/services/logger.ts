@@ -1,4 +1,26 @@
 import pino from "pino";
+import { randomUUID } from "node:crypto";
+
+/**
+ * Redaction paths for the structured logger. Defence-in-depth: nothing in the
+ * codebase currently logs auth material, but if a request/error object that
+ * carries credentials is ever passed to the logger, these paths censor it
+ * before it reaches stdout / a log aggregator. Covers the BoondManager JWT
+ * header, OAuth Bearer headers, and raw access tokens at one level of nesting.
+ */
+export const REDACT_PATHS = [
+  "authorization",
+  "Authorization",
+  "*.authorization",
+  "*.Authorization",
+  "headers.authorization",
+  "req.headers.authorization",
+  "res.headers.authorization",
+  'headers["x-jwt-client-boondmanager"]',
+  'req.headers["x-jwt-client-boondmanager"]',
+  "accessToken",
+  "*.accessToken",
+];
 
 /**
  * Read the log level from env, falling back to 'info' for production-friendly
@@ -23,6 +45,7 @@ function resolveLogLevel(): pino.Level {
  */
 export const logger = pino({
   level: resolveLogLevel(),
+  redact: { paths: REDACT_PATHS, censor: "[Redacted]" },
   // Human-readable (pretty) output in dev, JSON in prod. Override via LOG_FORMAT.
   transport:
     process.env.LOG_FORMAT === "json" || process.env.NODE_ENV === "production"
@@ -43,5 +66,8 @@ export const logger = pino({
  * logger child contexts so every log line from that request shares the ID.
  */
 export function generateCorrelationId(): string {
-  return Math.random().toString(16).slice(2, 10);
+  // randomUUID() is collision-resistant under high concurrency (unlike
+  // Math.random); the first 8 chars of the hyphen-free first group give a
+  // compact, still-unique-enough id for request tracing.
+  return randomUUID().replace(/-/g, "").slice(0, 8);
 }
