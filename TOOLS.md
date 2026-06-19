@@ -23,7 +23,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_accounts_get` | Détails d'un compte utilisateur | read · idempotent |
+| `boond_accounts_get` | Détails d'un(e) compte utilisateur | read · idempotent |
 | `boond_accounts_search` | Rechercher des comptes utilisateurs | read · idempotent · open-world |
 
 ### actions (4)
@@ -46,7 +46,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_agencies_get` | Détails d'une agence | read · idempotent |
+| `boond_agencies_get` | Détails d'un(e) agence | read · idempotent |
 | `boond_agencies_search` | Rechercher des agences | read · idempotent · open-world |
 
 ### application (2)
@@ -60,14 +60,14 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_business_units_get` | Détails d'une business unit | read · idempotent |
+| `boond_business_units_get` | Détails d'un(e) business unit | read · idempotent |
 | `boond_business_units_search` | Rechercher des business units | read · idempotent · open-world |
 
 ### calendars (2)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_calendars_get` | Détails d'un calendrier | read · idempotent |
+| `boond_calendars_get` | Détails d'un(e) calendrier | read · idempotent |
 | `boond_calendars_search` | Rechercher des calendriers | read · idempotent · open-world |
 
 ### candidates (10)
@@ -146,35 +146,35 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_expenses_create` | Créer une note de frais | write |
+| `boond_expenses_create` | Créer un(e) note de frais | write |
 | `boond_expenses_delete` | Supprimer une note de frais | delete |
-| `boond_expenses_get` | Détails d'une note de frais | read · idempotent |
+| `boond_expenses_get` | Détails d'un(e) note de frais | read · idempotent |
 | `boond_expenses_search` | Rechercher des notes de frais | read · idempotent · open-world |
-| `boond_expenses_update` | Modifier une note de frais | write · idempotent |
+| `boond_expenses_update` | Modifier un(e) note de frais | write · idempotent |
 
 ### flags (2)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_flags_get` | Détails d'un drapeau/étiquette | read · idempotent |
-| `boond_flags_search` | Rechercher des drapeaux/étiquettes | read · idempotent · open-world |
+| `boond_flags_get` | Détails d'un(e) drapeau | read · idempotent |
+| `boond_flags_search` | Rechercher des drapeaux | read · idempotent · open-world |
 
 ### invoices (5)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_invoices_create` | Créer une facture | write |
+| `boond_invoices_create` | Créer un(e) facture | write |
 | `boond_invoices_delete` | Supprimer une facture | delete |
-| `boond_invoices_get` | Détails d'une facture | read · idempotent |
+| `boond_invoices_get` | Détails d'un(e) facture | read · idempotent |
 | `boond_invoices_search` | Rechercher des factures | read · idempotent · open-world |
-| `boond_invoices_update` | Modifier une facture | write · idempotent |
+| `boond_invoices_update` | Modifier un(e) facture | write · idempotent |
 
 ### logs (2)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_logs_get` | Détails d'un log d'audit | read · idempotent |
-| `boond_logs_search` | Rechercher des logs d'audit | read · idempotent · open-world |
+| `boond_logs_get` | Détails d'un(e) log | read · idempotent |
+| `boond_logs_search` | Rechercher des logs | read · idempotent · open-world |
 
 ### notifications (2)
 
@@ -202,11 +202,11 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_orders_create` | Créer un bon de commande | write |
+| `boond_orders_create` | Créer un(e) bon de commande | write |
 | `boond_orders_delete` | Supprimer un bon de commande | delete |
-| `boond_orders_get` | Détails d'un bon de commande | read · idempotent |
+| `boond_orders_get` | Détails d'un(e) bon de commande | read · idempotent |
 | `boond_orders_search` | Rechercher des bons de commande | read · idempotent · open-world |
-| `boond_orders_update` | Modifier un bon de commande | write · idempotent |
+| `boond_orders_update` | Modifier un(e) bon de commande | write · idempotent |
 
 ### payments (2)
 
@@ -225,7 +225,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_poles_get` | Détails d'un pôle | read · idempotent |
+| `boond_poles_get` | Détails d'un(e) pôle | read · idempotent |
 | `boond_poles_search` | Rechercher des pôles | read · idempotent · open-world |
 
 ### positionings (5)
@@ -320,14 +320,14 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_roles_get` | Détails d'un rôle | read · idempotent |
+| `boond_roles_get` | Détails d'un(e) rôle | read · idempotent |
 | `boond_roles_search` | Rechercher des rôles | read · idempotent · open-world |
 
 ### threads (2)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_threads_get` | Détails d'un fil de discussion | read · idempotent |
+| `boond_threads_get` | Détails d'un(e) fil de discussion | read · idempotent |
 | `boond_threads_search` | Rechercher des fils de discussion | read · idempotent · open-world |
 
 ### timesheets (2)
@@ -341,8 +341,8 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_todolists_get` | Détails d'une liste de tâches | read · idempotent |
-| `boond_todolists_search` | Rechercher des listes de tâches | read · idempotent · open-world |
+| `boond_todolists_get` | Détails d'un(e) todolist | read · idempotent |
+| `boond_todolists_search` | Rechercher des todolists | read · idempotent · open-world |
 
 ### validations (2)
 
@@ -355,7 +355,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_webhooks_get` | Détails d'un webhook | read · idempotent |
+| `boond_webhooks_get` | Détails d'un(e) webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
 ### workflow (11)

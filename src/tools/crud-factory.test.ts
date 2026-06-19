@@ -93,6 +93,30 @@ describe("buildJsonApiBody", () => {
     };
     expect(result.data.attributes).toEqual({});
   });
+
+  it("should wrap relationships in JSON:API data envelopes", () => {
+    const result = buildJsonApiBody("invoice", { amount: 100 }, undefined, {
+      company: { id: "7", type: "company" },
+      project: { id: "9", type: "project" },
+    }) as { data: { relationships: Record<string, unknown> } };
+    expect(result.data.relationships).toEqual({
+      company: { data: { id: "7", type: "company" } },
+      project: { data: { id: "9", type: "project" } },
+    });
+  });
+
+  it("should skip undefined relationships and omit the key entirely when none remain", () => {
+    const result = buildJsonApiBody("invoice", { amount: 100 }, undefined, {
+      company: { id: "7", type: "company" },
+      project: undefined,
+    }) as { data: { relationships?: Record<string, unknown> } };
+    expect(result.data.relationships).toEqual({ company: { data: { id: "7", type: "company" } } });
+
+    const none = buildJsonApiBody("invoice", { amount: 100 }, undefined, {
+      company: undefined,
+    }) as { data: Record<string, unknown> };
+    expect(none.data).not.toHaveProperty("relationships");
+  });
 });
 
 describe("registerSearchTool", () => {

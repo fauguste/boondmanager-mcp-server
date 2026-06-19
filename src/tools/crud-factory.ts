@@ -196,19 +196,38 @@ Returns: Liste des ${opts.entityNamePlural} correspondants avec leur ID, nom et 
   );
 }
 
-export function registerGetTool(server: McpServer, opts: CrudToolOptions): void {
-  server.registerTool(
-    `${opts.prefix}_get`,
-    {
-      title: `Détails d'un(e) ${opts.entityName}`,
-      description: `Récupère les informations détaillées d'un(e) ${opts.entityName} par son ID. Optionnellement un onglet spécifique (information, technical, financial, actions, contracts, documents).
+interface GetToolOverrides {
+  /**
+   * When false, registers a plain id-only get tool (no `tab` parameter).
+   * Use for reference/admin domains that have no tab endpoints. Defaults to
+   * true (tab-aware), as used by the major entities.
+   */
+  withTab?: boolean;
+  title?: string;
+  description?: string;
+}
+
+export function registerGetTool(server: McpServer, opts: CrudToolOptions, overrides: GetToolOverrides = {}): void {
+  const withTab = overrides.withTab ?? true;
+  const title = overrides.title ?? `Détails d'un(e) ${opts.entityName}`;
+  const description =
+    overrides.description ??
+    (withTab
+      ? `Récupère les informations détaillées d'un(e) ${opts.entityName} par son ID. Optionnellement un onglet spécifique (information, technical, financial, actions, contracts, documents).
 
 Args:
   - id (string): Identifiant unique du/de la ${opts.entityName}
   - tab (string, optional): Onglet spécifique à récupérer
 
-Returns: Données JSON complètes de l'entité.`,
-      inputSchema: IdTabSchema,
+Returns: Données JSON complètes de l'entité.`
+      : `Récupère les informations détaillées d'un(e) ${opts.entityName} par son ID.`);
+
+  server.registerTool(
+    `${opts.prefix}_get`,
+    {
+      title,
+      description,
+      inputSchema: withTab ? IdTabSchema : IdSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -216,8 +235,9 @@ Returns: Données JSON complètes de l'entité.`,
         openWorldHint: false,
       },
     },
-    async (params: IdTabInput) => {
-      const path = params.tab ? `${opts.apiPath}/${params.id}/${params.tab}` : `${opts.apiPath}/${params.id}`;
+    async (params: IdTabInput | IdInput) => {
+      const tab = withTab ? (params as IdTabInput).tab : undefined;
+      const path = tab ? `${opts.apiPath}/${params.id}/${tab}` : `${opts.apiPath}/${params.id}`;
       const response = await apiRequest(path);
       const text = formatDetailResponse(response);
       return {
@@ -266,12 +286,20 @@ Returns: Données du/de la ${opts.entityName} créé(e) avec son ID.`,
   );
 }
 
+interface UpdateToolOverrides {
+  /** HTTP verb for the update call. A few BoondManager endpoints expect PUT
+   * (e.g. /expenses-reports) rather than the JSON:API-conventional PATCH. */
+  method?: "PATCH" | "PUT";
+}
+
 export function registerUpdateTool(
   server: McpServer,
   opts: CrudToolOptions,
   schema: z.ZodType,
-  buildBody: (params: Record<string, unknown>) => unknown
+  buildBody: (params: Record<string, unknown>) => unknown,
+  overrides: UpdateToolOverrides = {}
 ): void {
+  const method = overrides.method ?? "PATCH";
   server.registerTool(
     `${opts.prefix}_update`,
     {
@@ -292,7 +320,7 @@ Returns: Données mises à jour du/de la ${opts.entityName}.`,
       const p = params as Record<string, unknown>;
       const id = p.id as string;
       const body = buildBody(p);
-      const response = await apiRequest(`${opts.apiPath}/${id}`, "PATCH", body);
+      const response = await apiRequest(`${opts.apiPath}/${id}`, method, body);
       return {
         content: [
           {
@@ -362,16 +390,35 @@ Args:
   );
 }
 
-// Helper to build JSON:API body
-export function buildJsonApiBody(type: string, attributes: Record<string, unknown>, id?: string): unknown {
-  const body: Record<string, unknown> = {
-    data: {
-      type,
-      attributes: Object.fromEntries(Object.entries(attributes).filter(([_, v]) => v !== undefined)),
-    },
+/**
+ * Builds a JSON:API `{ data: { type, attributes[, id][, relationships] } }`
+ * payload. `undefined` attributes are dropped (so PATCH only touches the
+ * fields the caller actually supplied). `relationships` maps a relation name
+ * to a `{ id, type }` resource identifier and is wrapped in the JSON:API
+ * `{ data: ... }` envelope; entries are skipped when their value is undefined.
+ */
+export function buildJsonApiBody(
+  type: string,
+  attributes: Record<string, unknown>,
+  id?: string,
+  relationships?: Record<string, { id: string; type: string } | undefined>
+): unknown {
+  const data: Record<string, unknown> = {
+    type,
+    attributes: Object.fromEntries(Object.entries(attributes).filter(([_, v]) => v !== undefined)),
   };
   if (id) {
-    (body.data as Record<string, unknown>).id = id;
+    data.id = id;
   }
-  return body;
+  if (relationships) {
+    const rels = Object.fromEntries(
+      Object.entries(relationships)
+        .filter(([, ref]) => ref !== undefined)
+        .map(([name, ref]) => [name, { data: ref }])
+    );
+    if (Object.keys(rels).length > 0) {
+      data.relationships = rels;
+    }
+  }
+  return { data };
 }
