@@ -24,9 +24,9 @@ describe("registerActionTools", () => {
     server = createMockServer();
   });
 
-  it("should register 4 action tools", () => {
+  it("should register 5 action tools", () => {
     registerActionTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(4);
+    expect(server.registerTool).toHaveBeenCalledTimes(5);
   });
 
   it("should register all expected tool names", () => {
@@ -35,7 +35,16 @@ describe("registerActionTools", () => {
     expect(names).toContain("boond_actions_search");
     expect(names).toContain("boond_actions_get");
     expect(names).toContain("boond_actions_create");
+    expect(names).toContain("boond_actions_update");
     expect(names).toContain("boond_actions_delete");
+  });
+
+  it("should register update as a non-destructive idempotent write (operation: update)", () => {
+    registerActionTools(server);
+    const updateCall = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_actions_update");
+    expect(updateCall?.[1].annotations?.readOnlyHint).toBe(false);
+    expect(updateCall?.[1].annotations?.destructiveHint).toBe(false);
+    expect(updateCall?.[1].annotations?.idempotentHint).toBe(true);
   });
 
   it("should register search and get as readOnly", () => {
@@ -155,6 +164,54 @@ describe("registerActionTools", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("BOOND_DICTIONARY_OVERRIDES");
       expect(result.content[0].text).toContain("boond_application_dictionary");
+      expect(apiRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("boond_actions_update handler", () => {
+    function getUpdateHandler() {
+      registerActionTools(server);
+      const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_actions_update");
+      return call?.[2] as (params: Record<string, unknown>) => Promise<{
+        isError?: boolean;
+        content: Array<{ type: string; text: string }>;
+        structuredContent?: Record<string, unknown>;
+      }>;
+    }
+
+    beforeEach(() => {
+      vi.mocked(apiRequest).mockClear();
+      vi.mocked(apiRequest).mockResolvedValue({ data: { id: "123", type: "action" } });
+    });
+
+    it("issues a PUT with an attributes-only body (no relationships) to preserve calendar sync", async () => {
+      const handler = getUpdateHandler();
+      await handler({ id: "123", text: "Compte-rendu" });
+      expect(apiRequest).toHaveBeenCalledWith("/actions/123", "PUT", {
+        data: {
+          type: "action",
+          id: "123",
+          attributes: { text: "Compte-rendu" },
+        },
+      });
+      // No relationships key → dependsOn / positioning / Outlook event untouched.
+      const body = vi.mocked(apiRequest).mock.calls[0][2] as { data: Record<string, unknown> };
+      expect(body.data.relationships).toBeUndefined();
+    });
+
+    it("drops the id from attributes and returns the entity reference", async () => {
+      const handler = getUpdateHandler();
+      const result = await handler({ id: "123", typeOf: 12, title: "Entretien" });
+      const body = vi.mocked(apiRequest).mock.calls[0][2] as { data: { attributes: Record<string, unknown> } };
+      expect(body.data.attributes).toEqual({ typeOf: 12, title: "Entretien" });
+      expect(body.data.attributes.id).toBeUndefined();
+      expect(result.structuredContent).toEqual({ id: "123", type: "action" });
+    });
+
+    it("returns an error without calling the API when no field is provided", async () => {
+      const handler = getUpdateHandler();
+      const result = await handler({ id: "123" });
+      expect(result.isError).toBe(true);
       expect(apiRequest).not.toHaveBeenCalled();
     });
   });

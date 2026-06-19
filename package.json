@@ -1,7 +1,7 @@
 {
   "name": "boondmanager-mcp-server",
-  "version": "2.6.3",
-  "description": "MCP Server for BoondManager API - 175 tools, 11 prompts, 22 resources (ERP/CRM)",
+  "version": "2.7.0",
+  "description": "MCP Server for BoondManager API - 176 tools, 11 prompts, 22 resources (ERP/CRM)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",

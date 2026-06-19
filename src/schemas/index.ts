@@ -911,6 +911,31 @@ export const ActionCreateSchema = z
   })
   .strict();
 
+// PUT /actions/{id} (PATCH renvoie 405). Mise à jour partielle des seuls
+// attributs : aucune relation n'est envoyée, ce qui préserve le rattachement
+// `dependsOn`/`positioning` et la synchronisation calendrier (event Outlook /
+// Teams). `typeOf` accepte uniquement l'ID numérique du dictionnaire ici (pas
+// de résolution de libellé, faute d'entité `dependsOn` connue sur l'update).
+export const ActionUpdateSchema = z
+  .object({
+    id: z.string().min(1).describe("ID de l'action à modifier"),
+    typeOf: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Nouveau type : ID numérique du dictionnaire setting.action.* (via boond_application_dictionary)"),
+    title: z.string().optional().describe("Nouveau titre de l'action"),
+    text: z.string().optional().describe("Nouveau contenu / notes (HTML accepté). Remplace l'existant (pas d'ajout)."),
+    startDate: z
+      .string()
+      .regex(actionDateTimeRegex)
+      .optional()
+      .describe("Date de début au format ISO 8601 avec timezone (ex: 2026-06-05T10:00:00+0200)"),
+    endDate: z.string().regex(actionDateTimeRegex).optional().describe("Date de fin (même format que startDate)"),
+  })
+  .strict();
+
 // ---- Timesheet schemas ----
 
 export const ResourceTimesheetSchema = z

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ActionSearchSchema, ActionCreateSchema, IdSchema } from "../schemas/index.js";
+import { ActionSearchSchema, ActionCreateSchema, ActionUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
+import { buildJsonApiBody, registerDeleteTool, MutationOutputSchema } from "./crud-factory.js";
 import { availableLabels, formatOverridesSummary, resolveLabel } from "../config/dictionary-overrides.js";
 
 /** Display labels for the five entities an action can be attached to. */
@@ -179,6 +179,65 @@ Returns: L'action créée avec son ID.`),
             text: `✅ Action créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
           },
         ],
+      };
+    }
+  );
+
+  // Update action — PUT (PATCH renvoie 405 sur /actions/{id})
+  server.registerTool(
+    "boond_actions_update",
+    {
+      title: "Modifier une action",
+      description: `Met à jour une action existante dans BoondManager (PUT partiel, seuls les champs fournis sont modifiés).
+
+⚠️ Aucune relation n'est envoyée : le rattachement (dependsOn), le positionnement et la synchronisation calendrier (event Outlook/Teams, invités) sont préservés. Idéal pour ajouter un compte-rendu sans casser l'agenda — contrairement à delete + recreate qui supprime l'événement.
+
+Args:
+  - id (string, requis): ID de l'action à modifier
+  - typeOf (number, optional): Nouveau type (ID numérique du dictionnaire setting.action.*)
+  - title (string, optional): Nouveau titre
+  - text (string, optional): Nouveau contenu / notes (remplace l'existant, pas d'ajout)
+  - startDate, endDate (string, optional): Dates ISO avec timezone (ex: 2026-06-05T10:00:00+0200)
+
+Returns: L'action mise à jour.`,
+      inputSchema: ActionUpdateSchema,
+      outputSchema: MutationOutputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      const { id, ...attrs } = params;
+      if (!Object.values(attrs).some((v) => v !== undefined)) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: "❌ Aucun champ à mettre à jour. Fournissez au moins l'un de : typeOf, title, text, startDate, endDate.",
+            },
+          ],
+        };
+      }
+      // Attributs uniquement (pas de relationships) → préserve dependsOn /
+      // positioning et la synchro calendrier. PATCH renverrait 405.
+      const body = buildJsonApiBody("action", attrs, id);
+      const response = await apiRequest(`/actions/${id}`, "PUT", body);
+      const entity = Array.isArray(response.data) ? response.data[0] : response.data;
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Action #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
+        structuredContent: {
+          id: String(id),
+          ...(entity?.type !== undefined ? { type: String(entity.type) } : {}),
+        },
       };
     }
   );

@@ -23,7 +23,7 @@
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
-**175 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
+**176 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
 
 > **Sorties structurées.** En plus du texte lisible, les outils `search`, `create`, `update` et `delete` renvoient un `structuredContent` conforme à un `outputSchema` MCP : `search` → `{ total?, count, items[] }` (résumés compacts, pas les ressources JSON:API complètes), `create`/`update` → `{ id?, type? }`, `delete` → `{ id, deleted, reason? }`. Les clients MCP qui exploitent les sorties structurées obtiennent une référence d'entité fiable pour chaîner les appels. Les outils `get` restent en texte seul (leur texte est déjà du JSON exploitable).
 
@@ -73,7 +73,7 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claud
 
 | Domaine | Outils | Operations |
 |---------|--------|------------|
-| **Actions** | 4 | search, get, create, delete |
+| **Actions** | 5 | search, get, create, update, delete |
 | **Validations** | 2 | search, get |
 | **Todolists** | 2 | search, get |
 
@@ -770,7 +770,7 @@ boondmanager-mcp-server/
 │       ├── companies.ts      # 14 outils (CRUD + 9 onglets)
 │       ├── opportunities.ts  # 10 outils (CRUD + 5 onglets)
 │       ├── projects.ts       # 12 outils (CRUD + 7 onglets)
-│       ├── actions.ts        # 4 outils
+│       ├── actions.ts        # 5 outils
 │       ├── timesheets.ts     # 3 outils
 │       ├── invoices.ts       # 5 outils
 │       ├── orders.ts         # 5 outils

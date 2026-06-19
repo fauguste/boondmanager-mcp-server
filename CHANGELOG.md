@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.0] - 2026-06-19
+
+Nouvel outil `boond_actions_update` pour modifier une action sans la supprimer/recréer. Catalogue : **176 outils** (175 → 176), 11 prompts, 22 ressources.
+
+### Added
+
+- **`boond_actions_update`** ([#125](https://github.com/fauguste/boondmanager-mcp-server/issues/125)) : met à jour une action existante via `PUT /actions/{id}` (mise à jour partielle — seuls les champs fournis sont envoyés). Champs modifiables : `typeOf`, `title`, `text`, `startDate`, `endDate`. **Aucune relation n'est transmise dans le corps** : le rattachement `dependsOn`, le `positioning` et la synchronisation calendrier (event Outlook/Teams + invités) sont préservés. C'est l'intérêt principal face à l'ancien contournement *delete + recreate*, qui supprimait l'événement Outlook. Merci @Antoine-Engibex pour le signalement et la proposition détaillée.
+
+### Fixed
+
+- **`PATCH /actions/{id}` renvoyait `405 Method Not Allowed`** ([#125](https://github.com/fauguste/boondmanager-mcp-server/issues/125)) : l'endpoint des actions n'accepte que `PUT` (vérifié en réel ; `bodyPut.json` documenté côté RAML). Le nouvel outil utilise `PUT` directement.
+
 ## [2.6.3] - 2026-06-19
 
 Suite de la correction d'`boond_opportunities_create`/`update` : exposition des champs métier manquants et correction du `405` à la mise à jour ([#124](https://github.com/fauguste/boondmanager-mcp-server/issues/124)). Aucun changement de catalogue — toujours **175 outils, 11 prompts, 22 ressources**.
