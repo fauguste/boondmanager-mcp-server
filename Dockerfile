@@ -22,7 +22,7 @@
 # ---- builder ----
 # Pinned by multi-arch index digest for reproducible, tamper-evident builds.
 # Dependabot (docker ecosystem) keeps the digest fresh as `26-alpine` moves.
-FROM node:26-alpine@sha256:3ad34ca6292aec4a91d8ddeb9229e29d9c2f689efd0dd242860889ac71842eba AS builder
+FROM node:26-alpine@sha256:a2dc166a387cc6ca1e62d0c8e265e49ca985d6e60abc9fe6e6c3d6ce8e63f606 AS builder
 WORKDIR /app
 
 # Install only what's needed to build, with cache-friendly layering.
@@ -38,7 +38,7 @@ RUN npm prune --omit=dev
 
 
 # ---- runtime ----
-FROM node:26-alpine@sha256:3ad34ca6292aec4a91d8ddeb9229e29d9c2f689efd0dd242860889ac71842eba AS runtime
+FROM node:26-alpine@sha256:a2dc166a387cc6ca1e62d0c8e265e49ca985d6e60abc9fe6e6c3d6ce8e63f606 AS runtime
 WORKDIR /app
 
 # OCI image annotations — make the image discoverable in registries.
