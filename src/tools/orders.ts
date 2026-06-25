@@ -16,13 +16,44 @@ const OPTS = {
   prefix: "boond_orders",
 };
 
-/** Maps the companyId/projectId convenience inputs to JSON:API relationships. */
+/** Maps convenience inputs and schedule shortcuts to the Boond JSON:API body. */
 function buildOrderBody(params: Record<string, unknown>): unknown {
-  const { id, companyId, projectId, ...attrs } = params;
-  return buildJsonApiBody("order", attrs, id as string | undefined, {
+  const { id, companyId, projectId, ...rest } = params;
+  return buildJsonApiBody("order", orderAttributes(rest), id as string | undefined, {
     company: companyId ? { id: String(companyId), type: "company" } : undefined,
     project: projectId ? { id: String(projectId), type: "project" } : undefined,
   });
+}
+
+function normalizeSchedules(schedules?: Array<Record<string, unknown>>): Array<Record<string, unknown>> | undefined {
+  return schedules?.map((schedule) => {
+    const amount =
+      typeof schedule.amountExcludingTax === "number"
+        ? schedule.amountExcludingTax
+        : typeof schedule.turnoverTermOfPaymentExcludingTax === "number"
+          ? schedule.turnoverTermOfPaymentExcludingTax
+          : undefined;
+    return {
+      ...(typeof schedule.id === "string" ? { id: schedule.id } : {}),
+      date: schedule.date ?? schedule.endDate ?? schedule.startDate,
+      title: schedule.title ?? "Echeance",
+      turnoverQuotaExcludingTax: schedule.turnoverQuotaExcludingTax ?? amount ?? 0,
+      turnoverTermOfPaymentExcludingTax: schedule.turnoverTermOfPaymentExcludingTax ?? amount ?? 0,
+      forceTermOfPaymentExcludingTax: schedule.forceTermOfPaymentExcludingTax ?? true,
+    };
+  });
+}
+
+function orderAttributes(params: Record<string, unknown>): Record<string, unknown> {
+  const { reference, orderDate, amountExcludingTax, schedules, note, ...attrs } = params;
+  return {
+    ...attrs,
+    ...(reference ? { number: reference } : {}),
+    ...(orderDate ? { date: orderDate } : {}),
+    ...(amountExcludingTax !== undefined ? { turnoverOrderedExcludingTax: amountExcludingTax } : {}),
+    ...(Array.isArray(schedules) ? { schedules: normalizeSchedules(schedules as Array<Record<string, unknown>>) } : {}),
+    ...(note ? { informationComments: note } : {}),
+  };
 }
 
 export function registerOrderTools(server: McpServer): void {
@@ -39,7 +70,10 @@ Returns: Liste des bons de commande correspondants.`,
   });
   registerGetTool(server, OPTS, { withTab: false });
   registerCreateTool(server, OPTS, OrderCreateSchema, buildOrderBody);
-  registerUpdateTool(server, OPTS, OrderUpdateSchema, buildOrderBody);
+  registerUpdateTool(server, OPTS, OrderUpdateSchema, buildOrderBody, {
+    method: "PUT",
+    pathSuffix: "information",
+  });
   registerDeleteTool(server, OPTS, {
     title: "Supprimer un bon de commande",
     description: `Supprime un bon de commande de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,

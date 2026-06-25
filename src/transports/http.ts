@@ -40,6 +40,14 @@ export interface HttpTransportOptions {
    * reverse proxy, set `MCP_HTTP_PUBLIC_URL` explicitly.
    */
   publicUrl?: string;
+  /**
+   * Skip the OAuth2 Bearer check and use the env-based credentials configured
+   * via `initClient()` (BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY,
+   * or BOOND_API_TOKEN, or BasicAuth). Intended for single-tenant / self-hosted
+   * deployments where the operator owns both the server and the credentials.
+   * Set `BOOND_HTTP_STATIC_AUTH=true` to enable via `resolveHttpOptions()`.
+   */
+  staticAuth?: boolean;
 }
 
 export interface HttpServerHandle {
@@ -140,6 +148,9 @@ export function resolveHttpOptions(): HttpTransportOptions {
   const stateless = (readEnv("MCP_HTTP_STATEFUL") ?? "false").toLowerCase() !== "true";
   const enableJsonResponse = (readEnv("MCP_HTTP_JSON_RESPONSE") ?? "false").toLowerCase() === "true";
 
+  const staticAuthRaw = (readEnv("BOOND_HTTP_STATIC_AUTH") ?? "").toLowerCase();
+  const staticAuth = staticAuthRaw === "true" || staticAuthRaw === "1" || staticAuthRaw === "yes";
+
   return {
     host: readEnv("MCP_HTTP_HOST") ?? "127.0.0.1",
     port,
@@ -151,6 +162,7 @@ export function resolveHttpOptions(): HttpTransportOptions {
     maxSessions: readPositiveInt("MCP_HTTP_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
     allowedHosts: readAllowedHosts(),
     publicUrl: readEnv("MCP_HTTP_PUBLIC_URL"),
+    staticAuth,
   };
 }
 
@@ -354,11 +366,11 @@ export async function startHttpTransport(
 
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
-      // Public OAuth2 discovery endpoint (RFC 9728). Must be reachable
-      // without authentication — clients fetch it to learn where to send
-      // the user for authorization. Served at both the canonical root path
-      // and the path-suffixed variant per RFC 9728 §3.2.
+      // Public OAuth2 discovery endpoint (RFC 9728). Not served in static-auth
+      // mode — exposing it would cause OAuth-aware clients (mcp-remote, etc.)
+      // to attempt a full OAuth dance that will never complete.
       if (
+        !options.staticAuth &&
         req.method === "GET" &&
         (url.pathname === "/.well-known/oauth-protected-resource" ||
           url.pathname === `/.well-known/oauth-protected-resource${options.path}`)
@@ -373,22 +385,8 @@ export async function startHttpTransport(
         return;
       }
 
-      // OAuth2 Bearer is mandatory on the MCP endpoint. The token is opaque
-      // to us — we forward it to BoondManager, which is authoritative.
-      const accessToken = extractBearerToken(req.headers["authorization"]);
-      if (!accessToken) {
-        writeOAuthChallenge(
-          res,
-          401,
-          "Missing Bearer token. Authenticate against BoondManager and include `Authorization: Bearer <access_token>`."
-        );
-        return;
-      }
-
-      // Wrap the rest of the request lifecycle in the AsyncLocalStorage
-      // context so boond-client's `oauthContextAuth` can pull the token
-      // out when issuing API calls.
-      await oauthContext.run({ accessToken }, async () => {
+      // Core MCP dispatch — shared between OAuth and static-auth paths.
+      const dispatchMcpRequest = async (): Promise<void> => {
         if (options.stateless) {
           if (req.method !== "POST") {
             writeJsonRpcError(res, 405, "Only POST is supported in stateless mode");
@@ -477,7 +475,28 @@ export async function startHttpTransport(
         const server = createServerFactory();
         await server.connect(transport);
         await transport.handleRequest(req, res, body);
-      });
+      };
+
+      if (options.staticAuth) {
+        // Static-auth mode: env-based JWT credentials configured at startup via
+        // initClient(). No Bearer token required from the MCP client.
+        await dispatchMcpRequest();
+      } else {
+        // OAuth2 Bearer is mandatory on the MCP endpoint. The token is opaque
+        // to us — we forward it to BoondManager, which is authoritative.
+        const accessToken = extractBearerToken(req.headers["authorization"]);
+        if (!accessToken) {
+          writeOAuthChallenge(
+            res,
+            401,
+            "Missing Bearer token. Authenticate against BoondManager and include `Authorization: Bearer <access_token>`."
+          );
+          return;
+        }
+        // Wrap in AsyncLocalStorage so boond-client's oauthContextAuth can pull
+        // the token out when issuing API calls.
+        await oauthContext.run({ accessToken }, dispatchMcpRequest);
+      }
     } catch (error) {
       if (error instanceof PayloadTooLargeError) {
         if (!res.headersSent) {

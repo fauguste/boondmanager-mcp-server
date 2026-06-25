@@ -145,6 +145,21 @@ export function initClient(): void {
 }
 
 /**
+ * True when env-based credentials (JWT components, API token, or BasicAuth) are
+ * configured. Used by the HTTP transport to decide whether static-auth mode is
+ * possible without attempting a full `initClient()` call.
+ */
+export function hasEnvCredentials(): boolean {
+  return !!(
+    (envOrUndefined("BOOND_USER_TOKEN") &&
+      envOrUndefined("BOOND_CLIENT_TOKEN") &&
+      envOrUndefined("BOOND_CLIENT_KEY")) ||
+    envOrUndefined("BOOND_API_TOKEN") ||
+    (envOrUndefined("BOOND_USER") && envOrUndefined("BOOND_PASSWORD"))
+  );
+}
+
+/**
  * Install a custom auth provider — used by the HTTP transport bootstrap to
  * wire in an OAuth2 token source (where the access token is refreshed
  * transparently per request rather than baked in at startup).

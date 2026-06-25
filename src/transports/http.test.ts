@@ -56,6 +56,7 @@ const ENV_KEYS = [
   "MCP_HTTP_PUBLIC_URL",
   "BOOND_OAUTH_AUTHORIZATION_SERVER",
   "BOOND_OAUTH_SCOPES",
+  "BOOND_HTTP_STATIC_AUTH",
 ];
 
 /** Shorthand for an authenticated MCP request body (OAuth Bearer required). */
@@ -134,6 +135,19 @@ describe("resolveHttpOptions", () => {
   it("leaves allowedHosts undefined when MCP_HTTP_ALLOWED_HOSTS is unset", () => {
     const opts = resolveHttpOptions();
     expect(opts.allowedHosts).toBeUndefined();
+  });
+
+  it("reads BOOND_HTTP_STATIC_AUTH correctly", () => {
+    process.env["BOOND_HTTP_STATIC_AUTH"] = "true";
+    expect(resolveHttpOptions().staticAuth).toBe(true);
+    process.env["BOOND_HTTP_STATIC_AUTH"] = "1";
+    expect(resolveHttpOptions().staticAuth).toBe(true);
+    process.env["BOOND_HTTP_STATIC_AUTH"] = "yes";
+    expect(resolveHttpOptions().staticAuth).toBe(true);
+    process.env["BOOND_HTTP_STATIC_AUTH"] = "false";
+    expect(resolveHttpOptions().staticAuth).toBe(false);
+    delete process.env["BOOND_HTTP_STATIC_AUTH"];
+    expect(resolveHttpOptions().staticAuth).toBe(false);
   });
 });
 
@@ -478,6 +492,54 @@ describe("startHttpTransport (integration)", () => {
       result?: { serverInfo?: { name?: string } };
     };
     expect(json.result?.serverInfo?.name).toBe("boondmanager-mcp-server");
+  });
+
+  it("accepts MCP initialize without Bearer token in staticAuth mode", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34591,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+      staticAuth: true,
+    });
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        // No Authorization header
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "vitest", version: "1.0.0" },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { result?: { serverInfo?: { name?: string } } };
+    expect(json.result?.serverInfo?.name).toBe("boondmanager-mcp-server");
+  });
+
+  it("still rejects without Bearer when staticAuth is false (default)", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 34592,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+      staticAuth: false,
+    });
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      body: "{}",
+    });
+    expect(res.status).toBe(401);
   });
 
   it("rejects an oversized body with 413 (Content-Length precheck)", async () => {

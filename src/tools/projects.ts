@@ -137,8 +137,9 @@ export function registerProjectTools(server: McpServer): void {
   registerGetTool(server, OPTS);
 
   registerCreateTool(server, OPTS, ProjectCreateSchema, (params) => {
-    const { companyId, contactId, opportunityId, ...attrs } = params;
-    const body = buildJsonApiBody("project", attrs);
+    const { companyId, contactId, opportunityId, name, ...attrs } = params;
+    const apiAttrs = { ...attrs, ...(name ? { title: name } : {}) };
+    const body = buildJsonApiBody("project", apiAttrs);
     const relationships: Record<string, unknown> = {};
     if (companyId) relationships.company = { data: { id: companyId, type: "company" } };
     if (contactId) relationships.contact = { data: { id: contactId, type: "contact" } };
@@ -150,8 +151,9 @@ export function registerProjectTools(server: McpServer): void {
   });
 
   registerUpdateTool(server, OPTS, ProjectUpdateSchema, (params) => {
-    const { id, ...attrs } = params;
-    return buildJsonApiBody("project", attrs, id as string);
+    const { id, name, ...attrs } = params;
+    const apiAttrs = { ...attrs, ...(name ? { title: name } : {}) };
+    return buildJsonApiBody("project", apiAttrs, id as string);
   });
 
   registerDeleteTool(server, OPTS);

@@ -3,21 +3,26 @@ import { AbsenceSearchSchema, AbsenceCreateSchema, AbsenceUpdateSchema, IdSchema
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 
+function inclusiveDays(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 1;
+  return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
 export function registerAbsenceTools(server: McpServer): void {
-  // Search absences
   server.registerTool(
     "boond_absences_search",
     {
-      title: "Rechercher des absences",
-      description: `Recherche des absences (congés, RTT, maladie...) dans BoondManager avec filtres par ressource et période.
+      title: "Rechercher des demandes d'absence",
+      description: `Recherche des demandes d'absence dans BoondManager.
 
 Args:
-  - keywords (string, optional): Termes de recherche
-  - resourceId (string, optional): Filtrer par ID ressource
-  - startDate, endDate (string, optional): Période (YYYY-MM-DD)
+  - keywords (string, optional): Termes de recherche. resourceId est converti en COMP<id>.
+  - startMonth, endMonth (string, optional): Periode au format YYYY-MM.
   - page, pageSize: Pagination
 
-Returns: Liste des absences correspondantes.`,
+Returns: Liste des demandes d'absence correspondantes.`,
       inputSchema: AbsenceSearchSchema,
       annotations: {
         readOnlyHint: true,
@@ -27,20 +32,23 @@ Returns: Liste des absences correspondantes.`,
       },
     },
     async (params) => {
-      const query = buildSearchQuery(params);
-      const response = await apiRequest("/absences", "GET", undefined, query);
+      const { resourceId, keywords, ...rest } = params;
+      const tokens: string[] = [];
+      if (keywords) tokens.push(keywords);
+      if (resourceId) tokens.push(`COMP${resourceId}`);
+      const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
+      const response = await apiRequest("/absences-reports", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "absence") }],
       };
     }
   );
 
-  // Get absence details
   server.registerTool(
     "boond_absences_get",
     {
-      title: "Détails d'une absence",
-      description: `Récupère les informations détaillées d'une absence par son ID.`,
+      title: "Details d'une absence",
+      description: "Recupere les informations detaillees d'une demande d'absence par son ID.",
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,
@@ -57,12 +65,11 @@ Returns: Liste des absences correspondantes.`,
     }
   );
 
-  // Create absence
   server.registerTool(
     "boond_absences_create",
     {
-      title: "Créer une absence",
-      description: `Crée une nouvelle demande d'absence dans BoondManager, liée à une ressource.`,
+      title: "Creer une demande d'absence",
+      description: "Cree une demande d'absence Boond avec absencesPeriods.",
       inputSchema: AbsenceCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -72,32 +79,43 @@ Returns: Liste des absences correspondantes.`,
       },
     },
     async (params) => {
-      const { resourceId, ...attrs } = params;
-      const body = buildJsonApiBody("absence", attrs);
-      if (resourceId) {
-        (body as Record<string, Record<string, unknown>>).data.relationships = {
-          resource: { data: { id: resourceId, type: "resource" } },
-        };
-      }
+      const { resourceId, typeOf, startDate, endDate, duration, workUnitTypeReference, absencesPeriods, state, note } =
+        params;
+      const periods = absencesPeriods ?? [
+        {
+          startDate,
+          endDate,
+          duration: duration ?? inclusiveDays(startDate, endDate),
+          title: typeOf,
+          workUnitType: { reference: workUnitTypeReference ?? 2 },
+        },
+      ];
+      const body = buildJsonApiBody("absencesreport", {
+        ...(note ? { informationComments: note } : {}),
+        ...(state !== undefined ? { state } : {}),
+        absencesPeriods: periods,
+      });
+      (body as Record<string, Record<string, unknown>>).data.relationships = {
+        resource: { data: { id: resourceId, type: "resource" } },
+      };
       const response = await apiRequest("/absences-reports", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
         content: [
           {
             type: "text" as const,
-            text: `✅ Absence créée avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
+            text: `Absence creee avec succes.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
           },
         ],
       };
     }
   );
 
-  // Update absence
   server.registerTool(
     "boond_absences_update",
     {
       title: "Modifier une absence",
-      description: `Met à jour une absence existante. Seuls les champs fournis sont modifiés.`,
+      description: "Met a jour une demande d'absence existante. Seuls les champs fournis sont modifies.",
       inputSchema: AbsenceUpdateSchema,
       annotations: {
         readOnlyHint: false,
@@ -108,26 +126,25 @@ Returns: Liste des absences correspondantes.`,
     },
     async (params) => {
       const { id, ...attrs } = params;
-      const body = buildJsonApiBody("absence", attrs, id);
+      const body = buildJsonApiBody("absencesreport", attrs, id);
       const response = await apiRequest(`/absences-reports/${id}`, "PUT", body);
       return {
         content: [
           {
             type: "text" as const,
-            text: `✅ Absence #${id} mise à jour.\n\n${formatDetailResponse(response)}`,
+            text: `Absence #${id} mise a jour.\n\n${formatDetailResponse(response)}`,
           },
         ],
       };
     }
   );
 
-  // Delete absence — via la factory pour l'élicitation de confirmation + structuredContent
   registerDeleteTool(
     server,
     { entityName: "absence", entityNamePlural: "absences", apiPath: "/absences-reports", prefix: "boond_absences" },
     {
       title: "Supprimer une absence",
-      description: `Supprime une absence de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+      description: "Supprime une absence de BoondManager. Action irreversible.",
     }
   );
 }

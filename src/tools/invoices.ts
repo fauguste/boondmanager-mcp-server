@@ -18,13 +18,45 @@ const OPTS = {
   prefix: "boond_invoices",
 };
 
-/** Maps the companyId/projectId convenience inputs to JSON:API relationships. */
+/** Maps convenience inputs and simple amount fields to the Boond JSON:API body. */
 function buildInvoiceBody(params: Record<string, unknown>): unknown {
-  const { id, companyId, projectId, ...attrs } = params;
-  return buildJsonApiBody("invoice", attrs, id as string | undefined, {
+  const { id, orderId, companyId, projectId, ...rest } = params;
+  return buildJsonApiBody("invoice", invoiceAttributes(rest), id as string | undefined, {
+    order: orderId ? { id: String(orderId), type: "order" } : undefined,
     company: companyId ? { id: String(companyId), type: "company" } : undefined,
     project: projectId ? { id: String(projectId), type: "project" } : undefined,
   });
+}
+
+function invoiceRecordFromAmount(amount: number, taxRate?: number, note?: string): Record<string, unknown> {
+  return {
+    invoiceRecordType: null,
+    description: note ?? "Prestation",
+    amountExcludingTax: amount,
+    quantity: 1,
+    taxRates: [taxRate ?? 0],
+    taxes: [taxRate ?? 0],
+  };
+}
+
+function invoiceAttributes(params: Record<string, unknown>): Record<string, unknown> {
+  const { invoiceDate, amountExcludingTax, taxRate, note, ...attrs } = params;
+  return {
+    ...attrs,
+    ...(invoiceDate ? { date: invoiceDate } : {}),
+    ...(amountExcludingTax !== undefined && !Array.isArray(attrs.invoiceRecords)
+      ? {
+          invoiceRecords: [
+            invoiceRecordFromAmount(
+              Number(amountExcludingTax),
+              typeof taxRate === "number" ? taxRate : undefined,
+              note as string | undefined
+            ),
+          ],
+        }
+      : {}),
+    ...(note ? { informationComments: note } : {}),
+  };
 }
 
 export function registerInvoiceTools(server: McpServer): void {
@@ -35,15 +67,7 @@ export function registerInvoiceTools(server: McpServer): void {
     "boond_invoices_search",
     {
       title: "Rechercher des factures",
-      description: `Recherche des factures dans BoondManager avec filtres par société, projet et période.
-
-Args:
-  - keywords (string, optional): Termes de recherche (référence, société...)
-  - companyId, projectId (string, optional): Filtrer par entité liée
-  - startDate, endDate (string, optional): Période (YYYY-MM-DD)
-  - page, pageSize: Pagination
-
-Returns: Liste des factures correspondantes.`,
+      description: "Recherche des factures dans BoondManager avec filtres par societe, projet et periode.",
       inputSchema: InvoiceSearchSchema,
       outputSchema: SearchOutputSchema,
       annotations: {
@@ -68,7 +92,10 @@ Returns: Liste des factures correspondantes.`,
 
   registerGetTool(server, OPTS, { withTab: false });
   registerCreateTool(server, OPTS, InvoiceCreateSchema, buildInvoiceBody);
-  registerUpdateTool(server, OPTS, InvoiceUpdateSchema, buildInvoiceBody);
+  registerUpdateTool(server, OPTS, InvoiceUpdateSchema, buildInvoiceBody, {
+    method: "PUT",
+    pathSuffix: "information",
+  });
   registerDeleteTool(server, OPTS, {
     title: "Supprimer une facture",
     description: `Supprime une facture de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,

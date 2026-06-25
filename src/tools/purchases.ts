@@ -17,7 +17,9 @@ const PurchaseSearchSchema = z
 
 const PurchaseCreateSchema = z
   .object({
+    title: z.string().optional().describe("Titre de l'achat/sous-traitance"),
     companyId: z.string().optional().describe("ID de la société fournisseur"),
+    contactId: z.string().optional().describe("ID du contact fournisseur"),
     projectId: z.string().optional().describe("ID du projet associé"),
     state: z.number().int().optional().describe("État de l'achat"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
@@ -90,10 +92,11 @@ Returns: Liste des achats correspondants.`,
       },
     },
     async (params) => {
-      const { companyId, projectId, ...attrs } = params;
+      const { companyId, contactId, projectId, ...attrs } = params;
       const body = buildJsonApiBody("purchase", attrs);
       const relationships: Record<string, unknown> = {};
       if (companyId) relationships.company = { data: { id: companyId, type: "company" } };
+      if (contactId) relationships.contact = { data: { id: contactId, type: "contact" } };
       if (projectId) relationships.project = { data: { id: projectId, type: "project" } };
       if (Object.keys(relationships).length > 0) {
         (body as Record<string, Record<string, unknown>>).data.relationships = relationships;

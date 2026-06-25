@@ -2,8 +2,27 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResourceTimesheetSchema, TimesheetSearchSchema, TimesheetGetSchema } from "../schemas/index.js";
 import type { ResourceTimesheetInput, TimesheetSearchInput, TimesheetGetInput } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatDetailResponse } from "../services/boond-client.js";
+import { buildJsonApiBody } from "./crud-factory.js";
 import { CHARACTER_LIMIT } from "../constants.js";
 import type { JsonApiResponse } from "../types.js";
+import { z } from "zod";
+
+const TimesheetCreateSchema = z
+  .object({
+    resourceId: z.string().min(1).describe("ID de la ressource"),
+    projectId: z.string().optional().describe("ID du projet"),
+    term: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .describe("Mois au format YYYY-MM"),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
+    totalDays: z.number().optional().describe("Total jours"),
+    totalHours: z.number().optional().describe("Total heures"),
+    state: z.string().optional().describe("État de la feuille de temps"),
+    note: z.string().optional().describe("Notes"),
+  })
+  .strict();
 
 function formatTimesheetSummary(response: JsonApiResponse): string {
   const data = Array.isArray(response.data) ? response.data : [response.data];
@@ -40,6 +59,39 @@ function formatTimesheetSummary(response: JsonApiResponse): string {
 }
 
 export function registerTimesheetTools(server: McpServer): void {
+  server.registerTool(
+    "boond_timesheets_create",
+    {
+      title: "Créer une feuille de temps",
+      description: "Crée une feuille de temps mensuelle liée à une ressource.",
+      inputSchema: TimesheetCreateSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (params) => {
+      const { resourceId, projectId, ...attrs } = params;
+      const body = buildJsonApiBody("timesreport", attrs);
+      const relationships: Record<string, unknown> = {};
+      if (resourceId) relationships.resource = { data: { id: resourceId, type: "resource" } };
+      if (projectId) relationships.project = { data: { id: projectId, type: "project" } };
+      if (Object.keys(relationships).length > 0) {
+        (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
+      }
+      const response = await apiRequest("/times-reports", "POST", body);
+      const text = formatDetailResponse(response);
+      const entity = Array.isArray(response.data) ? response.data[0] : response.data;
+      return {
+        content: [
+          { type: "text" as const, text: `✅ Feuille de temps créée avec succès.\nID: ${entity?.id}\n\n${text}` },
+        ],
+      };
+    }
+  );
+
   // Get timesheets for a specific resource
   server.registerTool(
     "boond_resources_timesheets",

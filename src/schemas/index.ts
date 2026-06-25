@@ -985,6 +985,7 @@ export const ProjectCreateSchema = z
     companyId: z.string().optional().describe("ID de la société cliente"),
     contactId: z.string().optional().describe("ID du contact associé"),
     opportunityId: z.string().optional().describe("ID de l'opportunité liée"),
+    typeOf: z.number().int().optional().describe("Type de projet (ID du dictionnaire setting.typeOf.project)"),
     state: stateField("project", "État du projet (0=en cours, 1=terminé, 2=archivé...)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
@@ -996,6 +997,7 @@ export const ProjectUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID du projet à modifier"),
     name: z.string().optional().describe("Nom du projet"),
+    typeOf: z.number().int().optional().describe("Type de projet (ID du dictionnaire setting.typeOf.project)"),
     state: stateField("project", "État du projet"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
@@ -1008,13 +1010,14 @@ export const ProjectUpdateSchema = z
 export const InvoiceCreateSchema = z
   .object({
     reference: z.string().optional().describe("Référence de la facture"),
-    companyId: z.string().optional().describe("ID de la société facturée"),
-    projectId: z.string().optional().describe("ID du projet associé"),
+    orderId: z.string().optional().describe("ID du bon de commande associé"),
     state: z.number().int().optional().describe("État de la facture"),
     invoiceDate: z.string().optional().describe("Date de facturation (YYYY-MM-DD)"),
-    dueDate: z.string().optional().describe("Date d'échéance (YYYY-MM-DD)"),
+    expectedPaymentDate: z.string().optional().describe("Date d'échéance/paiement attendu (YYYY-MM-DD)"),
     amountExcludingTax: z.number().optional().describe("Montant HT"),
     taxRate: z.number().optional().describe("Taux de TVA (%)"),
+    invoiceRecords: z.array(z.record(z.string(), z.unknown())).optional().describe("Lignes de facture Boond"),
+    invoicePayments: z.array(z.record(z.string(), z.unknown())).optional().describe("Paiements client de la facture"),
     note: z.string().optional().describe("Notes / commentaires"),
   })
   .strict();
@@ -1025,9 +1028,11 @@ export const InvoiceUpdateSchema = z
     reference: z.string().optional().describe("Référence de la facture"),
     state: z.number().int().optional().describe("État de la facture"),
     invoiceDate: z.string().optional().describe("Date de facturation (YYYY-MM-DD)"),
-    dueDate: z.string().optional().describe("Date d'échéance (YYYY-MM-DD)"),
+    expectedPaymentDate: z.string().optional().describe("Date d'échéance/paiement attendu (YYYY-MM-DD)"),
     amountExcludingTax: z.number().optional().describe("Montant HT"),
     taxRate: z.number().optional().describe("Taux de TVA (%)"),
+    invoiceRecords: z.array(z.record(z.string(), z.unknown())).optional().describe("Lignes de facture Boond"),
+    invoicePayments: z.array(z.record(z.string(), z.unknown())).optional().describe("Paiements client de la facture"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
@@ -1057,7 +1062,11 @@ export const OrderCreateSchema = z
     projectId: z.string().optional().describe("ID du projet associé"),
     state: z.number().int().optional().describe("État du bon de commande"),
     orderDate: z.string().optional().describe("Date du bon de commande (YYYY-MM-DD)"),
+    startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
     amountExcludingTax: z.number().optional().describe("Montant HT"),
+    customerAgreement: z.boolean().optional().describe("Accord client reçu"),
+    schedules: z.array(z.record(z.string(), z.unknown())).optional().describe("Lignes/échéances de commande"),
     note: z.string().optional().describe("Notes / commentaires"),
   })
   .strict();
@@ -1068,7 +1077,11 @@ export const OrderUpdateSchema = z
     reference: z.string().optional().describe("Référence"),
     state: z.number().int().optional().describe("État"),
     orderDate: z.string().optional().describe("Date (YYYY-MM-DD)"),
+    startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
     amountExcludingTax: z.number().optional().describe("Montant HT"),
+    customerAgreement: z.boolean().optional().describe("Accord client reçu"),
+    schedules: z.array(z.record(z.string(), z.unknown())).optional().describe("Lignes/échéances de commande"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
@@ -1102,9 +1115,12 @@ export const DeliverySearchSchema = z
 export const AbsenceCreateSchema = z
   .object({
     resourceId: z.string().min(1).describe("ID de la ressource en absence"),
-    typeOf: z.string().min(1).describe("Type d'absence (congé payé, RTT, maladie, sans solde...)"),
+    typeOf: z.string().min(1).describe("Libellé de l'absence (congé payé, RTT, maladie, sans solde...)"),
     startDate: z.string().min(1).describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().min(1).describe("Date de fin (YYYY-MM-DD)"),
+    duration: z.number().optional().describe("Durée en jours ; calculée automatiquement si absente"),
+    workUnitTypeReference: z.number().int().min(1).optional().describe("Référence du type d'unité d'absence, défaut 1"),
+    absencesPeriods: z.array(z.record(z.string(), z.unknown())).optional().describe("Périodes d'absence Boond brutes"),
     state: z.number().int().optional().describe("État de la demande (0=en attente, 1=validé, 2=refusé...)"),
     note: z.string().optional().describe("Commentaire / motif"),
   })
@@ -1124,8 +1140,8 @@ export const AbsenceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     resourceId: z.string().optional().describe("Filtrer par ID ressource"),
-    startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
+    startMonth: z.string().optional().describe("Mois de début de période (YYYY-MM)"),
+    endMonth: z.string().optional().describe("Mois de fin de période (YYYY-MM)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
   })
@@ -1138,9 +1154,11 @@ export const ExpenseCreateSchema = z
     resourceId: z.string().min(1).describe("ID de la ressource"),
     projectId: z.string().optional().describe("ID du projet associé"),
     typeOf: z.string().optional().describe("Type de frais (transport, repas, hébergement...)"),
+    term: z.string().optional().describe("Période de la note de frais (YYYY-MM)"),
     expenseDate: z.string().min(1).describe("Date du frais (YYYY-MM-DD)"),
     amount: z.number().describe("Montant du frais"),
     currency: z.string().optional().describe("Devise (EUR, USD...)"),
+    exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
     state: z.number().int().optional().describe("État de la note de frais"),
     note: z.string().optional().describe("Description / justification"),
   })
@@ -1149,7 +1167,9 @@ export const ExpenseCreateSchema = z
 export const ExpenseUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID de la note de frais à modifier"),
+    term: z.string().optional().describe("Période de la note de frais (YYYY-MM)"),
     amount: z.number().optional().describe("Montant"),
+    exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
     state: z.number().int().optional().describe("État"),
     note: z.string().optional().describe("Description"),
   })
@@ -1250,7 +1270,10 @@ export const PaymentSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     invoiceId: z.string().optional().describe("Filtrer par ID facture"),
+    purchaseId: z.string().optional().describe("Filtrer par ID achat"),
     companyId: z.string().optional().describe("Filtrer par ID société"),
+    projectId: z.string().optional().describe("Filtrer par ID projet"),
+    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),

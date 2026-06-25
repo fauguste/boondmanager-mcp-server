@@ -183,4 +183,36 @@ describe("registerPositioningTools", () => {
       expect(Object.keys(body.data.attributes).sort()).toEqual(["informationComments", "startDate"]);
     });
   });
+
+  describe("boond_positionings_create handler", () => {
+    function createHandler() {
+      registerPositioningTools(server);
+      const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_positionings_create");
+      return call?.[2] as (params: unknown) => Promise<{
+        content: Array<{ type: string; text: string }>;
+      }>;
+    }
+
+    beforeEach(() => {
+      vi.mocked(apiRequest).mockClear();
+      vi.mocked(apiRequest).mockResolvedValue({
+        data: { id: "88", type: "positioning", attributes: { state: 3 } },
+      } as never);
+    });
+
+    it("uses dependsOn for candidate positioning creation", async () => {
+      const handler = createHandler();
+      await handler({ candidateId: "6", opportunityId: "4", state: 3, startDate: "2026-07-01" });
+      expect(apiRequest).toHaveBeenCalledWith("/positionings", "POST", {
+        data: {
+          type: "positioning",
+          attributes: { state: 3, startDate: "2026-07-01" },
+          relationships: {
+            dependsOn: { data: { id: "6", type: "candidate" } },
+            opportunity: { data: { id: "4", type: "opportunity" } },
+          },
+        },
+      });
+    });
+  });
 });

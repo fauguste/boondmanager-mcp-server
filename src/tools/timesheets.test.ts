@@ -15,9 +15,9 @@ describe("registerTimesheetTools", () => {
     server = createMockServer();
   });
 
-  it("should register 3 timesheet tools", () => {
+  it("should register 4 timesheet tools", () => {
     registerTimesheetTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(3);
+    expect(server.registerTool).toHaveBeenCalledTimes(4);
   });
 
   it("should register boond_resources_timesheets tool", () => {
@@ -32,18 +32,24 @@ describe("registerTimesheetTools", () => {
     expect(names).toContain("boond_timesheets_search");
   });
 
+  it("should register boond_timesheets_create tool", () => {
+    registerTimesheetTools(server);
+    const names = vi.mocked(server.registerTool).mock.calls.map((c) => c[0]);
+    expect(names).toContain("boond_timesheets_create");
+  });
+
   it("should register boond_timesheets_get tool", () => {
     registerTimesheetTools(server);
     const names = vi.mocked(server.registerTool).mock.calls.map((c) => c[0]);
     expect(names).toContain("boond_timesheets_get");
   });
 
-  it("should register all tools as readOnly", () => {
+  it("should register read tools as readOnly and create as write", () => {
     registerTimesheetTools(server);
-    for (const call of vi.mocked(server.registerTool).mock.calls) {
-      const [, metadata] = call;
-      expect(metadata.annotations?.readOnlyHint).toBe(true);
-      expect(metadata.annotations?.destructiveHint).toBe(false);
-    }
+    const calls = vi.mocked(server.registerTool).mock.calls;
+    expect(calls.find((c) => c[0] === "boond_timesheets_create")?.[1].annotations?.readOnlyHint).toBe(false);
+    expect(calls.find((c) => c[0] === "boond_timesheets_search")?.[1].annotations?.readOnlyHint).toBe(true);
+    expect(calls.find((c) => c[0] === "boond_timesheets_get")?.[1].annotations?.readOnlyHint).toBe(true);
+    expect(calls.find((c) => c[0] === "boond_resources_timesheets")?.[1].annotations?.readOnlyHint).toBe(true);
   });
 });

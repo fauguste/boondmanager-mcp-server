@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { initClient, initClientWithAuth, oauthContextAuth } from "./services/boond-client.js";
+import { initClient, initClientWithAuth, oauthContextAuth, hasEnvCredentials } from "./services/boond-client.js";
 import { createMcpServer, REGISTERED_DOMAINS } from "./server.js";
 import { runUpdateNotification } from "./services/update-checker.js";
 import { resolveHttpOptions, startHttpTransport } from "./transports/http.js";
@@ -34,22 +34,50 @@ function scheduleUpdateCheck(): void {
   void runUpdateNotification({ currentVersion: meta.version, packageName: meta.name });
 }
 
+function resolveStaticAuth(): boolean {
+  const v = process.env["BOOND_HTTP_STATIC_AUTH"];
+  if (!v || v.startsWith("${")) return false;
+  return v.toLowerCase() === "true" || v === "1" || v.toLowerCase() === "yes";
+}
+
 async function main(): Promise<void> {
   const kind = resolveTransport();
 
   if (kind === "http") {
-    // HTTP transport: OAuth2 only. The MCP server is a *protected resource*
-    // — it does not hold any OAuth client secrets and does not store tokens.
-    // Each MCP request carries its own `Authorization: Bearer <token>`,
-    // which the transport pushes into an AsyncLocalStorage context that the
-    // boond-client reads to call BoondManager on behalf of the user.
-    initClientWithAuth(oauthContextAuth);
+    const useStaticAuth = resolveStaticAuth();
+
+    if (useStaticAuth) {
+      // Static-auth mode: operator provides env credentials; no per-request
+      // OAuth token needed from MCP clients (e.g. Hermes, CI pipelines,
+      // single-tenant self-hosted deployments).
+      if (!hasEnvCredentials()) {
+        console.error(
+          "⚠️  BOOND_HTTP_STATIC_AUTH is set but no credentials found. " +
+            "Set BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY (or BOOND_API_TOKEN)."
+        );
+        process.exit(1);
+      }
+      try {
+        initClient();
+      } catch (error) {
+        console.error("⚠️  Failed to initialise env-based credentials:", (error as Error).message);
+        process.exit(1);
+      }
+    } else {
+      // OAuth2 protected resource: each MCP request must carry its own Bearer.
+      initClientWithAuth(oauthContextAuth);
+    }
+
     const options = resolveHttpOptions();
     const handle = await startHttpTransport(createMcpServer, options);
     console.error("🚀 BoondManager MCP Server running (streamable HTTP transport)");
     console.error(`📡 Endpoint: http://${handle.address.host}:${handle.address.port}${handle.address.path}`);
     console.error(`🔑 Mode: ${options.stateless ? "stateless" : "stateful"}`);
-    console.error("🔐 Boond auth: OAuth2 (per-request Bearer from MCP client)");
+    if (useStaticAuth) {
+      console.error("🔐 Boond auth: JWT statique (credentials env, pas de Bearer requis par le client)");
+    } else {
+      console.error("🔐 Boond auth: OAuth2 (per-request Bearer from MCP client)");
+    }
     console.error(`📦 Domains: ${REGISTERED_DOMAINS.join(", ")}`);
 
     const shutdown = async (signal: string): Promise<void> => {

@@ -93,8 +93,8 @@ Returns: Liste des positionnements correspondants.`,
       const { candidateId, resourceId, projectId, opportunityId, ...attrs } = params;
       const body = buildJsonApiBody("positioning", attrs);
       const relationships: Record<string, unknown> = {};
-      if (candidateId) relationships.candidate = { data: { id: candidateId, type: "candidate" } };
-      if (resourceId) relationships.resource = { data: { id: resourceId, type: "resource" } };
+      if (candidateId) relationships.dependsOn = { data: { id: candidateId, type: "candidate" } };
+      if (resourceId) relationships.dependsOn = { data: { id: resourceId, type: "resource" } };
       if (projectId) relationships.project = { data: { id: projectId, type: "project" } };
       if (opportunityId) relationships.opportunity = { data: { id: opportunityId, type: "opportunity" } };
       if (Object.keys(relationships).length > 0) {
