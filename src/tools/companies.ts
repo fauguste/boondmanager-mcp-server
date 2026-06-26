@@ -164,10 +164,19 @@ export function registerCompanyTools(server: McpServer): void {
     return buildJsonApiBody("company", attrs);
   });
 
-  registerUpdateTool(server, OPTS, CompanyUpdateSchema, (params) => {
-    const { id, ...attrs } = params;
-    return buildJsonApiBody("company", attrs, id as string);
-  });
+  // Updates go through PUT /companies/{id}/information — the base resource
+  // returns 405 on PATCH (issue #134, same root cause as #124). buildJsonApiBody
+  // drops undefined values, so PUT still only touches the supplied fields.
+  registerUpdateTool(
+    server,
+    OPTS,
+    CompanyUpdateSchema,
+    (params) => {
+      const { id, ...attrs } = params;
+      return buildJsonApiBody("company", attrs, id as string);
+    },
+    { method: "PUT", pathSuffix: "information" }
+  );
 
   registerDeleteTool(server, OPTS);
 

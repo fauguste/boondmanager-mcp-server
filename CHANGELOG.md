@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.1] - 2026-06-26
+
+Correctif du `405 Method Not Allowed` sur la mise à jour des principales entités. Aucun changement de catalogue — toujours **176 outils, 11 prompts, 22 ressources**.
+
+### Fixed
+
+- **Les outils `*_update` renvoyaient systématiquement `405 Method Not Allowed` (PATCH sur la ressource de base)** ([#134](https://github.com/fauguste/boondmanager-mcp-server/issues/134)) : comme pour les opportunités ([#124](https://github.com/fauguste/boondmanager-mcp-server/issues/124)), l'API BoondManager n'accepte pas `PATCH` sur la ressource de base de ces entités. La mise à jour cible désormais `PUT /{entité}/{id}/information` (endpoint documenté dans la RAML). Le corps reste partiel — seuls les champs fournis sont envoyés. Entités corrigées : **candidates, contacts, companies, resources, projects, products, invoices, orders**. Merci @ebktva pour le signalement détaillé et l'analyse de la cause racine.
+
 ## [2.7.0] - 2026-06-19
 
 Nouvel outil `boond_actions_update` pour modifier une action sans la supprimer/recréer. Catalogue : **176 outils** (175 → 176), 11 prompts, 22 ressources.

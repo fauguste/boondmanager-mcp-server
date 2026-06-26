@@ -39,7 +39,12 @@ Returns: Liste des bons de commande correspondants.`,
   });
   registerGetTool(server, OPTS, { withTab: false });
   registerCreateTool(server, OPTS, OrderCreateSchema, buildOrderBody);
-  registerUpdateTool(server, OPTS, OrderUpdateSchema, buildOrderBody);
+  // Updates go through PUT /orders/{id}/information — the base resource
+  // returns 405 on PATCH (issue #134, same root cause as #124).
+  registerUpdateTool(server, OPTS, OrderUpdateSchema, buildOrderBody, {
+    method: "PUT",
+    pathSuffix: "information",
+  });
   registerDeleteTool(server, OPTS, {
     title: "Supprimer un bon de commande",
     description: `Supprime un bon de commande de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,

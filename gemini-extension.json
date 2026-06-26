@@ -1,6 +1,6 @@
 {
   "name": "boondmanager",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "Serveur MCP pour l'API BoondManager (ERP/CRM ESN) - 176 outils, 11 prompts, 22 ressources.",
   "mcpServers": {
     "boondmanager": {
