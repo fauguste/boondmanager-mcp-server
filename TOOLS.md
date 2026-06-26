@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**176 tools** across **38 domains** · **11 prompts** · **22 resources**.
+**180 tools** across **38 domains** · **11 prompts** · **22 resources**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -13,10 +13,10 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_absences_create` | Créer une absence | write |
+| `boond_absences_create` | Creer une demande d'absence | write |
 | `boond_absences_delete` | Supprimer une absence | delete |
-| `boond_absences_get` | Détails d'une absence | read · idempotent |
-| `boond_absences_search` | Rechercher des absences | read · idempotent · open-world |
+| `boond_absences_get` | Details d'une absence | read · idempotent |
+| `boond_absences_search` | Rechercher des demandes d'absence | read · idempotent · open-world |
 | `boond_absences_update` | Modifier une absence | write · idempotent |
 
 ### accounts (2)
@@ -128,11 +128,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_contracts_create` | Créer un contrat | write |
 | `boond_contracts_get` | Détails d'un contrat | read · idempotent |
 
-### deliveries (2)
+### deliveries (3)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_deliveries_get` | Détails d'une livraison / CRA | read · idempotent |
+| `boond_deliveries_create` | Creer une prestation/livraison | write |
+| `boond_deliveries_get` | Details d'une livraison / CRA | read · idempotent |
 | `boond_deliveries_search` | Rechercher des livraisons / CRA | read · idempotent · open-world |
 
 ### documents (3)
@@ -209,11 +210,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_orders_search` | Rechercher des bons de commande | read · idempotent · open-world |
 | `boond_orders_update` | Modifier un(e) bon de commande | write · idempotent |
 
-### payments (2)
+### payments (3)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_payments_get` | Détails d'un paiement | read · idempotent |
+| `boond_payments_create` | Creer un paiement | write |
+| `boond_payments_get` | Details d'un paiement | read · idempotent |
 | `boond_payments_search` | Rechercher des paiements | read · idempotent · open-world |
 
 ### planning_absences (1)
@@ -266,11 +268,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_projects_simulation` | Simulation financière d'un projet | read · idempotent |
 | `boond_projects_update` | Modifier un(e) projet | write · idempotent |
 
-### provider_invoices (2)
+### provider_invoices (3)
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_provider_invoices_get` | Détails d'une facture fournisseur | read · idempotent |
+| `boond_provider_invoices_create` | Creer une facture fournisseur | write |
+| `boond_provider_invoices_get` | Details d'une facture fournisseur | read · idempotent |
 | `boond_provider_invoices_search` | Rechercher des factures fournisseur | read · idempotent · open-world |
 
 ### purchases (4)
@@ -331,10 +334,11 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_threads_get` | Détails d'un(e) fil de discussion | read · idempotent |
 | `boond_threads_search` | Rechercher des fils de discussion | read · idempotent · open-world |
 
-### timesheets (2)
+### timesheets (3)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_timesheets_create` | Créer une feuille de temps | write |
 | `boond_timesheets_get` | Détails d'une feuille de temps | read · idempotent |
 | `boond_timesheets_search` | Rechercher des feuilles de temps | read · idempotent · open-world |
 
