@@ -70,6 +70,8 @@ Returns: Liste des bons de commande correspondants.`,
   });
   registerGetTool(server, OPTS, { withTab: false });
   registerCreateTool(server, OPTS, OrderCreateSchema, buildOrderBody);
+  // Updates go through PUT /orders/{id}/information — the base resource
+  // returns 405 on PATCH (issue #134, same root cause as #124).
   registerUpdateTool(server, OPTS, OrderUpdateSchema, buildOrderBody, {
     method: "PUT",
     pathSuffix: "information",

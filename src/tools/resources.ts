@@ -337,10 +337,19 @@ export function registerResourceTools(server: McpServer): void {
     return buildJsonApiBody("resource", attrs);
   });
 
-  registerUpdateTool(server, OPTS, ResourceUpdateSchema, (params) => {
-    const { id, ...attrs } = params;
-    return buildJsonApiBody("resource", attrs, id as string);
-  });
+  // Updates go through PUT /resources/{id}/information — the base resource
+  // returns 405 on PATCH (issue #134, same root cause as #124). buildJsonApiBody
+  // drops undefined values, so PUT still only touches the supplied fields.
+  registerUpdateTool(
+    server,
+    OPTS,
+    ResourceUpdateSchema,
+    (params) => {
+      const { id, ...attrs } = params;
+      return buildJsonApiBody("resource", attrs, id as string);
+    },
+    { method: "PUT", pathSuffix: "information" }
+  );
 
   registerDeleteTool(server, OPTS);
 

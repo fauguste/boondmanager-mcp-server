@@ -92,6 +92,8 @@ export function registerInvoiceTools(server: McpServer): void {
 
   registerGetTool(server, OPTS, { withTab: false });
   registerCreateTool(server, OPTS, InvoiceCreateSchema, buildInvoiceBody);
+  // Updates go through PUT /invoices/{id}/information — the base resource
+  // returns 405 on PATCH (issue #134, same root cause as #124).
   registerUpdateTool(server, OPTS, InvoiceUpdateSchema, buildInvoiceBody, {
     method: "PUT",
     pathSuffix: "information",

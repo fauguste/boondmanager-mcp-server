@@ -150,11 +150,20 @@ export function registerProjectTools(server: McpServer): void {
     return body;
   });
 
-  registerUpdateTool(server, OPTS, ProjectUpdateSchema, (params) => {
-    const { id, name, ...attrs } = params;
-    const apiAttrs = { ...attrs, ...(name ? { title: name } : {}) };
-    return buildJsonApiBody("project", apiAttrs, id as string);
-  });
+  // Updates go through PUT /projects/{id}/information — the base resource
+  // returns 405 on PATCH (issue #134, same root cause as #124). buildJsonApiBody
+  // drops undefined values, so PUT still only touches the supplied fields.
+  registerUpdateTool(
+    server,
+    OPTS,
+    ProjectUpdateSchema,
+    (params) => {
+      const { id, name, ...attrs } = params;
+      const apiAttrs = { ...attrs, ...(name ? { title: name } : {}) };
+      return buildJsonApiBody("project", apiAttrs, id as string);
+    },
+    { method: "PUT", pathSuffix: "information" }
+  );
 
   registerDeleteTool(server, OPTS);
 

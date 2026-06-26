@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerResourceTools, mergeTechnicalData } from "./resources.js";
 import * as boondClient from "../services/boond-client.js";
@@ -98,6 +98,30 @@ describe("registerResourceTools", () => {
     expect(byName.get("boond_resources_reference_create")?.annotations?.destructiveHint).toBe(false);
     expect(byName.get("boond_resources_reference_update")?.annotations?.destructiveHint).toBe(false);
     expect(byName.get("boond_resources_reference_delete")?.annotations?.destructiveHint).toBe(true);
+  });
+
+  describe("boond_resources_update handler", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("updates via PUT /resources/{id}/information (issue #134)", async () => {
+      registerResourceTools(server);
+      const apiSpy = vi
+        .spyOn(boondClient, "apiRequest")
+        .mockResolvedValue({ data: { id: "55", type: "resource", attributes: {} } } as never);
+
+      const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_resources_update");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const handler = call![2] as any;
+      await handler({ id: "55", phone1: "+33769594357" });
+
+      const [path, method] = apiSpy.mock.calls[0];
+      // The base resource returns 405 on PATCH; updates target the
+      // /information sub-resource with PUT.
+      expect(path).toBe("/resources/55/information");
+      expect(method).toBe("PUT");
+    });
   });
 
   describe("boond_resources_technical_data_update handler", () => {
