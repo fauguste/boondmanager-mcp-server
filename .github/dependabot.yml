@@ -32,6 +32,13 @@ updates:
       - "fauguste"
     labels:
       - "ci"
+    groups:
+      # Single PR for all action bumps — sub-actions sharing a repo
+      # (github/codeql-action/init|autobuild|analyze) must move together,
+      # otherwise CodeQL fails on a version mismatch.
+      github-actions:
+        patterns:
+          - "*"
 
   # Docker base image
   - package-ecosystem: "docker"
