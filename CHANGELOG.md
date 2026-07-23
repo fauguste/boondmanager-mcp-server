@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.8.2] - 2026-07-23
+
+Release de maintenance : mises à jour de sécurité et de correctifs des dépendances (Dependabot) et fiabilisation des tests HTTP. Aucun changement fonctionnel. Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
+
+### Changed
+
+- **Dépendances runtime (transitives)** : bump de `hono` (4.12.25 → 4.12.31, [#159](https://github.com/fauguste/boondmanager-mcp-server/pull/159)), `body-parser` (2.2.2 → 2.3.0, [#157](https://github.com/fauguste/boondmanager-mcp-server/pull/157)) et `fast-uri` (3.1.2 → 3.1.4, [#160](https://github.com/fauguste/boondmanager-mcp-server/pull/160)) — correctifs amont, lockfile uniquement.
+- **Dev-dependencies** : bump de `brace-expansion` (5.0.6 → 5.0.8, [#155](https://github.com/fauguste/boondmanager-mcp-server/pull/155), [#158](https://github.com/fauguste/boondmanager-mcp-server/pull/158)) et du groupe dev-dependencies ([#150](https://github.com/fauguste/boondmanager-mcp-server/pull/150), [#153](https://github.com/fauguste/boondmanager-mcp-server/pull/153)) — rien n'est embarqué dans le paquet publié.
+- **GitHub Actions & image de base** : bump des groupes d'actions Dependabot ([#151](https://github.com/fauguste/boondmanager-mcp-server/pull/151), [#154](https://github.com/fauguste/boondmanager-mcp-server/pull/154)) et de l'image Docker Node ([#149](https://github.com/fauguste/boondmanager-mcp-server/pull/149)).
+
+### Fixed
+
+- **Fiabilisation des tests HTTP** ([#156](https://github.com/fauguste/boondmanager-mcp-server/pull/156)) : suppression de la flakiness `EADDRINUSE` en utilisant des ports éphémères.
+
 ## [2.8.1] - 2026-07-08
 
 Correctif du plafond `maxResults` par route (signalement de l'équipe technique BoondManager) et mises à jour de maintenance (Dependabot). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
