@@ -189,7 +189,7 @@ describe("startHttpTransport (integration)", () => {
   it("serves /healthz without authentication", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34561,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -207,7 +207,7 @@ describe("startHttpTransport (integration)", () => {
   it("serves /healthz even when the Host header is not in the allow-list", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34562,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -222,7 +222,7 @@ describe("startHttpTransport (integration)", () => {
   it("does not answer /healthz on non-GET methods", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34563,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -234,7 +234,7 @@ describe("startHttpTransport (integration)", () => {
   it("returns 404 for unknown paths", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34567,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -246,7 +246,7 @@ describe("startHttpTransport (integration)", () => {
   it("rejects GET in stateless mode with 405", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34568,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -262,7 +262,7 @@ describe("startHttpTransport (integration)", () => {
   it("returns 401 with a WWW-Authenticate challenge when no Bearer token is present", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34569,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -281,7 +281,7 @@ describe("startHttpTransport (integration)", () => {
   it("rejects requests with a non-Bearer Authorization scheme", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34579,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -297,7 +297,7 @@ describe("startHttpTransport (integration)", () => {
   it("publishes RFC 9728 protected-resource metadata at /.well-known/oauth-protected-resource", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34580,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -315,7 +315,7 @@ describe("startHttpTransport (integration)", () => {
   it("serves the path-suffixed metadata variant per RFC 9728 §3.2", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34581,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -331,7 +331,7 @@ describe("startHttpTransport (integration)", () => {
     process.env["BOOND_OAUTH_SCOPES"] = "candidates,resources";
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34582,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -345,7 +345,7 @@ describe("startHttpTransport (integration)", () => {
   it("reaps idle stateful sessions on sweep", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34571,
+      port: 0,
       path: "/mcp",
       stateless: false,
       enableJsonResponse: true,
@@ -391,7 +391,7 @@ describe("startHttpTransport (integration)", () => {
   it("rejects requests with a Host header outside the allow-list", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34572,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -405,7 +405,7 @@ describe("startHttpTransport (integration)", () => {
   it("accepts requests with a Host header in the configured allow-list", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "0.0.0.0",
-      port: 34573,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -436,7 +436,7 @@ describe("startHttpTransport (integration)", () => {
   it("disables host validation when allowedHosts is `['*']`", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34574,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -464,7 +464,7 @@ describe("startHttpTransport (integration)", () => {
   it("responds to an MCP initialize request in stateless mode", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34570,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -497,7 +497,7 @@ describe("startHttpTransport (integration)", () => {
   it("accepts MCP initialize without Bearer token in staticAuth mode", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34591,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -529,7 +529,7 @@ describe("startHttpTransport (integration)", () => {
   it("still rejects without Bearer when staticAuth is false (default)", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34592,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -545,7 +545,7 @@ describe("startHttpTransport (integration)", () => {
   it("rejects an oversized body with 413 (Content-Length precheck)", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34574,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,
@@ -562,7 +562,7 @@ describe("startHttpTransport (integration)", () => {
   it("rejects new sessions with 503 once the session cap is reached", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34575,
+      port: 0,
       path: "/mcp",
       stateless: false,
       enableJsonResponse: true,
@@ -603,7 +603,7 @@ describe("startHttpTransport (integration)", () => {
     // publicUrl whose host embeds the path string ('/mcp') must not be mangled.
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
-      port: 34576,
+      port: 0,
       path: "/mcp",
       stateless: true,
       enableJsonResponse: true,

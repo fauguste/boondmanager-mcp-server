@@ -523,8 +523,13 @@ export async function startHttpTransport(
     });
   });
 
+  // Report the port the OS actually bound. When options.port is 0 (ephemeral),
+  // the kernel picks a free port and only server.address() knows which one.
+  const bound = httpServer.address();
+  const boundPort = bound && typeof bound === "object" ? bound.port : options.port;
+
   return {
-    address: { host: options.host, port: options.port, path: options.path },
+    address: { host: options.host, port: boundPort, path: options.path },
     sessionCount: () => sessions.size,
     sweepIdleSessions,
     close: async () => {
