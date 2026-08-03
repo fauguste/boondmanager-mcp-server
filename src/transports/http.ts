@@ -33,6 +33,15 @@ export interface HttpTransportOptions {
    */
   allowedHosts?: string[];
   /**
+   * Allow-list of `Origin` header values (scheme + host + port) accepted from
+   * browser-based clients. A request with **no** `Origin` is always accepted
+   * (curl, gateways, non-browser MCP clients); a request carrying an `Origin`
+   * outside this list gets a `403` (MCP 2025-11-25 requirement). Empty array =
+   * validation disabled. Use `["*"]` to opt out explicitly. When undefined, the
+   * loopback origins are applied if bound to a loopback interface.
+   */
+  allowedOrigins?: string[];
+  /**
    * Public URL clients use to reach this MCP endpoint — used as the
    * `resource` field of the protected-resource metadata and in the
    * `WWW-Authenticate` challenge. Defaults to `http://{host}:{port}{path}`
@@ -86,14 +95,21 @@ function readPositiveInt(key: string, fallback: number): number {
   return Math.floor(parsed);
 }
 
-function readAllowedHosts(): string[] | undefined {
-  const raw = readEnv("MCP_HTTP_ALLOWED_HOSTS");
+function readCsvEnv(key: string): string[] | undefined {
+  const raw = readEnv(key);
   if (raw === undefined) return undefined;
-  const parts = raw
+  return raw
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-  return parts;
+}
+
+function readAllowedHosts(): string[] | undefined {
+  return readCsvEnv("MCP_HTTP_ALLOWED_HOSTS");
+}
+
+function readAllowedOrigins(): string[] | undefined {
+  return readCsvEnv("MCP_HTTP_ALLOWED_ORIGINS");
 }
 
 /**
@@ -120,6 +136,44 @@ export function resolveAllowedHosts(configured: string[] | undefined, host: stri
     return configured;
   }
   if (LOOPBACK_HOSTS.has(host)) return LOCALHOST_ALLOWED_HOSTS;
+  return [];
+}
+
+/**
+ * Canonical form of an origin for comparison: lowercased (scheme and host are
+ * case-insensitive) and without a trailing slash (some clients send
+ * `http://localhost:3000/`, the spec form has no path).
+ */
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Resolves the effective `Origin` allow-list, mirroring `resolveAllowedHosts`:
+ * an explicit list wins, a sole `*` disables validation, a `*` mixed with real
+ * origins is dropped with a warning (validation stays on), and the loopback
+ * default only applies when bound to a loopback interface. Returned entries are
+ * normalised (see `normalizeOrigin`) so the request-time comparison is exact.
+ *
+ * Unlike hosts, origins are port-sensitive — a page served from
+ * `http://localhost:8080` is a different origin from the server on
+ * `http://localhost:3000` — so the default list embeds the bound port.
+ */
+export function resolveAllowedOrigins(configured: string[] | undefined, host: string, port: number): string[] {
+  if (configured && configured.length > 0) {
+    if (configured.includes("*")) {
+      if (configured.length === 1) return [];
+      logger.warn(
+        { allowedOrigins: configured },
+        "MCP_HTTP_ALLOWED_ORIGINS contains '*' alongside other origins; ignoring '*' and keeping Origin validation enabled. Set it to exactly '*' to disable validation."
+      );
+      return configured.filter((o) => o !== "*").map(normalizeOrigin);
+    }
+    return configured.map(normalizeOrigin);
+  }
+  if (LOOPBACK_HOSTS.has(host)) {
+    return ["localhost", "127.0.0.1", "[::1]"].map((h) => `http://${h}:${port}`);
+  }
   return [];
 }
 
@@ -161,6 +215,7 @@ export function resolveHttpOptions(): HttpTransportOptions {
     sessionSweepIntervalMs: readPositiveInt("MCP_HTTP_SESSION_SWEEP_INTERVAL_MS", DEFAULT_SESSION_SWEEP_INTERVAL_MS),
     maxSessions: readPositiveInt("MCP_HTTP_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
     allowedHosts: readAllowedHosts(),
+    allowedOrigins: readAllowedOrigins(),
     publicUrl: readEnv("MCP_HTTP_PUBLIC_URL"),
     staticAuth,
   };
@@ -255,6 +310,10 @@ export async function startHttpTransport(
   const sessionSweepIntervalMs = options.sessionSweepIntervalMs ?? DEFAULT_SESSION_SWEEP_INTERVAL_MS;
   const maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   const allowedHosts = resolveAllowedHosts(options.allowedHosts, options.host);
+  // Filled in right after listen(): the default origin allow-list embeds the
+  // bound port, which is only known once the OS assigned it (options.port === 0).
+  // No request can reach the handler before then.
+  let allowedOrigins: string[] = [];
   const resourceUrl = resolveResourceUrl(options);
   const authorizationServer = resolveAuthorizationServer();
   const advertisedScopes = resolveAdvertisedScopes();
@@ -351,6 +410,20 @@ export async function startHttpTransport(
         }
         if (!allowedHosts.includes(hostname)) {
           writeJsonRpcError(res, 403, `Invalid Host: ${hostname}`);
+          return;
+        }
+      }
+
+      // Origin validation (MCP 2025-11-25): a browser-initiated request coming
+      // from an unexpected origin must be rejected with 403. A *missing* Origin
+      // is allowed — non-browser clients (curl, gateways, MCP CLI clients)
+      // never send one, and the Host check above already covers DNS rebinding.
+      // Like the Host check, this runs after /healthz so probes stay unaffected.
+      if (allowedOrigins.length > 0) {
+        const originHeader = req.headers.origin;
+        const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+        if (origin && !allowedOrigins.includes(normalizeOrigin(origin))) {
+          writeJsonRpcError(res, 403, `Invalid Origin: ${origin}`);
           return;
         }
       }
@@ -527,6 +600,8 @@ export async function startHttpTransport(
   // the kernel picks a free port and only server.address() knows which one.
   const bound = httpServer.address();
   const boundPort = bound && typeof bound === "object" ? bound.port : options.port;
+
+  allowedOrigins = resolveAllowedOrigins(options.allowedOrigins, options.host, boundPort);
 
   return {
     address: { host: options.host, port: boundPort, path: options.path },
