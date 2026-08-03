@@ -109,6 +109,42 @@ the file server-side; the MCP server never reads local files), with
 `parsing: true` to trigger Boond's AI resume parsing on `candidateResume`.
 Delete goes through the factory (elicitation + structuredContent).
 
+**List summaries** (`src/services/boond-client.ts::formatEntitySummary`): one
+line per search result. Rows are normally identified by name / `value` /
+`title`. Rows that have none of those — `/invoices`, `/orders`, `/actions`,
+`/deliveries-groupments`, `/projects` are keyed on a reference, a number or a
+date — fall back to `fallbackIdentityParts()`, which appends `number`,
+`reference`, the date (or `startDate`→`endDate` window), up to
+`MAX_FALLBACK_AMOUNTS` turnover figures, `typeOf`, and a `Note: "…"` excerpt of
+`text`. The fallback is **conditional on purpose**: `/resources` and
+`/opportunities` also carry `reference` and amount attributes, and appending
+them there would inflate every line for no gain. When touching this, keep the
+regression tests in `boond-client.test.ts` that pin the named-row output
+byte-for-byte.
+
+Invariants the excerpt path must keep (each has a test):
+
+- `text` is excerpted **only when it is a string** — `text: null` / nested
+  objects must not print `null` / `[object Object]`.
+- The note is **labelled and quoted** (`Note: "…"`): it is end-user CRM prose,
+  so the model has to read it as a data field, not as server-authored text.
+- Tags are stripped with `HTML_TAG_RE` (tag name required after `<`, quoted
+  attribute values matched explicitly), never `/<[^>]*>/` — that regex ate user
+  text between a `<` and a later `>`. Entities are decoded (`decodeHtmlEntities`).
+- Truncation runs on code points (`Array.from`), so an emoji on the
+  `MAX_TEXT_EXCERPT` boundary can't become an unpaired surrogate.
+- Attribute values go through the shared `renderAttributeValue()` — the same
+  helper `formatProjectedSummary` uses, so object-shaped amounts render
+  identically on both paths.
+
+**List truncation** (`formatListResponse`): a page over `CHARACTER_LIMIT` is cut
+**on line boundaries** and ends with `[Résultats tronqués : shown/total
+ligne(s) affichée(s) …]`. Enriched fallback rows are several times longer than
+the bare `[type #id] | Statut: n` they replaced, so a 500-row `/actions` page
+can now hit the limit; a mid-line cut used to emit a half-row that looked
+complete and hid the row count from the model. The result is always
+≤ `CHARACTER_LIMIT`.
+
 **Error formatting** (`src/services/boond-client.ts`): non-2xx responses
 are surfaced through `formatApiError()` which uses
 `parseBoondErrorBody()` to extract `errors[].detail` from BoondManager's
@@ -207,11 +243,22 @@ Common gotchas:
   is CV/full-text.
 - Pagination: `pageSize` is the input name, mapped to `maxResults` for
   the API; `MAX_PAGE_SIZE = 500`, `DEFAULT_PAGE_SIZE = 30`.
-- **`fields`** (the six main search tools only): client-side projection —
-  the listed attribute names replace the standard one-line summary in the
-  output. It is **never** forwarded to the API (`buildSearchQuery` strips
-  it); unknown names are skipped silently. Use it to keep large result
-  pages token-cheap (e.g. `fields: ["title", "updateDate"]`).
+- **`fields`** (every search tool except `boond_timesheets_search` and the
+  `boond_reporting_*` family, which render through their own formatters):
+  client-side projection — the listed attribute names replace the standard
+  one-line summary in the output. It is **never** forwarded to the API
+  (`buildSearchQuery` strips it); unknown names are skipped silently. Use it
+  to keep large result pages token-cheap (e.g. `fields: ["title", "updateDate"]`).
+  Adding it to a new search schema means adding `fields: fieldsField` to the
+  schema **and** passing `params.fields` to `formatListResponse` — the
+  crud-factory does this automatically, hand-rolled tools do not
+  (`src/tools/fields-projection.test.ts` asserts the forwarding for every
+  hand-rolled search tool; add a row there for a new one).
+  `fieldsField`'s description is deliberately terse: it is duplicated into ~32
+  tool schemas, so each character costs ~32 bytes of the `tools/list` payload.
+  Tools declaring an `outputSchema` must project through the same
+  `entity.attributes ?? entity` bag as the text path (`buildListStructured`), or
+  flat reference rows (`/calendars`, dictionary payloads) come back as bare ids.
 
 The Zod schemas in `src/schemas/index.ts` are `.strict()`, so any caller
 passing an old/invalid filter name (e.g., `mainManagers`) gets a clear

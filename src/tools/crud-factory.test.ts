@@ -306,6 +306,27 @@ describe("buildListStructured", () => {
     expect(structured.count).toBe(1);
     expect(structured.items[0].id).toBe("7");
   });
+
+  it("projects the selected attributes", () => {
+    const structured = buildListStructured(
+      { data: [{ id: "1", type: "invoice", attributes: { reference: "F-1", state: 10 } }] },
+      ["reference"]
+    );
+    expect(structured.items[0].attributes).toEqual({ reference: "F-1" });
+    expect(structured.items[0].summary).toBeUndefined();
+  });
+
+  // `/calendars` and dictionary-style endpoints return flat items with no
+  // `attributes` wrapper. The text output projects them fine; structuredContent
+  // used to hand back `{}` for every row, so a client trusting the declared
+  // outputSchema saw bare ids.
+  it("projects flat items that have no attributes wrapper", () => {
+    const structured = buildListStructured(
+      { data: [{ id: "1", type: "calendar", value: "Congés payés", typeOf: 1 }] as never },
+      ["value", "typeOf"]
+    );
+    expect(structured.items[0].attributes).toEqual({ value: "Congés payés", typeOf: 1 });
+  });
 });
 
 describe("registerDeleteTool handler (elicitation)", () => {

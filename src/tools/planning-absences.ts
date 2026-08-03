@@ -22,7 +22,7 @@ Returns: Planning des absences.`,
       const query = buildSearchQuery(params);
       const response = await apiSearch("/planning-absences", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "planning absence") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "planning absence", params.fields) }],
       };
     }
   );

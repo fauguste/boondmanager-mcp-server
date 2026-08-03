@@ -38,7 +38,7 @@ Returns: Liste des validations correspondantes.`,
       const query = buildSearchQuery(params);
       const response = await apiSearch("/validations", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "validation") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "validation", params.fields) }],
       };
     }
   );

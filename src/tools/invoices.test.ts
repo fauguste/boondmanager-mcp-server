@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerInvoiceTools } from "./invoices.js";
-import { apiRequest } from "../services/boond-client.js";
-import { InvoiceCreateSchema, InvoiceUpdateSchema } from "../schemas/index.js";
+import { apiRequest, formatListResponse } from "../services/boond-client.js";
+import { InvoiceCreateSchema, InvoiceUpdateSchema, InvoiceSearchSchema } from "../schemas/index.js";
 
 vi.mock("../services/boond-client.js", () => ({
   apiRequest: vi.fn().mockResolvedValue({ data: { id: "1", type: "invoice", attributes: {} } }),
@@ -57,6 +57,25 @@ describe("registerInvoiceTools", () => {
     registerInvoiceTools(server);
     const deleteCall = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_invoices_delete");
     expect(deleteCall?.[1].annotations?.destructiveHint).toBe(true);
+  });
+
+  it("forwards the `fields` projection to the list formatter", async () => {
+    // /invoices rows carry no name or title, so the projection is the only way
+    // to get a caller-chosen summary without one `_get` per row.
+    registerInvoiceTools(server);
+    const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_invoices_search");
+    const handler = call?.[2] as (params: unknown) => Promise<unknown>;
+
+    await handler({ page: 1, pageSize: 30, fields: ["reference", "turnoverInvoicedExcludingTax"] });
+
+    expect(vi.mocked(formatListResponse)).toHaveBeenCalledWith(expect.anything(), "facture", [
+      "reference",
+      "turnoverInvoicedExcludingTax",
+    ]);
+  });
+
+  it("accepts `fields` on the search schema", () => {
+    expect(InvoiceSearchSchema.safeParse({ fields: ["reference"] }).success).toBe(true);
   });
 
   it("keeps invoice create contract centered on orderId", () => {

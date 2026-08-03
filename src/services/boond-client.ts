@@ -842,6 +842,180 @@ export async function apiSearch(path: string, query: Record<string, QueryValue>)
   return meta !== undefined ? { data, meta } : { data };
 }
 
+/**
+ * Business identifiers used as a last resort when a list row has no
+ * human-readable identity (no name, no title, no dictionary `value`).
+ *
+ * Transactional endpoints (`/invoices`, `/orders`, `/actions`,
+ * `/deliveries-groupments`, `/projects`…) key their rows on a reference, a
+ * number or a date rather than on a name, so the standard summary rendered
+ * them as a bare `[order #1234] | Statut: 1` — a line the model cannot act on
+ * without a follow-up `_get` per row.
+ *
+ * These are deliberately NOT appended unconditionally: `/resources` and
+ * `/opportunities` also carry `reference` and amount attributes, and their
+ * rows already read well (name, title). Enriching them too would only inflate
+ * every line. See `hasIdentity` in formatEntitySummary.
+ */
+const AMOUNT_FALLBACK_FIELDS: ReadonlyArray<readonly [string, string]> = [
+  ["turnoverInvoicedExcludingTax", "CA facturé HT"],
+  ["turnoverOrderedExcludingTax", "CA commandé HT"],
+  ["turnoverSimulatedExcludingTax", "CA simulé HT"],
+  ["averageDailyPriceExcludingTax", "TJM HT"],
+];
+
+/** Max amount entries appended to a fallback line, to keep it scannable. */
+const MAX_FALLBACK_AMOUNTS = 2;
+
+/** Max length (in code points) of the `text` excerpt used to identify an action. */
+const MAX_TEXT_EXCERPT = 80;
+
+/**
+ * HTML comments, then element tags. The tag pattern requires a tag name right
+ * after the `<` (or `</`), so free text such as
+ * `Relancer si < 3 jours > sinon cloturer` survives intact — a naive
+ * `/<[^>]*>/` swallowed everything between the two operators. Quoted attribute
+ * values are matched explicitly so a `>` inside one (`<a href="a>b">`) doesn't
+ * end the tag early and leak `b">` into the excerpt. The alternatives are
+ * mutually exclusive on their first character, so there is no backtracking
+ * blow-up on unterminated input.
+ */
+const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
+const HTML_TAG_RE = /<\/?[a-zA-Z][a-zA-Z0-9:._-]*(?:\s+(?:"[^"]*"|'[^']*'|[^"'<>])*)?\/?>/g;
+
+/** Entities actually seen in BoondManager notes (WYSIWYG output + French text). */
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  hellip: "…",
+  agrave: "à",
+  acirc: "â",
+  ccedil: "ç",
+  eacute: "é",
+  egrave: "è",
+  ecirc: "ê",
+  euml: "ë",
+  icirc: "î",
+  iuml: "ï",
+  ocirc: "ô",
+  ugrave: "ù",
+  ucirc: "û",
+  uuml: "ü",
+  laquo: "«",
+  raquo: "»",
+  rsquo: "’",
+  lsquo: "‘",
+  ldquo: "“",
+  rdquo: "”",
+  deg: "°",
+  euro: "€",
+  ndash: "–",
+  mdash: "—",
+};
+
+/** Decodes numeric and common named entities so the excerpt reads as text, not as markup. */
+function decodeHtmlEntities(input: string): string {
+  return input.replace(/&(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (match, body: string) => {
+    if (body.startsWith("#")) {
+      const hex = body[1] === "x" || body[1] === "X";
+      const code = Number.parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      // Surrogate code points are rejected on purpose: decoding `&#55296;`
+      // would inject the very unpaired surrogate the excerpt guards against.
+      if (!Number.isInteger(code) || code <= 0 || code > 0x10ffff) return match;
+      if (code >= 0xd800 && code <= 0xdfff) return match;
+      return String.fromCodePoint(code);
+    }
+    return NAMED_ENTITIES[body.toLowerCase()] ?? match;
+  });
+}
+
+/**
+ * Renders BoondManager's HTML note fields (`/actions`.text is a `<div>…</div>`)
+ * as a short single-line excerpt. Only strings are excerpted — `text: null` and
+ * nested objects are skipped by the caller rather than printed as `null` /
+ * `[object Object]`.
+ *
+ * Truncation runs on code points (`Array.from`), never on UTF-16 code units, so
+ * an emoji sitting on the boundary can't be cut into an unpaired surrogate.
+ */
+function textExcerpt(raw: string): string | undefined {
+  const stripped = decodeHtmlEntities(raw.replace(HTML_COMMENT_RE, " ").replace(HTML_TAG_RE, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+  if (stripped === "") return undefined;
+  const chars = Array.from(stripped);
+  return chars.length > MAX_TEXT_EXCERPT ? `${chars.slice(0, MAX_TEXT_EXCERPT).join("")}…` : stripped;
+}
+
+/**
+ * Single rendering rule for a raw JSON:API attribute value, shared by the
+ * fallback summary and the `fields` projection — some Boond amounts come back
+ * as `{ amount, currency }` objects, and the two paths used to disagree
+ * (`[object Object]` on one side, JSON on the other).
+ */
+function renderAttributeValue(value: unknown): string {
+  return value === null || typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+/**
+ * A row is considered to name itself through `value` only when that value is a
+ * non-empty string once rendered. `value: null` / `value: ""` used to both
+ * print a bogus token *and* suppress the business-identifier fallback.
+ */
+function hasValueIdentity(value: unknown): boolean {
+  return value !== undefined && value !== null && renderAttributeValue(value) !== "";
+}
+
+/**
+ * Secondary identifiers for rows that have no name/title/value. Order is
+ * chosen so the most identifying token comes first (number, then reference,
+ * then when it happened, then how much).
+ */
+function fallbackIdentityParts(attrs: Record<string, unknown>): string[] {
+  const parts: string[] = [];
+
+  if (attrs.number) parts.push(`N°: ${attrs.number}`);
+  if (attrs.reference) parts.push(`Réf: ${attrs.reference}`);
+
+  if (attrs.date) {
+    parts.push(`Date: ${attrs.date}`);
+  } else if (attrs.startDate && attrs.endDate) {
+    parts.push(`Du ${attrs.startDate} au ${attrs.endDate}`);
+  } else if (attrs.startDate) {
+    parts.push(`Début: ${attrs.startDate}`);
+  } else if (attrs.endDate) {
+    parts.push(`Fin: ${attrs.endDate}`);
+  }
+
+  let amounts = 0;
+  for (const [field, label] of AMOUNT_FALLBACK_FIELDS) {
+    if (amounts >= MAX_FALLBACK_AMOUNTS) break;
+    const value = attrs[field];
+    // 0 is meaningful here (an order with no turnover yet), so only
+    // undefined/null are skipped.
+    if (value === undefined || value === null) continue;
+    parts.push(`${label}: ${renderAttributeValue(value)}`);
+    amounts++;
+  }
+
+  // `typeOf` is an integer resolved through boond://dictionary/typeOf/* — on
+  // its own it is weak, but on an action it is often the only discriminator.
+  if (attrs.typeOf !== undefined && attrs.typeOf !== null) parts.push(`Type: ${attrs.typeOf}`);
+
+  // End-user-authored free text: labelled and quoted so the model reads it as
+  // a data field of the row and not as server-authored instructions.
+  if (typeof attrs.text === "string") {
+    const excerpt = textExcerpt(attrs.text);
+    if (excerpt !== undefined) parts.push(`Note: "${excerpt}"`);
+  }
+
+  return parts;
+}
+
 export function formatEntitySummary(entity: unknown): string {
   // A few BoondManager endpoints (e.g. `/calendars`, `/application/dictionary`)
   // return reference items as flat objects without a JSON:API `attributes`
@@ -869,9 +1043,10 @@ export function formatEntitySummary(entity: unknown): string {
     parts.push(`${attrs.firstName || ""} ${attrs.lastName || ""}`.trim());
   }
   if (attrs.name) parts.push(String(attrs.name));
-  // `value` covers the `/calendars` and dictionary-style payloads.
-  if (!attrs.firstName && !attrs.lastName && !attrs.name && attrs.value !== undefined) {
-    parts.push(String(attrs.value));
+  // `value` covers the `/calendars` and dictionary-style payloads. `0` is a
+  // legitimate label there, so only null/undefined/"" are skipped.
+  if (!attrs.firstName && !attrs.lastName && !attrs.name && hasValueIdentity(attrs.value)) {
+    parts.push(renderAttributeValue(attrs.value));
   }
   if (attrs.email1) parts.push(`Email: ${attrs.email1}`);
   if (attrs.phone1) parts.push(`Tel: ${attrs.phone1}`);
@@ -879,6 +1054,19 @@ export function formatEntitySummary(entity: unknown): string {
   if (attrs.state !== undefined) parts.push(`Statut: ${attrs.state}`);
   if (attrs.title) parts.push(`Titre: ${attrs.title}`);
   if (attrs.iso !== undefined && String(attrs.iso) !== id) parts.push(`ISO: ${attrs.iso}`);
+
+  // Rows that named themselves are already useful — leave them untouched.
+  // Only the ones reduced to `[type #id]` (+ maybe a status integer) get the
+  // business identifiers appended.
+  const hasIdentity =
+    Boolean(attrs.firstName) ||
+    Boolean(attrs.lastName) ||
+    Boolean(attrs.name) ||
+    Boolean(attrs.title) ||
+    hasValueIdentity(attrs.value);
+  if (!hasIdentity) {
+    parts.push(...fallbackIdentityParts(attrs));
+  }
 
   return parts.join(" | ");
 }
@@ -892,13 +1080,15 @@ export function formatEntitySummary(entity: unknown): string {
 function formatProjectedSummary(entity: unknown, fields: string[]): string {
   const e = (entity ?? {}) as Record<string, unknown>;
   const attrs = (e.attributes ?? e) as Record<string, unknown>;
-  const id = e.id !== undefined ? String(e.id) : "?";
-  const parts: string[] = [`[#${id}]`];
+  // Reference endpoints return flat rows keyed on something else than `id`
+  // (`/calendars` keys countries on `iso`), so a missing id renders as the same
+  // `[item]` token the standard summary uses — not as a `[#?]` that reads like
+  // a formatting bug.
+  const parts: string[] = [e.id !== undefined ? `[#${String(e.id)}]` : "[item]"];
   for (const field of fields) {
     const value = attrs[field];
     if (value === undefined) continue;
-    const rendered = value === null || typeof value === "object" ? JSON.stringify(value) : String(value);
-    parts.push(`${field}: ${rendered}`);
+    parts.push(`${field}: ${renderAttributeValue(value)}`);
   }
   return parts.join(" | ");
 }
@@ -913,17 +1103,33 @@ export function formatListResponse(response: JsonApiResponse, entityType: string
 
   const projected = fields !== undefined && fields.length > 0;
   const lines = data.map((item) => (projected ? formatProjectedSummary(item, fields) : formatEntitySummary(item)));
-  let result = lines.join("\n");
+  const header = total !== undefined ? `Total: ${total} ${entityType}(s)\n\n` : "";
+  const body = lines.join("\n");
 
-  if (total !== undefined) {
-    result = `Total: ${total} ${entityType}(s)\n\n${result}`;
+  if (header.length + body.length <= CHARACTER_LIMIT) return header + body;
+
+  // Cut on line boundaries and say how many rows were dropped. A mid-line cut
+  // produced a half-row indistinguishable from a complete one, and the count
+  // is what tells the model to narrow the query (or use `fields`/`pageSize`)
+  // instead of trusting an implicitly complete page.
+  const notice = (shown: number) =>
+    `\n\n[Résultats tronqués : ${shown}/${lines.length} ligne(s) affichée(s) (limite de ${CHARACTER_LIMIT} caractères). ` +
+    `Affinez les filtres, réduisez pageSize, ou utilisez 'fields' pour raccourcir chaque ligne.]`;
+  const budget = CHARACTER_LIMIT - header.length - notice(lines.length).length;
+
+  const kept: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    const cost = kept.length === 0 ? line.length : line.length + 1;
+    if (used + cost > budget) break;
+    used += cost;
+    kept.push(line);
   }
 
-  if (result.length > CHARACTER_LIMIT) {
-    result = result.substring(0, CHARACTER_LIMIT) + "\n\n[Résultats tronqués...]";
-  }
+  // A single row longer than the whole budget still has to show something.
+  if (kept.length === 0) return header + body.substring(0, Math.max(budget, 0)) + notice(0);
 
-  return result;
+  return header + kept.join("\n") + notice(kept.length);
 }
 
 /**
