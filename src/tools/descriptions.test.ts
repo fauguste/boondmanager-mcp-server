@@ -41,6 +41,7 @@ import {
 } from "./index.js";
 import { registerAllPrompts } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
+import { SERVER_INSTRUCTIONS } from "../instructions.js";
 
 /**
  * Sensible upper bound for a single tool description. MCP has a ~50KB total
@@ -62,6 +63,24 @@ const MAX_PROMPT_DESCRIPTION_LENGTH = 3000;
  * not the content itself. Keep them terse.
  */
 const MAX_RESOURCE_DESCRIPTION_LENGTH = 1000;
+
+/**
+ * Server-level `instructions` are sent once in the `initialize` result but live
+ * in the model's context for the whole session, competing with the tools[] list
+ * for the same budget. They exist to *replace* per-tool boilerplate, so if they
+ * grow past this, the content probably belongs in a prompt or a resource.
+ */
+const MAX_SERVER_INSTRUCTIONS_LENGTH = 4000;
+
+describe("server instructions length", () => {
+  it("does not exceed the length limit", () => {
+    expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(MAX_SERVER_INSTRUCTIONS_LENGTH);
+  });
+
+  it("is substantial enough to be worth sending", () => {
+    expect(SERVER_INSTRUCTIONS.length).toBeGreaterThan(500);
+  });
+});
 
 describe("tool/prompt/resource description lengths", () => {
   let tools: Array<{ name: string; description?: string }>;

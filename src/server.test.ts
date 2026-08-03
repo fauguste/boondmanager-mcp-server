@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   createMcpServer,
   registerAll,
@@ -10,7 +12,9 @@ import {
   REGISTERED_DOMAINS,
   SERVER_NAME,
   SERVER_VERSION,
+  SERVER_DESCRIPTION,
 } from "./server.js";
+import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { resolveAccessPolicy } from "./config/access-policy.js";
 
 /** Counting stub that records every registration call. */
@@ -66,6 +70,64 @@ describe("SERVER_VERSION", () => {
   it("is not the legacy hardcoded placeholder", () => {
     expect(SERVER_VERSION).not.toBe("1.0.0");
     expect(SERVER_VERSION).not.toBe("0.0.0-unknown");
+  });
+});
+
+describe("SERVER_DESCRIPTION", () => {
+  it("matches the package.json description (single source of truth)", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const pkgPath = resolve(here, "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { description: string };
+    expect(SERVER_DESCRIPTION).toBe(pkg.description);
+    expect(SERVER_DESCRIPTION.length).toBeGreaterThan(0);
+  });
+});
+
+describe("SERVER_INSTRUCTIONS", () => {
+  it("is a non-empty string", () => {
+    expect(typeof SERVER_INSTRUCTIONS).toBe("string");
+    expect(SERVER_INSTRUCTIONS.trim().length).toBeGreaterThan(0);
+  });
+
+  it("states the cross-cutting rules the tool descriptions no longer repeat", () => {
+    // Perimeter filters: the most common source of silently-wrong searches.
+    expect(SERVER_INSTRUCTIONS).toContain("perimeterDynamic");
+    expect(SERVER_INSTRUCTIONS).toContain("perimeterManagers");
+    expect(SERVER_INSTRUCTIONS).toContain("perimeterAgencies");
+    expect(SERVER_INSTRUCTIONS).toContain("narrowPerimeter");
+    // The rejected legacy names must be called out explicitly.
+    expect(SERVER_INSTRUCTIONS).toContain("mainManagers");
+    // Dictionary resolution via resources rather than an extra tool call.
+    expect(SERVER_INSTRUCTIONS).toContain("boond://dictionary");
+    // Naming convention + token-economy knobs.
+    expect(SERVER_INSTRUCTIONS).toContain("boond_{domaine}_{opération}");
+    expect(SERVER_INSTRUCTIONS).toContain("pageSize");
+    expect(SERVER_INSTRUCTIONS).toContain("fields");
+    // keywords prefix syntax.
+    for (const prefix of ["CSOC", "CCON", "CAND", "COMP", "AO", "PRJ", "MIS", "PROD", "CTR"]) {
+      expect(SERVER_INSTRUCTIONS).toContain(prefix);
+    }
+  });
+});
+
+describe("MCP initialize result", () => {
+  it("advertises instructions, name, version and description to a connected client", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "vitest", version: "1.0.0" });
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    try {
+      expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
+      const info = client.getServerVersion();
+      expect(info?.name).toBe(SERVER_NAME);
+      expect(info?.version).toBe(SERVER_VERSION);
+      expect(info?.description).toBe(SERVER_DESCRIPTION);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 });
 
