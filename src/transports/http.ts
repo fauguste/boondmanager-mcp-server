@@ -27,18 +27,20 @@ export interface HttpTransportOptions {
   maxSessions?: number;
   /**
    * Allow-list of Host header hostnames (port-agnostic) for DNS rebinding
-   * protection. Empty array = validation disabled. Use `["*"]` to opt out
-   * explicitly. When undefined, a localhost default is applied if bound
-   * to a loopback interface.
+   * protection. Use `["*"]` to opt out explicitly. When undefined **or empty**
+   * (an unset / blank env var), a localhost default is applied if bound to a
+   * loopback interface, and validation is off otherwise — a blank value never
+   * silently disables the check, `*` is the explicit opt-out.
    */
   allowedHosts?: string[];
   /**
    * Allow-list of `Origin` header values (scheme + host + port) accepted from
    * browser-based clients. A request with **no** `Origin` is always accepted
    * (curl, gateways, non-browser MCP clients); a request carrying an `Origin`
-   * outside this list gets a `403` (MCP 2025-11-25 requirement). Empty array =
-   * validation disabled. Use `["*"]` to opt out explicitly. When undefined, the
-   * loopback origins are applied if bound to a loopback interface.
+   * outside this list gets a `403` (MCP 2025-11-25 requirement). Use `["*"]` to
+   * opt out explicitly. When undefined **or empty** (an unset / blank env var),
+   * the loopback default of `resolveOriginPolicy` applies — same rationale as
+   * `allowedHosts`: blank does not mean "disabled".
    */
   allowedOrigins?: string[];
   /**
@@ -117,6 +119,10 @@ function readAllowedOrigins(): string[] | undefined {
  * bound listen interface. Returns an empty array when validation is disabled
  * (either explicitly via `["*"]` or implicitly when bound to a non-loopback
  * interface without an explicit list).
+ *
+ * An empty `configured` array is treated as *unconfigured*, not as "disabled":
+ * `MCP_HTTP_ALLOWED_HOSTS=` (or a value of only commas) must not quietly turn a
+ * security control off. `["*"]` is the explicit opt-out.
  */
 export function resolveAllowedHosts(configured: string[] | undefined, host: string): string[] {
   if (configured && configured.length > 0) {
@@ -157,32 +163,114 @@ function normalizeOrigin(value: string): string {
 }
 
 /**
- * Resolves the effective `Origin` allow-list, mirroring `resolveAllowedHosts`:
- * an explicit list wins, a sole `*` disables validation, a `*` mixed with real
- * origins is dropped with a warning (validation stays on), and the loopback
- * default only applies when bound to a loopback interface. Returned entries are
- * normalised (see `normalizeOrigin`) so the request-time comparison is exact.
+ * Whether a normalised origin is a browser page served from the local machine.
  *
- * Unlike hosts, origins are port-sensitive — a page served from
- * `http://localhost:8080` is a different origin from the server on
- * `http://localhost:3000` — so the default list embeds the bound port.
+ * Matching is on the *hostname literal*, not on resolution: `http://127.0.0.1.
+ * nip.io` resolves to a loopback address but its hostname is not in the set, so
+ * it is correctly rejected — that indirection is exactly the DNS rebinding
+ * vector `Origin` validation exists to stop.
  */
-export function resolveAllowedOrigins(configured: string[] | undefined, host: string, port: number): string[] {
+const LOOPBACK_ORIGIN_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+function isLoopbackOrigin(normalizedOrigin: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(normalizedOrigin);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  return LOOPBACK_ORIGIN_HOSTNAMES.has(url.hostname);
+}
+
+/** Resolved `Origin` validation policy — see `resolveOriginPolicy`. */
+export interface OriginPolicy {
+  /** `false` = validation disabled; every `Origin` is accepted. */
+  enabled: boolean;
+  /** Exact-match allow-list, normalised (see `normalizeOrigin`). */
+  origins: string[];
+  /**
+   * Also accept any `http`/`https` origin whose hostname is a loopback literal,
+   * **on any port**. Set only by the loopback default, never by an explicit
+   * allow-list (an operator who enumerates origins gets exact matching).
+   */
+  allowAnyLoopback: boolean;
+}
+
+const VALIDATION_DISABLED: OriginPolicy = { enabled: false, origins: [], allowAnyLoopback: false };
+
+/**
+ * Resolves the effective `Origin` policy, mirroring `resolveAllowedHosts`: an
+ * explicit list wins (exact match, port-sensitive), a sole `*` disables
+ * validation, a `*` mixed with real origins is dropped with a warning
+ * (validation stays on), and the default only applies when bound to a loopback
+ * interface. An empty `configured` array counts as unconfigured, not disabled.
+ *
+ * The loopback default accepts **any loopback origin on any port**, plus the
+ * origin of `publicUrl` when one is configured. Pinning the bound port instead
+ * (the obvious reading of "origins are port-sensitive") would 403 every real
+ * browser client: nothing is ever *served* from this port — it answers JSON-RPC
+ * — so the origins that legitimately show up are other local ports (MCP
+ * Inspector on `:6274`, a dev server on `:5173`) or the proxy's public URL.
+ * The anti-DNS-rebinding property is untouched: a remote page still gets a 403,
+ * and an attacker already running code on the loopback interface can simply
+ * omit the header, which is always accepted.
+ */
+export function resolveOriginPolicy(configured: string[] | undefined, host: string, publicUrl?: string): OriginPolicy {
   if (configured && configured.length > 0) {
     if (configured.includes("*")) {
-      if (configured.length === 1) return [];
+      if (configured.length === 1) return VALIDATION_DISABLED;
       logger.warn(
         { allowedOrigins: configured },
         "MCP_HTTP_ALLOWED_ORIGINS contains '*' alongside other origins; ignoring '*' and keeping Origin validation enabled. Set it to exactly '*' to disable validation."
       );
-      return configured.filter((o) => o !== "*").map(normalizeOrigin);
+      return {
+        enabled: true,
+        origins: configured.filter((o) => o !== "*").map(normalizeOrigin),
+        allowAnyLoopback: false,
+      };
     }
-    return configured.map(normalizeOrigin);
+    return { enabled: true, origins: configured.map(normalizeOrigin), allowAnyLoopback: false };
   }
-  if (LOOPBACK_HOSTS.has(host)) {
-    return ["localhost", "127.0.0.1", "[::1]"].map((h) => `http://${h}:${port}`);
+  if (!LOOPBACK_HOSTS.has(host)) return VALIDATION_DISABLED;
+  return { enabled: true, origins: originOf(publicUrl), allowAnyLoopback: true };
+}
+
+/**
+ * The scheme+host+port of a configured public URL, as a 0- or 1-element list.
+ * A server bound to loopback behind a reverse proxy is reached by the browser
+ * under that URL, so its origin belongs in the default allow-list — otherwise
+ * the documented proxy deployment 403s until the operator discovers
+ * `MCP_HTTP_ALLOWED_ORIGINS`.
+ */
+function originOf(publicUrl: string | undefined): string[] {
+  if (!publicUrl) return [];
+  try {
+    return [normalizeOrigin(new URL(publicUrl).origin)];
+  } catch {
+    return [];
   }
-  return [];
+}
+
+/** Applies a resolved policy to one `Origin` header value. */
+export function isOriginAllowed(policy: OriginPolicy, origin: string): boolean {
+  if (!policy.enabled) return true;
+  const normalized = normalizeOrigin(origin);
+  if (policy.origins.includes(normalized)) return true;
+  return policy.allowAnyLoopback && isLoopbackOrigin(normalized);
+}
+
+/** RFC 9728 §3.2: bare metadata path, plus the resource-path-suffixed variant. */
+const OAUTH_METADATA_PATH = "/.well-known/oauth-protected-resource";
+
+/**
+ * Whether a request targets the public protected-resource metadata document.
+ * Shared by the `Origin` exemption and the handler itself so the two cannot
+ * drift apart. Takes the raw `req.url` — it runs before the `URL` parse.
+ */
+export function isDiscoveryPath(reqUrl: string | undefined, mcpPath: string): boolean {
+  const pathname = (reqUrl ?? "").split("?")[0];
+  return pathname === OAUTH_METADATA_PATH || pathname === `${OAUTH_METADATA_PATH}${mcpPath}`;
 }
 
 /**
@@ -318,10 +406,7 @@ export async function startHttpTransport(
   const sessionSweepIntervalMs = options.sessionSweepIntervalMs ?? DEFAULT_SESSION_SWEEP_INTERVAL_MS;
   const maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   const allowedHosts = resolveAllowedHosts(options.allowedHosts, options.host);
-  // Filled in right after listen(): the default origin allow-list embeds the
-  // bound port, which is only known once the OS assigned it (options.port === 0).
-  // No request can reach the handler before then.
-  let allowedOrigins: string[] = [];
+  const originPolicy = resolveOriginPolicy(options.allowedOrigins, options.host, options.publicUrl);
   const resourceUrl = resolveResourceUrl(options);
   const authorizationServer = resolveAuthorizationServer();
   const advertisedScopes = resolveAdvertisedScopes();
@@ -333,7 +418,7 @@ export async function startHttpTransport(
   const resourceOrigin = resourceUrl.endsWith(options.path)
     ? resourceUrl.slice(0, resourceUrl.length - options.path.length)
     : resourceUrl;
-  const metadataUrl = `${resourceOrigin}/.well-known/oauth-protected-resource${options.path}`;
+  const metadataUrl = `${resourceOrigin}${OAUTH_METADATA_PATH}${options.path}`;
   const wwwAuthenticate = `Bearer realm="${resourceUrl}", resource_metadata="${metadataUrl}"`;
 
   const sweepIdleSessions = async (): Promise<number> => {
@@ -426,11 +511,15 @@ export async function startHttpTransport(
       // from an unexpected origin must be rejected with 403. A *missing* Origin
       // is allowed — non-browser clients (curl, gateways, MCP CLI clients)
       // never send one, and the Host check above already covers DNS rebinding.
-      // Like the Host check, this runs after /healthz so probes stay unaffected.
-      if (allowedOrigins.length > 0) {
+      // Like the Host check, this runs after /healthz so probes stay unaffected,
+      // and it skips the RFC 9728 discovery document: that document is public,
+      // credential-free and read-only, and a browser client only fetches it
+      // *because* we pointed it there from a 401 challenge — 403ing it would
+      // dead-end the OAuth bootstrap the challenge just started.
+      if (originPolicy.enabled && !isDiscoveryPath(req.url, options.path)) {
         const originHeader = req.headers.origin;
         const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
-        if (origin && !allowedOrigins.includes(normalizeOrigin(origin))) {
+        if (origin && !isOriginAllowed(originPolicy, origin)) {
           writeJsonRpcError(res, 403, `Invalid Origin: ${origin}`);
           return;
         }
@@ -450,12 +539,7 @@ export async function startHttpTransport(
       // Public OAuth2 discovery endpoint (RFC 9728). Not served in static-auth
       // mode — exposing it would cause OAuth-aware clients (mcp-remote, etc.)
       // to attempt a full OAuth dance that will never complete.
-      if (
-        !options.staticAuth &&
-        req.method === "GET" &&
-        (url.pathname === "/.well-known/oauth-protected-resource" ||
-          url.pathname === `/.well-known/oauth-protected-resource${options.path}`)
-      ) {
+      if (!options.staticAuth && req.method === "GET" && isDiscoveryPath(url.pathname, options.path)) {
         writeProtectedResourceMetadata(res);
         return;
       }
@@ -608,8 +692,6 @@ export async function startHttpTransport(
   // the kernel picks a free port and only server.address() knows which one.
   const bound = httpServer.address();
   const boundPort = bound && typeof bound === "object" ? bound.port : options.port;
-
-  allowedOrigins = resolveAllowedOrigins(options.allowedOrigins, options.host, boundPort);
 
   return {
     address: { host: options.host, port: boundPort, path: options.path },

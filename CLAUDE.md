@@ -501,13 +501,30 @@ HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only: how often to scan for idle sessions |
 | `MCP_HTTP_MAX_SESSIONS` | `1000` | Stateful only: max concurrent sessions. New `initialize` requests beyond the cap get `503` (after an idle sweep). Guards against memory exhaustion via unbounded session creation. |
 | `MCP_HTTP_ALLOWED_HOSTS` | (auto) | Comma-separated allow-list of `Host` header hostnames for DNS rebinding protection (CVE-2025-66414). Default = `localhost,127.0.0.1,[::1]` when bound to a loopback interface, otherwise validation is disabled. Set to exactly `*` (sole entry) to opt out explicitly when fronting the server with a reverse proxy that already validates hosts; a `*` mixed with real hostnames is ignored (validation stays on) with a warning. |
-| `MCP_HTTP_ALLOWED_ORIGINS` | (auto) | Comma-separated allow-list of `Origin` header values (scheme + host + port) accepted from browser-based clients — required by spec 2025-11-25, which mandates a `403` on an invalid `Origin`. Default = `http://localhost:{port},http://127.0.0.1:{port},http://[::1]:{port}` when bound to a loopback interface, otherwise validation is disabled. Same `*` semantics as `MCP_HTTP_ALLOWED_HOSTS`. **A request with no `Origin` is always accepted** (curl, gateways, non-browser MCP clients never send one). |
+| `MCP_HTTP_ALLOWED_ORIGINS` | (auto) | Comma-separated allow-list of `Origin` header values (scheme + host + port) accepted from browser-based clients — required by spec 2025-11-25, which mandates a `403` on an invalid `Origin`. Default when bound to a loopback interface = **any loopback origin on any port** (`http`/`https` on `localhost` / `127.0.0.1` / `[::1]`) plus the origin of `MCP_HTTP_PUBLIC_URL` if set; validation is disabled otherwise. Same `*` semantics as `MCP_HTTP_ALLOWED_HOSTS`. **A request with no `Origin` is always accepted** (curl, gateways, non-browser MCP clients never send one). |
 
-`Origin` validation runs right after the `Host` check, in the same block, and
-`/healthz` is exempt from both. Entries are compared case-insensitively and
-ignoring a trailing slash. Unlike hosts, origins are **port-sensitive** — the
-loopback default embeds the bound port (the port the OS actually assigned, so
-`MCP_HTTP_PORT=0` works too).
+`Origin` validation runs right after the `Host` check, in the same block.
+`/healthz` is exempt from both, and the RFC 9728 discovery document
+(`/.well-known/oauth-protected-resource*`) is exempt from the `Origin` check —
+it is public and credential-free, and a browser only fetches it because a `401`
+challenge pointed it there, so a `403` would dead-end the OAuth bootstrap.
+Entries are compared case-insensitively and ignoring a trailing slash.
+
+**Why the loopback default is port-agnostic** (`resolveOriginPolicy` in
+`src/transports/http.ts`): an *explicitly configured* list is exact-match and
+therefore port-sensitive, but pinning the bound port in the **default** would
+`403` every real browser client. Nothing is ever served *from* the MCP port — it
+answers JSON-RPC — so the origins that legitimately appear are other local ports
+(MCP Inspector on `:6274`, a dev server on `:5173`) or the reverse proxy's public
+URL. The anti-DNS-rebinding property is unaffected: a remote `Origin` still gets
+a `403` (matching is on the hostname *literal*, so `http://127.0.0.1.nip.io` is
+rejected), and an attacker already executing on the loopback interface can just
+omit the header, which is always accepted.
+
+An **empty** `MCP_HTTP_ALLOWED_HOSTS` / `MCP_HTTP_ALLOWED_ORIGINS` (blank value,
+or only commas) counts as *unconfigured* and falls back to the default — a blank
+env var must never silently switch a security control off. `*` is the explicit
+opt-out.
 
 Request bodies are capped at 1 MiB (`Content-Length` precheck + streaming guard); oversized requests get `413`.
 

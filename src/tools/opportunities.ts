@@ -97,18 +97,15 @@ Returns: Données de simulation financière de l'opportunité.`,
 
 const OPPORTUNITY_SEARCH_DESCRIPTION = `Recherche des opportunités commerciales dans BoondManager avec filtres serveur.
 
-⚠️ Utilisez les filtres structurés plutôt que la pagination intégrale. Les noms de paramètres sont ceux exacts de l'API.
-
 Cas d'usage courants :
 • **Mes opportunités** sans connaître son propre ID : \`perimeterDynamic: ["data"]\`. Pour "opportunités de X" : \`perimeterManagers: [<X_id>]\` (combiner avec \`perimeterManagersType: "main"|"hr"\`).
 • **États / types** : \`opportunityStates: [<id>]\` (dictionnaire \`setting.state.opportunity\`), \`opportunityTypes: [<id>]\` (\`setting.typeOf.project\`). IDs entiers issus du dictionnaire.
 • **Lié à une société/contact/candidat** : utiliser \`keywords\` avec préfixes — \`"CSOC<id>"\` (société), \`"CCON<id>"\` (contact), \`"CAND<id>"\` (candidat), \`"COMP<id>"\` (ressource), \`"PROD<id>"\` (produit), \`"AO<id>"\` (opportunité).
-• **Périmètre orga** : \`perimeterAgencies\`, \`perimeterPoles\`, \`perimeterBusinessUnits\`. \`narrowPerimeter: true\` pour ET.
 • **Métier** : \`activityAreas\`, \`expertiseAreas\`, \`tools\`, \`places\` (zones), \`durations\`, \`origins\`.
 • **Positionnements** : \`positioningStates: [<id>]\` ou \`["none"]\` pour les opportunités sans positionnement.
 • **Période** : \`period: "created"|"started"|"closingDate"|"updated"|"updatedPositioning"|"withActions"|...\` + \`startDate\`/\`endDate\`. Ex: clôtures 2026 → \`period: "closingDate", startDate: "2026-01-01", endDate: "2026-12-31"\`.
 
-Pagination : \`page\`, \`pageSize\` (max 500). Tri : \`sort: "creationDate"|"title"|"company.name"|"startDate"|"endDate"|"state"|"closingDate"|"answerDate"|"updateDate"|...\` + \`order\`.
+Tri : \`sort: "creationDate"|"title"|"company.name"|"startDate"|"endDate"|"state"|"closingDate"|"answerDate"|"updateDate"|...\` + \`order\`.
 
 Returns : liste paginée des opportunités. Utiliser \`boond_opportunities_get\` ou les outils d'onglets pour le détail.`;
 

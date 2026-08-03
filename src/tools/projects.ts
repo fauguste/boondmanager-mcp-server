@@ -114,18 +114,15 @@ Returns: Données de productivité du projet.`,
 
 const PROJECT_SEARCH_DESCRIPTION = `Recherche des projets / missions dans BoondManager avec filtres serveur.
 
-⚠️ Utilisez les filtres structurés plutôt que la pagination intégrale. Les noms de paramètres sont ceux exacts de l'API.
-
 Cas d'usage courants :
 • **Mes projets** sans connaître son propre ID : \`perimeterDynamic: ["data"]\`. Pour "projets de X" : \`perimeterManagers: [<X_id>]\`.
 • **États / types** : \`projectStates: [<id>]\` (dictionnaire \`setting.state.project\`), \`projectTypes: [<id>]\` (\`setting.typeOf.project\`). IDs entiers.
 • **Société cliente** : \`companies: [<companyId>]\` (filtre les projets rattachés à ces sociétés).
 • **Lié à un contact / opportunité / contrat / ressource / produit** : utiliser \`keywords\` avec préfixes — \`"PRJ<id>"\` (projet), \`"CSOC<id>"\` (société), \`"CCON<id>"\` (contact), \`"AO<id>"\` (opportunité), \`"CTR<id>"\` (contrat), \`"COMP<id>"\` (ressource), \`"PROD<id>"\` (produit), \`"MIS<id>"\` (livraison).
-• **Périmètre orga** : \`perimeterAgencies\`, \`perimeterPoles\`, \`perimeterBusinessUnits\`. \`narrowPerimeter: true\` pour ET.
 • **Métier** : \`activityAreas\`, \`expertiseAreas\`, \`flags\` (tags).
 • **Période** : \`period: "running"\` (en cours), \`"created"\`, \`"started"\`, \`"stopped"\`, \`"closed"\`, \`"updated"\`, \`"hasAdditionalDataOrPurchase"\` + \`startDate\`/\`endDate\`. Ex: projets en cours en 2026 → \`period: "running", startDate: "2026-01-01", endDate: "2026-12-31"\`.
 
-Pagination : \`page\`, \`pageSize\` (max 500). Tri : \`sort: "startDate"|"endDate"|"reference"|"company.name"|"mainManager.lastName"\` + \`order\`.
+Tri : \`sort: "startDate"|"endDate"|"reference"|"company.name"|"mainManager.lastName"\` + \`order\`.
 
 Returns : liste paginée des projets. Utiliser \`boond_projects_get\` ou les outils d'onglets pour le détail.`;
 

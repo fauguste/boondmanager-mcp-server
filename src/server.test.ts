@@ -83,6 +83,50 @@ describe("SERVER_DESCRIPTION", () => {
   });
 });
 
+describe("package.json manifest degradation", () => {
+  /**
+   * Both identity constants are computed at module-evaluation time, so a
+   * malformed `package.json` must degrade to a placeholder rather than throw an
+   * import-time TypeError (which would mean the server never starts, with an
+   * opaque stack). `JSON.parse` returning a *valid* non-object — `null` is the
+   * one that bites — is the case a try/catch around the parse alone misses.
+   */
+  async function importServerWithPackageJson(contents: string) {
+    vi.resetModules();
+    vi.doMock("node:fs", async () => {
+      const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+      return {
+        ...actual,
+        readFileSync: (path: Parameters<typeof readFileSync>[0], ...rest: unknown[]) =>
+          String(path).endsWith("package.json")
+            ? contents
+            : (actual.readFileSync as (...a: unknown[]) => unknown)(path, ...rest),
+      };
+    });
+    try {
+      // `vi.resetModules()` above drops the statically imported copy, so this
+      // re-evaluates `server.ts` against the mocked fs.
+      return await import("./server.js");
+    } finally {
+      vi.doUnmock("node:fs");
+      vi.resetModules();
+    }
+  }
+
+  it.each([
+    ["a file that parses to null", "null"],
+    ["a file that parses to a scalar", '"2.0.0"'],
+    ["a truncated file", '{"version": "2.'],
+  ])("falls back to placeholders for %s", async (_label, contents) => {
+    const mod = (await importServerWithPackageJson(contents)) as {
+      SERVER_VERSION: string;
+      SERVER_DESCRIPTION: string;
+    };
+    expect(mod.SERVER_VERSION).toBe("0.0.0-unknown");
+    expect(mod.SERVER_DESCRIPTION).toBe("MCP server for the BoondManager API (ERP/CRM)");
+  });
+});
+
 describe("SERVER_INSTRUCTIONS", () => {
   it("is a non-empty string", () => {
     expect(typeof SERVER_INSTRUCTIONS).toBe("string");

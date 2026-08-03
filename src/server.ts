@@ -69,7 +69,13 @@ function readPackageManifest(): { version?: unknown; description?: unknown } {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const pkgPath = resolve(here, "..", "package.json");
-    return JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: unknown; description?: unknown };
+    const parsed: unknown = JSON.parse(readFileSync(pkgPath, "utf8"));
+    // `JSON.parse` happily returns `null` (or a string, or a number) for a
+    // well-formed but non-object file. Those reach the property accesses below,
+    // which run at module evaluation time — a `TypeError` there means the
+    // server never starts, with an opaque import stack. Degrade instead.
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return parsed as { version?: unknown; description?: unknown };
   } catch {
     return {};
   }

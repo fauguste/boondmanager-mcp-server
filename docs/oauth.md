@@ -172,9 +172,13 @@ The reverse proxy must forward at least:
 - `Authorization` header (Bearer token)
 - `Host` header (or set `MCP_HTTP_ALLOWED_HOSTS` to include the public
   hostname)
-- `Origin` header for browser-based clients (or set
-  `MCP_HTTP_ALLOWED_ORIGINS` to include their origins — a request with no
-  `Origin` is always accepted, so non-browser clients need nothing)
+- `Origin` header for browser-based clients. Setting `MCP_HTTP_PUBLIC_URL`
+  (which you need anyway, see above) already puts its origin on the default
+  allow-list, so the common proxy setup needs nothing extra; use
+  `MCP_HTTP_ALLOWED_ORIGINS` only when browsers reach the server under
+  *additional* origins. A request with no `Origin` is always accepted, so
+  non-browser clients need nothing, and the discovery document below is
+  exempt from the check so the OAuth bootstrap always completes.
 - The request body for POSTs
 
 There is nothing to protect at the network layer beyond what the OAuth

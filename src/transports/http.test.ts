@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { request as httpRequest } from "node:http";
 import {
+  isDiscoveryPath,
+  isOriginAllowed,
   resolveAllowedHosts,
-  resolveAllowedOrigins,
   resolveHttpOptions,
+  resolveOriginPolicy,
   startHttpTransport,
   type HttpServerHandle,
 } from "./http.js";
@@ -208,38 +210,88 @@ describe("resolveAllowedHosts", () => {
   });
 });
 
-describe("resolveAllowedOrigins", () => {
-  it("returns the loopback origins (port included) by default when bound to a loopback interface", () => {
-    expect(resolveAllowedOrigins(undefined, "127.0.0.1", 3000)).toEqual([
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://[::1]:3000",
-    ]);
-    expect(resolveAllowedOrigins(undefined, "localhost", 8080)).toEqual([
-      "http://localhost:8080",
-      "http://127.0.0.1:8080",
+describe("resolveOriginPolicy", () => {
+  it("accepts any loopback origin by default when bound to a loopback interface", () => {
+    const policy = resolveOriginPolicy(undefined, "127.0.0.1");
+    expect(policy).toEqual({ enabled: true, origins: [], allowAnyLoopback: true });
+    // The port is deliberately NOT pinned: nothing is served from the MCP port,
+    // so the browser clients that legitimately show up sit on other local ports.
+    for (const origin of [
+      "http://localhost:6274", // MCP Inspector
+      "http://127.0.0.1:5173", // Vite dev server
       "http://[::1]:8080",
-    ]);
+      "https://localhost:3000",
+      "http://localhost", // implicit :80
+    ]) {
+      expect(isOriginAllowed(policy, origin)).toBe(true);
+    }
   });
 
-  it("returns an empty list (validation disabled) when bound to a non-loopback interface with no config", () => {
-    expect(resolveAllowedOrigins(undefined, "0.0.0.0", 3000)).toEqual([]);
-    expect(resolveAllowedOrigins([], "0.0.0.0", 3000)).toEqual([]);
+  it("still rejects remote origins under the loopback default (DNS rebinding)", () => {
+    const policy = resolveOriginPolicy(undefined, "localhost");
+    for (const origin of [
+      "https://evil.example.com",
+      "http://127.0.0.1.nip.io", // resolves to loopback, hostname is not
+      "http://localhost.evil.example.com",
+      "file://",
+      "null",
+    ]) {
+      expect(isOriginAllowed(policy, origin)).toBe(false);
+    }
+  });
+
+  it("adds the public URL's origin to the loopback default (reverse-proxy deployment)", () => {
+    const policy = resolveOriginPolicy(undefined, "127.0.0.1", "https://mcp.example.com/mcp");
+    expect(policy.origins).toEqual(["https://mcp.example.com"]);
+    expect(isOriginAllowed(policy, "https://mcp.example.com")).toBe(true);
+    expect(isOriginAllowed(policy, "https://other.example.com")).toBe(false);
+  });
+
+  it("ignores an unparseable public URL rather than throwing", () => {
+    expect(resolveOriginPolicy(undefined, "127.0.0.1", "not a url").origins).toEqual([]);
+  });
+
+  it("disables validation when bound to a non-loopback interface with no config", () => {
+    const policy = resolveOriginPolicy(undefined, "0.0.0.0");
+    expect(policy.enabled).toBe(false);
+    expect(isOriginAllowed(policy, "https://evil.example.com")).toBe(true);
+  });
+
+  it("treats an empty configured list as unconfigured, not as disabled", () => {
+    // A blank `MCP_HTTP_ALLOWED_ORIGINS=` must not silently switch the check
+    // off — `*` is the explicit opt-out. Asserted on a *loopback* bind, where
+    // the two behaviours actually differ.
+    const policy = resolveOriginPolicy([], "127.0.0.1");
+    expect(policy).toEqual({ enabled: true, origins: [], allowAnyLoopback: true });
+    expect(isOriginAllowed(policy, "https://evil.example.com")).toBe(false);
+    expect(resolveOriginPolicy([], "0.0.0.0").enabled).toBe(false);
   });
 
   it("treats a sole `*` as an explicit opt-out", () => {
-    expect(resolveAllowedOrigins(["*"], "127.0.0.1", 3000)).toEqual([]);
+    const policy = resolveOriginPolicy(["*"], "127.0.0.1");
+    expect(policy.enabled).toBe(false);
+    expect(isOriginAllowed(policy, "https://evil.example.com")).toBe(true);
   });
 
   it("ignores `*` when mixed with real origins (keeps validation on)", () => {
-    expect(resolveAllowedOrigins(["*", "https://app.example.com"], "0.0.0.0", 3000)).toEqual([
-      "https://app.example.com",
-    ]);
+    const policy = resolveOriginPolicy(["*", "https://app.example.com"], "0.0.0.0");
+    expect(policy).toEqual({
+      enabled: true,
+      origins: ["https://app.example.com"],
+      allowAnyLoopback: false,
+    });
+  });
+
+  it("matches an explicit list exactly — port-sensitive, no loopback shortcut", () => {
+    const policy = resolveOriginPolicy(["http://localhost:5173"], "127.0.0.1");
+    expect(policy.allowAnyLoopback).toBe(false);
+    expect(isOriginAllowed(policy, "http://localhost:5173")).toBe(true);
+    expect(isOriginAllowed(policy, "http://localhost:6274")).toBe(false);
   });
 
   it("normalises configured origins (case, whitespace, trailing slashes)", () => {
-    expect(resolveAllowedOrigins(["HTTPS://App.Example.COM/"], "0.0.0.0", 3000)).toEqual(["https://app.example.com"]);
-    expect(resolveAllowedOrigins([" https://app.example.com///"], "0.0.0.0", 3000)).toEqual([
+    expect(resolveOriginPolicy(["HTTPS://App.Example.COM/"], "0.0.0.0").origins).toEqual(["https://app.example.com"]);
+    expect(resolveOriginPolicy([" https://app.example.com///"], "0.0.0.0").origins).toEqual([
       "https://app.example.com",
     ]);
   });
@@ -249,9 +301,23 @@ describe("resolveAllowedOrigins", () => {
     // caller-supplied Origin header, so it must not backtrack.
     const origin = `https://app.example.com${"/".repeat(50_000)}`;
     const started = process.hrtime.bigint();
-    expect(resolveAllowedOrigins([origin], "0.0.0.0", 3000)).toEqual(["https://app.example.com"]);
+    expect(resolveOriginPolicy([origin], "0.0.0.0").origins).toEqual(["https://app.example.com"]);
     const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
     expect(elapsedMs).toBeLessThan(250);
+  });
+});
+
+describe("isDiscoveryPath", () => {
+  it("matches the bare and path-suffixed RFC 9728 metadata paths", () => {
+    expect(isDiscoveryPath("/.well-known/oauth-protected-resource", "/mcp")).toBe(true);
+    expect(isDiscoveryPath("/.well-known/oauth-protected-resource/mcp", "/mcp")).toBe(true);
+    expect(isDiscoveryPath("/.well-known/oauth-protected-resource?x=1", "/mcp")).toBe(true);
+  });
+
+  it("does not match anything else", () => {
+    expect(isDiscoveryPath("/mcp", "/mcp")).toBe(false);
+    expect(isDiscoveryPath("/.well-known/oauth-authorization-server", "/mcp")).toBe(false);
+    expect(isDiscoveryPath(undefined, "/mcp")).toBe(false);
   });
 });
 
@@ -563,10 +629,55 @@ describe("startHttpTransport (integration)", () => {
       stateless: true,
       enableJsonResponse: true,
     });
-    // Loopback default embeds the bound port.
+    // The loopback default accepts any local port, not just the bound one:
+    // a browser client (MCP Inspector, a dev server) is served from elsewhere.
+    for (const origin of [
+      `http://localhost:${handle.address.port}`,
+      "http://localhost:6274",
+      "http://127.0.0.1:5173",
+    ]) {
+      const res = await postWithHost(handle.address.port, "/mcp", "127.0.0.1", INIT_BODY, {
+        Accept: "application/json, text/event-stream",
+        Origin: origin,
+        ...AUTH_HEADER,
+      });
+      expect(res.status, `Origin ${origin} should be accepted`).toBe(200);
+    }
+  });
+
+  it("serves the RFC 9728 discovery document regardless of Origin", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+      allowedOrigins: ["https://app.example.com"],
+    });
+    // A browser client only fetches this because a 401 challenge pointed it
+    // here; 403ing it would dead-end the OAuth bootstrap.
+    for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"]) {
+      const res = await fetch(`http://127.0.0.1:${handle.address.port}${path}`, {
+        headers: { Origin: "https://evil.example.com" },
+      });
+      expect(res.status, `${path} should be served`).toBe(200);
+      const doc = (await res.json()) as { resource?: string };
+      expect(doc.resource).toContain("/mcp");
+    }
+  });
+
+  it("adds the publicUrl origin to the loopback default (reverse-proxy deployment)", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+      publicUrl: "https://mcp.example.com/mcp",
+    });
     const res = await postWithHost(handle.address.port, "/mcp", "127.0.0.1", INIT_BODY, {
       Accept: "application/json, text/event-stream",
-      Origin: `http://localhost:${handle.address.port}`,
+      Origin: "https://mcp.example.com",
       ...AUTH_HEADER,
     });
     expect(res.status).toBe(200);
