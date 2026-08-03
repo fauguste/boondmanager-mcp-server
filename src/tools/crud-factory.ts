@@ -69,7 +69,11 @@ export function buildListStructured(response: JsonApiResponse, fields?: string[]
     if (entity.id !== undefined) item.id = String(entity.id);
     if (entity.type !== undefined) item.type = String(entity.type);
     if (projected) {
-      const attrs = (entity.attributes ?? {}) as Record<string, unknown>;
+      // Some reference endpoints (`/calendars`, dictionary-style payloads) return
+      // flat items with no `attributes` wrapper — same fallback as
+      // `formatProjectedSummary`, otherwise structuredContent held bare ids while
+      // the text output showed the projected values.
+      const attrs = (entity.attributes ?? entity) as Record<string, unknown>;
       const selected: Record<string, unknown> = {};
       for (const field of fields) {
         if (attrs[field] !== undefined) selected[field] = attrs[field];

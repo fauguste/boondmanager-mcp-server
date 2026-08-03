@@ -5,13 +5,15 @@ import { appendOverridesToDescription, resolveLabel } from "../config/dictionary
 // Client-side projection, shared by every search schema. Declared before
 // `SearchSchema` because that schema embeds it (a `const` referenced during
 // module init would otherwise hit the temporal dead zone).
+//
+// The description is deliberately terse: it is duplicated into ~32 tool
+// schemas, so every character costs ~32 bytes of the `tools/list` payload.
 export const fieldsField = z
   .array(z.string())
   .optional()
   .describe(
-    "Projection côté client : liste d'attributs JSON:API à afficher pour chaque résultat " +
-      "(ex: ['title', 'updateDate', 'numberOfActiveProjects']). Réduit fortement la taille de la réponse. " +
-      "Absent = résumé standard (nom, email, ville, statut...). Les noms inconnus sont ignorés."
+    "Projection : attributs à afficher par résultat (ex: ['title','updateDate']). " +
+      "Absent = résumé standard. Noms inconnus ignorés."
   );
 
 // Common search schema
