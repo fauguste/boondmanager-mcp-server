@@ -34,7 +34,7 @@ Returns: Liste des avantages correspondants.`,
       const query = buildSearchQuery(params);
       const response = await apiSearch("/advantages", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "avantage") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "avantage", params.fields) }],
       };
     }
   );

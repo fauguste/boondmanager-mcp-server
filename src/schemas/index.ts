@@ -2,6 +2,18 @@ import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
 import { appendOverridesToDescription, resolveLabel } from "../config/dictionary-overrides.js";
 
+// Client-side projection, shared by every search schema. Declared before
+// `SearchSchema` because that schema embeds it (a `const` referenced during
+// module init would otherwise hit the temporal dead zone).
+export const fieldsField = z
+  .array(z.string())
+  .optional()
+  .describe(
+    "Projection côté client : liste d'attributs JSON:API à afficher pour chaque résultat " +
+      "(ex: ['title', 'updateDate', 'numberOfActiveProjects']). Réduit fortement la taille de la réponse. " +
+      "Absent = résumé standard (nom, email, ville, statut...). Les noms inconnus sont ignorés."
+  );
+
 // Common search schema
 export const SearchSchema = z
   .object({
@@ -20,6 +32,7 @@ export const SearchSchema = z
       .max(MAX_PAGE_SIZE)
       .default(DEFAULT_PAGE_SIZE)
       .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
+    fields: fieldsField,
   })
   .strict();
 
@@ -44,14 +57,6 @@ const pageSizeField = z
 const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
 const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri (asc/desc)");
 const intArray = (doc: string) => z.array(z.number().int()).optional().describe(doc);
-const fieldsField = z
-  .array(z.string())
-  .optional()
-  .describe(
-    "Projection côté client : liste d'attributs JSON:API à afficher pour chaque résultat " +
-      "(ex: ['title', 'updateDate', 'numberOfActiveProjects']). Réduit fortement la taille de la réponse. " +
-      "Absent = résumé standard (nom, email, ville, statut...). Les noms inconnus sont ignorés."
-  );
 const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
 
 // Shared `tools` (technologies/skills) filter. Centralised so every entity
@@ -873,6 +878,7 @@ export const ActionSearchSchema = z
     companyId: z.string().optional().describe("Filtrer par ID société"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1050,6 +1056,7 @@ export const InvoiceSearchSchema = z
       .describe("Type de période (created, updated, expectedPayment, performedPayment, period)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1093,6 +1100,7 @@ export const OrderSearchSchema = z
     projectId: z.string().optional().describe("Filtrer par ID projet"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1107,6 +1115,7 @@ export const DeliverySearchSchema = z
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1144,6 +1153,7 @@ export const AbsenceSearchSchema = z
     endMonth: z.string().optional().describe("Mois de fin de période (YYYY-MM)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1184,6 +1194,7 @@ export const ExpenseSearchSchema = z
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1261,6 +1272,7 @@ export const PositioningSearchSchema = z
       .describe("Filtrer par ID produit (envoyé à l'API comme référence keywords PROD<id>)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1278,6 +1290,7 @@ export const PaymentSearchSchema = z
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1289,6 +1302,7 @@ export const AdvantageSearchSchema = z
     resourceId: z.string().optional().describe("Filtrer par ID ressource"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1332,6 +1346,7 @@ export const ValidationSearchSchema = z
       .max(MAX_PAGE_SIZE)
       .default(DEFAULT_PAGE_SIZE)
       .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
+    fields: fieldsField,
   })
   .strict();
 
@@ -1359,6 +1374,7 @@ export const NotificationSearchSchema = z
       .max(MAX_PAGE_SIZE)
       .default(DEFAULT_PAGE_SIZE)
       .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
+    fields: fieldsField,
   })
   .strict();
 

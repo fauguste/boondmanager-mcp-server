@@ -130,6 +130,138 @@ describe("formatEntitySummary", () => {
     expect(result).toContain("France");
     expect(result).toContain("ISO: FR");
   });
+
+  // Rows keyed on a reference/number/date instead of a name used to render as
+  // a bare `[order #1234] | Statut: 1`, forcing a `_get` per row. The payloads
+  // below mirror the shape of BoondManager list responses; every value is
+  // synthetic — no tenant data belongs in the repo.
+  describe("business-identifier fallback (rows with no name/title)", () => {
+    it("identifies a project by its reference", () => {
+      const result = formatEntitySummary({
+        id: "1042",
+        type: "project",
+        attributes: {
+          reference: "PRJ1042-ACME - Refonte du portail client",
+          typeOf: 22,
+          startDate: "2026-08-01",
+          endDate: "2026-09-30",
+          turnoverSimulatedExcludingTax: 0,
+        },
+      });
+      expect(result).toContain("Réf: PRJ1042-ACME - Refonte du portail client");
+      expect(result).toContain("Du 2026-08-01 au 2026-09-30");
+      expect(result).toContain("CA simulé HT: 0");
+    });
+
+    it("identifies an order by its number, reference and amounts", () => {
+      const result = formatEntitySummary({
+        id: "1234",
+        type: "order",
+        attributes: {
+          date: "2026-08-03",
+          number: "26E0001234",
+          reference: "BM1000000001234",
+          turnoverInvoicedExcludingTax: 0,
+          turnoverOrderedExcludingTax: 12000,
+          state: 1,
+        },
+      });
+      expect(result).toContain("N°: 26E0001234");
+      expect(result).toContain("Réf: BM1000000001234");
+      expect(result).toContain("Date: 2026-08-03");
+      expect(result).toContain("Statut: 1");
+      // Capped at MAX_FALLBACK_AMOUNTS so the line stays scannable.
+      expect(result).toContain("CA facturé HT: 0");
+      expect(result).toContain("CA commandé HT: 12000");
+    });
+
+    it("identifies an invoice by date and amount even when reference is blank", () => {
+      const result = formatEntitySummary({
+        id: "5001",
+        type: "invoice",
+        attributes: {
+          date: "2026-07-31",
+          reference: "",
+          state: 10,
+          turnoverInvoicedExcludingTax: 1500,
+          totalPayableIncludingTax: 1800,
+        },
+      });
+      expect(result).toContain("Date: 2026-07-31");
+      expect(result).toContain("CA facturé HT: 1500");
+      // An empty reference must not produce a dangling "Réf: ".
+      expect(result).not.toContain("Réf:");
+    });
+
+    it("identifies an action by its date, type and a stripped text excerpt", () => {
+      const result = formatEntitySummary({
+        id: "7001",
+        type: "action",
+        attributes: {
+          startDate: "2027-09-01T15:00:00+0200",
+          typeOf: 3,
+          text: "<div>Relancer au prochain trimestre</div>",
+        },
+      });
+      expect(result).toContain("Début: 2027-09-01T15:00:00+0200");
+      expect(result).toContain("Type: 3");
+      expect(result).toContain("Relancer au prochain trimestre");
+      expect(result).not.toContain("<div>");
+    });
+
+    it("truncates a long HTML note to a single-line excerpt", () => {
+      const result = formatEntitySummary({
+        id: "1",
+        type: "action",
+        attributes: { text: `<p>${"a".repeat(200)}</p>` },
+      });
+      expect(result).toContain("…");
+      expect(result.length).toBeLessThan(140);
+    });
+
+    it("skips an HTML note that carries no text", () => {
+      const result = formatEntitySummary({ id: "1", type: "action", attributes: { text: "<div></div>" } });
+      expect(result).toBe("[action #1]");
+    });
+
+    // Regression guard: /resources and /opportunities also carry `reference`
+    // and amount attributes. Their rows already read well, so the fallback
+    // must stay off for them — otherwise every line grows for no gain.
+    it("leaves a named row untouched even when it carries a reference and an amount", () => {
+      const result = formatEntitySummary({
+        id: "2001",
+        type: "resource",
+        attributes: {
+          firstName: "Jean",
+          lastName: "DUPONT",
+          reference: "BM100000002001",
+          title: "Responsable technique",
+          state: 1,
+          averageDailyPriceExcludingTax: 900,
+          typeOf: 0,
+        },
+      });
+      expect(result).toBe("[resource #2001] | Jean DUPONT | Statut: 1 | Titre: Responsable technique");
+    });
+
+    it("leaves a titled row untouched (opportunities carry reference + startDate)", () => {
+      const result = formatEntitySummary({
+        id: "3001",
+        type: "opportunity",
+        attributes: {
+          reference: "AO3001",
+          title: "RFP - Outil de pilotage",
+          state: 9,
+          startDate: "2026-07-01",
+        },
+      });
+      expect(result).toBe("[opportunity #3001] | Statut: 9 | Titre: RFP - Outil de pilotage");
+    });
+
+    it("keeps returning a bare header when the payload has nothing to show", () => {
+      expect(formatEntitySummary({ id: "4001", type: "positioning", attributes: {} })).toBe("[positioning #4001]");
+    });
+  });
 });
 
 describe("formatListResponse", () => {

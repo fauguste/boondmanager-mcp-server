@@ -842,6 +842,92 @@ export async function apiSearch(path: string, query: Record<string, QueryValue>)
   return meta !== undefined ? { data, meta } : { data };
 }
 
+/**
+ * Business identifiers used as a last resort when a list row has no
+ * human-readable identity (no name, no title, no dictionary `value`).
+ *
+ * Transactional endpoints (`/invoices`, `/orders`, `/actions`,
+ * `/deliveries-groupments`, `/projects`…) key their rows on a reference, a
+ * number or a date rather than on a name, so the standard summary rendered
+ * them as a bare `[order #1234] | Statut: 1` — a line the model cannot act on
+ * without a follow-up `_get` per row.
+ *
+ * These are deliberately NOT appended unconditionally: `/resources` and
+ * `/opportunities` also carry `reference` and amount attributes, and their
+ * rows already read well (name, title). Enriching them too would only inflate
+ * every line. See `hasIdentity` in formatEntitySummary.
+ */
+const AMOUNT_FALLBACK_FIELDS: ReadonlyArray<readonly [string, string]> = [
+  ["turnoverInvoicedExcludingTax", "CA facturé HT"],
+  ["turnoverOrderedExcludingTax", "CA commandé HT"],
+  ["turnoverSimulatedExcludingTax", "CA simulé HT"],
+  ["averageDailyPriceExcludingTax", "TJM HT"],
+];
+
+/** Max amount entries appended to a fallback line, to keep it scannable. */
+const MAX_FALLBACK_AMOUNTS = 2;
+
+/** Max length of the `text` excerpt used to identify an action. */
+const MAX_TEXT_EXCERPT = 80;
+
+/**
+ * Renders BoondManager's HTML note fields (`/actions`.text is a `<div>…</div>`)
+ * as a short single-line excerpt. Entities are left as-is: the excerpt is a
+ * hint for the model, not content to round-trip.
+ */
+function textExcerpt(raw: unknown): string | undefined {
+  const stripped = String(raw)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (stripped === "") return undefined;
+  return stripped.length > MAX_TEXT_EXCERPT ? `${stripped.slice(0, MAX_TEXT_EXCERPT)}…` : stripped;
+}
+
+/**
+ * Secondary identifiers for rows that have no name/title/value. Order is
+ * chosen so the most identifying token comes first (number, then reference,
+ * then when it happened, then how much).
+ */
+function fallbackIdentityParts(attrs: Record<string, unknown>): string[] {
+  const parts: string[] = [];
+
+  if (attrs.number) parts.push(`N°: ${attrs.number}`);
+  if (attrs.reference) parts.push(`Réf: ${attrs.reference}`);
+
+  if (attrs.date) {
+    parts.push(`Date: ${attrs.date}`);
+  } else if (attrs.startDate && attrs.endDate) {
+    parts.push(`Du ${attrs.startDate} au ${attrs.endDate}`);
+  } else if (attrs.startDate) {
+    parts.push(`Début: ${attrs.startDate}`);
+  } else if (attrs.endDate) {
+    parts.push(`Fin: ${attrs.endDate}`);
+  }
+
+  let amounts = 0;
+  for (const [field, label] of AMOUNT_FALLBACK_FIELDS) {
+    if (amounts >= MAX_FALLBACK_AMOUNTS) break;
+    const value = attrs[field];
+    // 0 is meaningful here (an order with no turnover yet), so only
+    // undefined/null are skipped.
+    if (value === undefined || value === null) continue;
+    parts.push(`${label}: ${value}`);
+    amounts++;
+  }
+
+  // `typeOf` is an integer resolved through boond://dictionary/typeOf/* — on
+  // its own it is weak, but on an action it is often the only discriminator.
+  if (attrs.typeOf !== undefined && attrs.typeOf !== null) parts.push(`Type: ${attrs.typeOf}`);
+
+  if (attrs.text !== undefined) {
+    const excerpt = textExcerpt(attrs.text);
+    if (excerpt !== undefined) parts.push(excerpt);
+  }
+
+  return parts;
+}
+
 export function formatEntitySummary(entity: unknown): string {
   // A few BoondManager endpoints (e.g. `/calendars`, `/application/dictionary`)
   // return reference items as flat objects without a JSON:API `attributes`
@@ -879,6 +965,19 @@ export function formatEntitySummary(entity: unknown): string {
   if (attrs.state !== undefined) parts.push(`Statut: ${attrs.state}`);
   if (attrs.title) parts.push(`Titre: ${attrs.title}`);
   if (attrs.iso !== undefined && String(attrs.iso) !== id) parts.push(`ISO: ${attrs.iso}`);
+
+  // Rows that named themselves are already useful — leave them untouched.
+  // Only the ones reduced to `[type #id]` (+ maybe a status integer) get the
+  // business identifiers appended.
+  const hasIdentity =
+    Boolean(attrs.firstName) ||
+    Boolean(attrs.lastName) ||
+    Boolean(attrs.name) ||
+    Boolean(attrs.title) ||
+    attrs.value !== undefined;
+  if (!hasIdentity) {
+    parts.push(...fallbackIdentityParts(attrs));
+  }
 
   return parts.join(" | ");
 }

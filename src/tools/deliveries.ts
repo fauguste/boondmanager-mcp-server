@@ -93,7 +93,7 @@ Returns: Liste des livraisons correspondantes.`,
       const query = buildSearchQuery(params);
       const response = await apiSearch("/deliveries-groupments", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "livraison") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "livraison", params.fields) }],
       };
     }
   );

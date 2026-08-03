@@ -94,7 +94,7 @@ Returns: Liste des paiements correspondants.`,
       const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
       const response = await apiRequest("/payments", "GET", undefined, query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "paiement") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "paiement", params.fields) }],
       };
     }
   );

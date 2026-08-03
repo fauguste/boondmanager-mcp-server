@@ -109,6 +109,19 @@ the file server-side; the MCP server never reads local files), with
 `parsing: true` to trigger Boond's AI resume parsing on `candidateResume`.
 Delete goes through the factory (elicitation + structuredContent).
 
+**List summaries** (`src/services/boond-client.ts::formatEntitySummary`): one
+line per search result. Rows are normally identified by name / `value` /
+`title`. Rows that have none of those — `/invoices`, `/orders`, `/actions`,
+`/deliveries-groupments`, `/projects` are keyed on a reference, a number or a
+date — fall back to `fallbackIdentityParts()`, which appends `number`,
+`reference`, the date (or `startDate`→`endDate` window), up to
+`MAX_FALLBACK_AMOUNTS` turnover figures, `typeOf`, and a tag-stripped excerpt
+of `text`. The fallback is **conditional on purpose**: `/resources` and
+`/opportunities` also carry `reference` and amount attributes, and appending
+them there would inflate every line for no gain. When touching this, keep the
+regression tests in `boond-client.test.ts` that pin the named-row output
+byte-for-byte.
+
 **Error formatting** (`src/services/boond-client.ts`): non-2xx responses
 are surfaced through `formatApiError()` which uses
 `parseBoondErrorBody()` to extract `errors[].detail` from BoondManager's
@@ -207,11 +220,15 @@ Common gotchas:
   is CV/full-text.
 - Pagination: `pageSize` is the input name, mapped to `maxResults` for
   the API; `MAX_PAGE_SIZE = 500`, `DEFAULT_PAGE_SIZE = 30`.
-- **`fields`** (the six main search tools only): client-side projection —
-  the listed attribute names replace the standard one-line summary in the
-  output. It is **never** forwarded to the API (`buildSearchQuery` strips
-  it); unknown names are skipped silently. Use it to keep large result
-  pages token-cheap (e.g. `fields: ["title", "updateDate"]`).
+- **`fields`** (every search tool except `boond_timesheets_search` and the
+  `boond_reporting_*` family, which render through their own formatters):
+  client-side projection — the listed attribute names replace the standard
+  one-line summary in the output. It is **never** forwarded to the API
+  (`buildSearchQuery` strips it); unknown names are skipped silently. Use it
+  to keep large result pages token-cheap (e.g. `fields: ["title", "updateDate"]`).
+  Adding it to a new search schema means adding `fields: fieldsField` to the
+  schema **and** passing `params.fields` to `formatListResponse` — the
+  crud-factory does this automatically, hand-rolled tools do not.
 
 The Zod schemas in `src/schemas/index.ts` are `.strict()`, so any caller
 passing an old/invalid filter name (e.g., `mainManagers`) gets a clear

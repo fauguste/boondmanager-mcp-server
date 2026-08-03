@@ -48,7 +48,7 @@ Returns: Liste des positionnements correspondants.`,
       const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
       const response = await apiRequest("/positionings", "GET", undefined, query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "positionnement") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "positionnement", params.fields) }],
       };
     }
   );

@@ -35,7 +35,7 @@ Returns: Liste des notifications correspondantes.`,
       const query = buildSearchQuery(params);
       const response = await apiSearch("/notifications", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "notification") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "notification", params.fields) }],
       };
     }
   );
