@@ -1080,8 +1080,11 @@ export function formatEntitySummary(entity: unknown): string {
 function formatProjectedSummary(entity: unknown, fields: string[]): string {
   const e = (entity ?? {}) as Record<string, unknown>;
   const attrs = (e.attributes ?? e) as Record<string, unknown>;
-  const id = e.id !== undefined ? String(e.id) : "?";
-  const parts: string[] = [`[#${id}]`];
+  // Reference endpoints return flat rows keyed on something else than `id`
+  // (`/calendars` keys countries on `iso`), so a missing id renders as the same
+  // `[item]` token the standard summary uses — not as a `[#?]` that reads like
+  // a formatting bug.
+  const parts: string[] = [e.id !== undefined ? `[#${String(e.id)}]` : "[item]"];
   for (const field of fields) {
     const value = attrs[field];
     if (value === undefined) continue;

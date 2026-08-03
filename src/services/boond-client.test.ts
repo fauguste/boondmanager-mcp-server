@@ -480,6 +480,13 @@ describe("formatListResponse", () => {
       expect(result).toContain('skills: {"main":"TS"}');
     });
 
+    // Observed on the real `/calendars` endpoint: 249 flat rows keyed on `iso`,
+    // no `id` anywhere. The header used to render as `[#?]`.
+    it("uses the [item] header for a flat row that has no id", () => {
+      const result = formatListResponse({ data: [{ iso: "AD", value: "Andorre" }] as never }, "calendrier", ["value"]);
+      expect(result).toBe("[item] | value: Andorre");
+    });
+
     it("falls back to the standard summary when fields is empty", () => {
       const result = formatListResponse(response, "candidat", []);
       expect(result).toContain("Jean Dupont");
