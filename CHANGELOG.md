@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.8.3] - 2026-08-03
+
+Release de maintenance : correctifs de sécurité des dépendances transitives, mise à jour du SDK MCP et de la chaîne d'outillage CI. Aucun changement fonctionnel. Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
+
+### Security
+
+- **Deux advisories transitives corrigées** (`npm audit` : 2 → 0 vulnérabilité côté runtime) :
+  - `fast-uri` (3.1.4 → 3.1.5) — [GHSA-7p8r-x3mc-p8w7](https://github.com/advisories/GHSA-7p8r-x3mc-p8w7), *host confusion* via introducteur d'autorité `\` (severity high). Dépendance transitive d'`ajv` (8.17.1 → 8.18.0).
+  - `@hono/node-server` (1.19.14 → 2.0.12) — [GHSA-frvp-7c67-39w9](https://github.com/advisories/GHSA-frvp-7c67-39w9), *path traversal* dans `serve-static` sous Windows via backslash encodé `%5C` (severity moderate). Rendu possible par l'élargissement de plage du SDK MCP 1.30.0 (`^1.19.9 || ^2.0.5`). Dépendance transitive du SDK, non utilisée directement par le serveur (le transport HTTP s'appuie sur `node:http`) ; lockfile uniquement, aucun changement de `package.json`.
+
+### Changed
+
+- **SDK MCP** ([#163](https://github.com/fauguste/boondmanager-mcp-server/pull/163)) : bump de `@modelcontextprotocol/sdk` (1.29.0 → 1.30.0) — la nouvelle version élargit sa plage `@hono/node-server` (`^1.19.9 || ^2.0.5`). Aucun ajustement de code nécessaire.
+- **Dev-dependencies** ([#161](https://github.com/fauguste/boondmanager-mcp-server/pull/161), [#164](https://github.com/fauguste/boondmanager-mcp-server/pull/164)) : bump d'`eslint` (10.7.0 → 10.8.0), `typescript-eslint` (8.64.0 → 8.65.0), `prettier` (3.9.5 → 3.9.6), `lint-staged` (17.1.0 → 17.2.0) et `@types/node` (26.1.1 → 26.1.2) — lockfile uniquement, rien n'est embarqué dans le paquet publié.
+- **GitHub Actions** ([#162](https://github.com/fauguste/boondmanager-mcp-server/pull/162), [#166](https://github.com/fauguste/boondmanager-mcp-server/pull/166)) : bump d'`actions/checkout` (v7.0.0 → v7.0.1), `github/codeql-action` (v4.37.1 → v4.37.4) et `docker/login-action` — digests réépinglés dans tous les workflows.
+- **Image Docker** ([#165](https://github.com/fauguste/boondmanager-mcp-server/pull/165)) : bump du digest de l'image de base `node:26-alpine`, la reconstruction embarque les derniers correctifs amont.
+
 ## [2.8.2] - 2026-07-23
 
 Release de maintenance : mises à jour de sécurité et de correctifs des dépendances (Dependabot) et fiabilisation des tests HTTP. Aucun changement fonctionnel. Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
