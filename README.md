@@ -206,7 +206,7 @@ Exemples d'invocation des prompts ressources / competences / CV :
 
 ## Prerequis
 
-- Node.js >= 20
+- Node.js >= 22
 - Un compte BoondManager avec acces API active
 - L'option "Allow API Rest calls using BasicAuth authentication" activee dans la configuration BoondManager (si BasicAuth)
 
@@ -574,7 +574,7 @@ Le serveur supporte deux transports MCP, selectionnables via la variable d'envir
 
 ### Streamable HTTP (pour les gateways MCP)
 
-Depuis la v1.4.0, le serveur peut etre expose en HTTP (specification MCP Streamable HTTP 2025-03-26) afin d'etre branche derriere une passerelle MCP ou deploye comme service.
+Depuis la v1.4.0, le serveur peut etre expose en HTTP (transport MCP Streamable HTTP) afin d'etre branche derriere une passerelle MCP ou deploye comme service. La revision de protocole negociee est celle du SDK installe (`2025-11-25`).
 
 > **Authentification BoondManager : OAuth2 protected resource.** Le serveur HTTP **ne detient aucun secret** (ni `client_secret`, ni refresh token, ni stockage utilisateur). Chaque requete MCP doit porter `Authorization: Bearer <boond_access_token>` ; le serveur transmet le token tel quel a BoondManager. C'est le **client MCP** (Claude Desktop, Claude Code, gateway…) qui fait la danse OAuth contre BoondManager et qui gere le refresh. Procedure complete : [docs/oauth.md](docs/oauth.md).
 
@@ -608,6 +608,7 @@ npx boondmanager-mcp-server
 | `MCP_HTTP_SESSION_TTL_MS` | `1800000` (30 min) | En mode stateful, duree d'inactivite au-dela de laquelle une session est fermee. |
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Frequence de balayage des sessions inactives. |
 | `MCP_HTTP_ALLOWED_HOSTS` | _(auto)_ | Liste blanche du header `Host` (anti DNS rebinding, CVE-2025-66414). `*` pour desactiver explicitement. |
+| `MCP_HTTP_ALLOWED_ORIGINS` | _(auto)_ | Liste blanche du header `Origin` (scheme + host + port) pour les clients navigateur ; un `Origin` hors liste recoit un `403` (exigence spec 2025-11-25). Defaut = origines loopback avec le port d'ecoute quand le serveur ecoute en loopback, sinon validation desactivee. **Une requete sans `Origin` est toujours acceptee** (curl, gateways, clients MCP non-navigateur). `*` pour desactiver explicitement. |
 
 **Variables OAuth2 — discovery (toutes optionnelles)**
 
@@ -841,13 +842,13 @@ npm run typecheck
 
 ### Stack technique
 
-- **Runtime** : Node.js >= 20 (ES2022)
+- **Runtime** : Node.js >= 22 (ES2022)
 - **Langage** : TypeScript 5.8+ (mode strict)
 - **MCP SDK** : @modelcontextprotocol/sdk 1.12+
 - **Validation** : Zod 4
 - **Tests** : Vitest 4 + couverture V8
 - **Lint** : ESLint 10 + typescript-eslint
-- **Transports** : stdio (defaut) + Streamable HTTP (MCP 2025-03-26)
+- **Transports** : stdio (defaut) + Streamable HTTP (spec MCP 2025-11-25)
 
 ## Ressources
 

@@ -3,6 +3,32 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9.0] - 2026-08-03
+
+Remise à niveau sur la révision de spec MCP **2025-11-25** (celle que le SDK négocie déjà), fermeture d'un trou de validation HTTP et sortie de la fenêtre EOL de Node 20 ([#167](https://github.com/fauguste/boondmanager-mcp-server/issues/167)). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
+
+> ⚠️ **BREAKING** : le prérequis runtime passe à **Node.js >= 22**. Node 20 est en fin de vie depuis le 2026-04-30 et n'est plus testé en CI. Les utilisateurs restés en 20 doivent mettre à jour leur runtime (l'image Docker tournait déjà sur Node 26).
+
+### Added
+
+- **`instructions` au niveau serveur** : le serveur annonce désormais, dans le résultat d'`initialize`, un jeu de règles transverses (`src/instructions.ts`) — convention de nommage `boond_{domaine}_{opération}`, pièges des filtres de périmètre (`perimeterDynamic` / `perimeterManagers` / `perimeterAgencies` + `narrowPerimeter`, et le rejet explicite de `mainManagers` & co par les schémas `.strict()`), syntaxe préfixée de `keywords` (`CSOC`, `CCON`, `CAND`, `COMP`, `AO`, `PRJ`, `MIS`, `PROD`, `CTR`), économie de contexte (`fields`, `pageSize`, plafond `page ≤ 100`) et résolution des états/types via les ressources `boond://dictionary/*`. Ces règles sont énoncées **une fois** au lieu d'être dupliquées dans chacune des 180 descriptions d'outils. Longueur plafonnée à 4000 caractères et testée.
+- **`Implementation.description`** (nouveauté 2025-11-25) : l'identité annoncée à l'`initialize` porte désormais une description, lue depuis `package.json` — pas de source de vérité supplémentaire à synchroniser au moment des releases.
+
+### Security
+
+- **Validation de l'en-tête `Origin`** (exigence de la spec 2025-11-25) : le transport HTTP renvoie désormais un `403 Forbidden` sur un `Origin` hors liste blanche, en complément de la validation `Host` déjà en place (anti DNS rebinding). Nouvelle variable `MCP_HTTP_ALLOWED_ORIGINS`, mêmes sémantiques que `MCP_HTTP_ALLOWED_HOSTS` (`*` seul = désactivation explicite, `*` mélangé = ignoré + warning). Par défaut : origines loopback avec le port d'écoute quand le serveur écoute en loopback, validation désactivée sinon. **Une requête sans `Origin` reste acceptée** (curl, gateways, clients MCP non-navigateur) et `/healthz` reste exempté — aucun client existant n'est cassé.
+
+### Changed
+
+- **Prérequis Node.js : >= 22** (`package.json::engines`, `manifest.json::compatibility.runtimes`). Matrice CI `[20, 22, 24]` → `[22, 24, 26]` ; les étapes épinglées sur Node 22 (validation MCPB, drift check `TOOLS.md`, cohérence des versions, upload de couverture) restent dans la matrice. Workflows `api-monitor` passés de Node 20 à 22.
+- **Dev-dependencies** : bump de `typescript-eslint` (8.65.0 → 8.66.0) et `lint-staged` (17.2.0 → 17.3.0) — lockfile uniquement, rien n'est embarqué dans le paquet publié.
+
+### Documentation
+
+- `CLAUDE.md` : nouvelles sections *MCP Spec Level* (révision négociée = celle du SDK, `2025-11-25` ; révision publiée = `2026-07-28`, suivie dans [#170](https://github.com/fauguste/boondmanager-mcp-server/issues/170)) et *Server Identity & Instructions* ; références obsolètes « 2025-03-26 » / « 2025-06-18 » corrigées.
+- `README.md`, `README-docker.md` : `MCP_HTTP_ALLOWED_ORIGINS` documentée, prérequis Node mis à jour.
+- `docs/oauth.md` : note à l'attention des intégrateurs — la DCR ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)) est dépréciée dans la révision 2026-07-28 au profit des *Client ID Metadata Documents*, et les clients doivent valider le paramètre `iss` ([RFC 9207](https://datatracker.ietf.org/doc/html/rfc9207)). Côté serveur (protected resource), rien à changer.
+
 ## [2.8.3] - 2026-08-03
 
 Release de maintenance : correctifs de sécurité des dépendances transitives, mise à jour du SDK MCP et de la chaîne d'outillage CI. Aucun changement fonctionnel. Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.

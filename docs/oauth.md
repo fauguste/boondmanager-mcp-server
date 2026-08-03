@@ -172,11 +172,41 @@ The reverse proxy must forward at least:
 - `Authorization` header (Bearer token)
 - `Host` header (or set `MCP_HTTP_ALLOWED_HOSTS` to include the public
   hostname)
+- `Origin` header for browser-based clients (or set
+  `MCP_HTTP_ALLOWED_ORIGINS` to include their origins — a request with no
+  `Origin` is always accepted, so non-browser clients need nothing)
 - The request body for POSTs
 
 There is nothing to protect at the network layer beyond what the OAuth
 token already gates — there is no "service-account" secret stored on the
 server that an attacker could steal by reaching the listener.
+
+---
+
+## 4bis. Spec revisions: what integrators should know
+
+The server is a **protected resource** only — it holds no OAuth state and
+issues no tokens — so the changes below require **nothing on the server
+side**. They matter for the *client* half of the flow, which is where
+integrators do their work.
+
+- **Dynamic Client Registration (DCR, [RFC 7591][rfc-7591]) is deprecated
+  in the 2026-07-28 spec revision**, in favour of **Client ID Metadata
+  Documents (CIMD)**: instead of POSTing a registration request, the client
+  uses an HTTPS URL that resolves to its own metadata document as its
+  `client_id`. Clients that rely on DCR still work wherever BoondManager
+  supports it, but new integrations should prefer CIMD where available.
+- **Clients must validate the `iss` parameter** returned on the
+  authorization response ([RFC 9207][rfc-9207]) against the issuer they
+  started the flow with. This defends against mix-up attacks when a client
+  talks to several authorization servers. Purely client-side — the MCP
+  server never sees the authorization response.
+- The protected-resource metadata this server publishes
+  (`/.well-known/oauth-protected-resource`, [RFC 9728][rfc-9728]) is
+  unchanged across these revisions, as is the `WWW-Authenticate` challenge.
+
+[rfc-7591]: https://datatracker.ietf.org/doc/html/rfc7591
+[rfc-9207]: https://datatracker.ietf.org/doc/html/rfc9207
 
 ---
 
