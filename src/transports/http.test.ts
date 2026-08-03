@@ -237,8 +237,21 @@ describe("resolveAllowedOrigins", () => {
     ]);
   });
 
-  it("normalises configured origins (case, trailing slash)", () => {
+  it("normalises configured origins (case, whitespace, trailing slashes)", () => {
     expect(resolveAllowedOrigins(["HTTPS://App.Example.COM/"], "0.0.0.0", 3000)).toEqual(["https://app.example.com"]);
+    expect(resolveAllowedOrigins([" https://app.example.com///"], "0.0.0.0", 3000)).toEqual([
+      "https://app.example.com",
+    ]);
+  });
+
+  it("normalises a long run of trailing slashes in linear time", () => {
+    // Guards the js/polynomial-redos fix: normalisation runs on the
+    // caller-supplied Origin header, so it must not backtrack.
+    const origin = `https://app.example.com${"/".repeat(50_000)}`;
+    const started = process.hrtime.bigint();
+    expect(resolveAllowedOrigins([origin], "0.0.0.0", 3000)).toEqual(["https://app.example.com"]);
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    expect(elapsedMs).toBeLessThan(250);
   });
 });
 

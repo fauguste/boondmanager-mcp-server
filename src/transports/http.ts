@@ -143,9 +143,17 @@ export function resolveAllowedHosts(configured: string[] | undefined, host: stri
  * Canonical form of an origin for comparison: lowercased (scheme and host are
  * case-insensitive) and without a trailing slash (some clients send
  * `http://localhost:3000/`, the spec form has no path).
+ *
+ * The trailing slashes are stripped with an index scan rather than a
+ * `/\/+$/` replace: this runs on the caller-supplied `Origin` header, and an
+ * anchored quantifier over a long run of `/` backtracks quadratically
+ * (js/polynomial-redos). The scan below is linear whatever the input.
  */
 function normalizeOrigin(value: string): string {
-  return value.trim().replace(/\/+$/, "").toLowerCase();
+  const trimmed = value.trim();
+  let end = trimmed.length;
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return trimmed.slice(0, end).toLowerCase();
 }
 
 /**
