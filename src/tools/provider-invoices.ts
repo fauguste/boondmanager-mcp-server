@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema } from "../schemas/index.js";
+import { IdSchema, fieldsField } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
@@ -12,6 +12,7 @@ const ProviderInvoiceSearchSchema = z
     resourceId: z.string().optional().describe("Filtrer par ID ressource via mot-cle COMP<id>"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numero de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Resultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -92,7 +93,7 @@ export function registerProviderInvoiceTools(server: McpServer): void {
       const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
       const response = await apiRequest("/provider-invoices", "GET", undefined, query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "facture fournisseur") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "facture fournisseur", params.fields) }],
       };
     }
   );

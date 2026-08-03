@@ -39,7 +39,7 @@ Returns: Liste des demandes d'absence correspondantes.`,
       const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
       const response = await apiRequest("/absences-reports", "GET", undefined, query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "absence") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "absence", params.fields) }],
       };
     }
   );

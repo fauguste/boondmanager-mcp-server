@@ -19,6 +19,10 @@ import {
   ContactSearchSchema,
   OpportunitySearchSchema,
   ActionSearchSchema,
+  CompanySearchSchema,
+  ProjectSearchSchema,
+  ValidationSearchSchema,
+  NotificationSearchSchema,
   ActionCreateSchema,
   ResourceTimesheetSchema,
   TimesheetSearchSchema,
@@ -835,5 +839,55 @@ describe("Reporting schemas", () => {
       }).success
     ).toBe(true);
     expect(ReportingProductionPlansSchema.safeParse({ positioningStates: [1] }).success).toBe(false);
+  });
+});
+
+// The `fields` projection is what keeps a large result page token-cheap. It
+// used to exist only on the six main search schemas, which left the highest
+// volume endpoints (invoices, orders, actions…) with no way to trim a page —
+// and no usable default summary either, since those rows carry no name.
+describe("fields projection availability", () => {
+  // `base` carries the schema's required filters, if any, so the assertion is
+  // about `fields` alone and not about a missing required key.
+  const schemasWithFields: ReadonlyArray<
+    readonly [string, { safeParse: (v: unknown) => { success: boolean } }, Record<string, unknown>]
+  > = [
+    ["SearchSchema", SearchSchema, {}],
+    ["ResourceSearchSchema", ResourceSearchSchema, {}],
+    ["CandidateSearchSchema", CandidateSearchSchema, {}],
+    ["ContactSearchSchema", ContactSearchSchema, {}],
+    ["CompanySearchSchema", CompanySearchSchema, {}],
+    ["OpportunitySearchSchema", OpportunitySearchSchema, {}],
+    ["ProjectSearchSchema", ProjectSearchSchema, {}],
+    ["ActionSearchSchema", ActionSearchSchema, {}],
+    ["InvoiceSearchSchema", InvoiceSearchSchema, {}],
+    ["OrderSearchSchema", OrderSearchSchema, {}],
+    ["DeliverySearchSchema", DeliverySearchSchema, {}],
+    ["AbsenceSearchSchema", AbsenceSearchSchema, {}],
+    ["ExpenseSearchSchema", ExpenseSearchSchema, {}],
+    ["PositioningSearchSchema", PositioningSearchSchema, {}],
+    ["PaymentSearchSchema", PaymentSearchSchema, {}],
+    ["AdvantageSearchSchema", AdvantageSearchSchema, {}],
+    ["ValidationSearchSchema", ValidationSearchSchema, { startMonth: "2026-01", endMonth: "2026-03" }],
+    ["NotificationSearchSchema", NotificationSearchSchema, { category: "activity" }],
+  ];
+
+  it.each(schemasWithFields)("%s accepts a fields projection", (_name, schema, base) => {
+    expect(schema.safeParse({ ...base, fields: ["reference", "date"] }).success).toBe(true);
+  });
+
+  it.each(schemasWithFields)("%s still rejects an unknown key", (_name, schema, base) => {
+    expect(schema.safeParse({ ...base, nopeNotAFilter: true }).success).toBe(false);
+  });
+
+  it("rejects a non-string fields entry", () => {
+    expect(SearchSchema.safeParse({ fields: [42] }).success).toBe(false);
+  });
+
+  // TimesheetSearchSchema is deliberately excluded: boond_timesheets_search
+  // renders through formatTimesheetSummary, so a `fields` input would be
+  // advertised and then silently ignored.
+  it("does not advertise fields on the timesheet search", () => {
+    expect(TimesheetSearchSchema.safeParse({ fields: ["term"] }).success).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema } from "../schemas/index.js";
+import { IdSchema, fieldsField } from "../schemas/index.js";
 import {
   apiRequest,
   apiSearch,
@@ -18,6 +18,7 @@ const PurchaseSearchSchema = z
     projectId: z.string().optional().describe("Filtrer par ID projet"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
+    fields: fieldsField,
   })
   .strict();
 
@@ -58,7 +59,7 @@ Returns: Liste des achats correspondants.`,
       const query = buildSearchQuery(params);
       const response = await apiSearch("/purchases", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "achat") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "achat", params.fields) }],
       };
     }
   );

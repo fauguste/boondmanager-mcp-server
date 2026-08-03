@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [2.9.0] - 2026-08-03
+## [Unreleased]
 
 Remise à niveau sur la révision de spec MCP **2025-11-25** (celle que le SDK négocie déjà), fermeture d'un trou de validation HTTP et sortie de la fenêtre EOL de Node 20 ([#167](https://github.com/fauguste/boondmanager-mcp-server/issues/167)). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
 
@@ -28,6 +28,26 @@ Remise à niveau sur la révision de spec MCP **2025-11-25** (celle que le SDK n
 - `CLAUDE.md` : nouvelles sections *MCP Spec Level* (révision négociée = celle du SDK, `2025-11-25` ; révision publiée = `2026-07-28`, suivie dans [#170](https://github.com/fauguste/boondmanager-mcp-server/issues/170)) et *Server Identity & Instructions* ; références obsolètes « 2025-03-26 » / « 2025-06-18 » corrigées.
 - `README.md`, `README-docker.md` : `MCP_HTTP_ALLOWED_ORIGINS` documentée, prérequis Node mis à jour.
 - `docs/oauth.md` : note à l'attention des intégrateurs — la DCR ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)) est dépréciée dans la révision 2026-07-28 au profit des *Client ID Metadata Documents*, et les clients doivent valider le paramètre `iss` ([RFC 9207](https://datatracker.ietf.org/doc/html/rfc9207)). Côté serveur (protected resource), rien à changer.
+
+## [2.9.0] - 2026-08-03
+
+Lisibilité des résultats de recherche sur les entités transactionnelles et généralisation de la projection `fields` à l'ensemble des outils de recherche. Catalogue inchangé : **180 outils, 11 prompts, 22 ressources** — l'évolution porte sur les schémas d'entrée et le rendu des listes.
+
+### Added
+
+- **`fields` généralisé à tous les outils de recherche** ([#172](https://github.com/fauguste/boondmanager-mcp-server/pull/172)) : la projection côté client, jusqu'ici réservée aux six outils de recherche principaux, est ajoutée au `SearchSchema` de base et aux douze schémas qui en étaient dépourvus (`/actions`, `/invoices`, `/orders`, `/deliveries`, `/payments`, `/purchases`, `/absences`, `/advantages`, `/positionings`, `/provider-invoices`, `/notifications`, `/validations`). Les domaines à fort volume disposent désormais de la même échappatoire économe en tokens que les autres : `fields: ["number", "date"]` remplace la ligne de résumé standard, au lieu d'un `_get` par ligne. `boond_timesheets_search` et la famille `boond_reporting_*` en sont volontairement exclus — ils passent par leurs propres formateurs, le paramètre serait accepté puis silencieusement ignoré. Un nouveau `src/tools/fields-projection.test.ts` verrouille le passage de `params.fields` pour les douze outils écrits à la main.
+
+### Fixed
+
+- **Lignes de résultats identifiables sur les entités sans nom ni titre** ([#172](https://github.com/fauguste/boondmanager-mcp-server/pull/172)) : `/invoices`, `/orders`, `/actions`, `/deliveries-groupments` et `/projects` s'affichaient en en-tête nu (`[order #1234] | Statut: 1`) alors que les attributs métier étaient déjà dans la charge utile. `formatEntitySummary` retombe désormais sur les identifiants métier — `number`, `reference`, la date (ou la fenêtre `startDate`→`endDate`), jusqu'à deux montants de chiffre d'affaires, `typeOf` et un extrait de `text` libellé `Note: "…"` — **uniquement** lorsque la ligne n'a ni `firstName`/`lastName`, ni `name`, ni `title`, ni `value`. `/resources` et `/opportunities` portent aussi `reference` et des montants mais se lisent déjà bien : le repli reste désactivé pour eux et leur sortie est inchangée octet pour octet (verrouillé par des tests de régression).
+- **Robustesse de l'extrait `text`** : l'extrait n'est produit que si `text` est une chaîne (`text: null` n'imprime plus `null`, un objet imbriqué plus `[object Object]`), il est libellé et cité pour que le modèle le lise comme une donnée et non comme du texte serveur. Le strip HTML `/<[^>]*>/` — qui mangeait le texte utilisateur entre un `<` et un `>` ultérieur (`Relancer si < 3 jours > sinon cloturer`) — est remplacé par un motif exigeant un nom de balise et gérant les valeurs d'attributs entre guillemets ; les commentaires HTML sont retirés et les entités décodées. La troncature s'effectue sur les points de code, donc un emoji sur la limite ne peut plus devenir un demi-surrogate.
+- **Troncature des listes sur les frontières de ligne** : les lignes enrichies font dépasser `CHARACTER_LIMIT` à une page de 500 résultats `/actions` ; la coupe au milieu d'une ligne émettait une demi-ligne d'apparence complète et masquait le décompte. Le message de troncature indique maintenant `shown/total ligne(s) affichée(s)`.
+- **Cohérence texte / `structuredContent`** : `buildListStructured` projette à travers le même sac `entity.attributes ?? entity` que le chemin texte — les lignes plates de référence (`/calendars`, charges de dictionnaire) revenaient en identifiants nus. Les lignes plates sans `id` sont rendues `[item]`, comme dans le résumé standard, au lieu de `[#?]`. Un `renderAttributeValue()` partagé garantit que les montants en forme d'objet s'affichent identiquement sur les deux chemins, et `hasValueIdentity()` corrige l'asymétrie sur `value` falsy (`null` / `""` imprimaient un jeton bidon *et* supprimaient le repli ; un `0` numérique reste une étiquette valide).
+
+### Changed
+
+- **Description de `fields` resserrée** (271 → 125 caractères) : elle est dupliquée dans ~32 schémas d'outils, ce qui rend ~4,7 Ko de la charge utile `tools/list`.
+- **Dépendances runtime (transitives)** : bump de `hono` (4.12.31 → 4.12.34, [GHSA-8j4g-w8fx-2239](https://github.com/advisories/GHSA-8j4g-w8fx-2239) — ReDoS dans le middleware CORS) et d'`ip-address` (10.2.0 → 10.4.0, [GHSA-mwp4-54f8-5fhr](https://github.com/advisories/GHSA-mwp4-54f8-5fhr) — octets à zéro non significatif décodés en décimal, contournement SSRF). Toutes deux transitives du SDK MCP (`@hono/node-server`, `express-rate-limit`) et non utilisées par le serveur — le transport HTTP s'appuie sur `node:http`. Lockfile uniquement, `package.json` inchangé ; `npm audit` : 2 → 0 vulnérabilité.
 
 ## [2.8.3] - 2026-08-03
 

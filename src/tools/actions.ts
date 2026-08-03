@@ -62,7 +62,7 @@ Returns: Liste des actions correspondantes.`,
       // on /actions (heavy objects → memory overflow above 100).
       const response = await apiSearch("/actions", query);
       return {
-        content: [{ type: "text" as const, text: formatListResponse(response, "action") }],
+        content: [{ type: "text" as const, text: formatListResponse(response, "action", params.fields) }],
       };
     }
   );
