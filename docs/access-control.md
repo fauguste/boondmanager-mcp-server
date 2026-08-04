@@ -27,6 +27,7 @@ surface exposée à l'IA.
 
 | Variable | Effet | Exemple |
 |----------|-------|---------|
+| `BOOND_MCP_PROFILE` | Profil(s) préconfiguré(s) (CSV = union). Raccourci pour ne pas composer la liste de domaines à la main. Ignoré si `BOOND_MCP_DOMAINS` est défini. | `finance` |
 | `BOOND_MCP_DOMAINS` | Liste blanche de domaines (CSV). Absente = tous les domaines. | `invoices,payments,application` |
 | `BOOND_MCP_EXCLUDE_DOMAINS` | Liste noire de domaines (CSV). Appliquée **après** la liste blanche. | `candidates,resources` |
 | `BOOND_MCP_OPERATIONS` | Liste blanche d'opérations (CSV) parmi `read,create,update,delete`. Absente = toutes. | `read,create,update` |
@@ -34,15 +35,57 @@ surface exposée à l'IA.
 
 Règles de résolution :
 
-- **Domaines** : `effectif = (liste blanche ?? tous) − liste noire`. La liste
-  noire l'emporte toujours.
+- **Domaines** : `effectif = (liste blanche ?? profil(s) ?? tous) − liste noire`.
+  `BOOND_MCP_DOMAINS` prime sur `BOOND_MCP_PROFILE` (celui qui a listé les
+  domaines à la main sait ce qu'il veut ; un `warn` est journalisé si les deux
+  sont définis), et la liste noire l'emporte toujours sur les deux.
 - **Opérations** : si `BOOND_MCP_OPERATIONS` est défini, il prime ; sinon, si
   `BOOND_MCP_READ_ONLY` est vrai → `read` seulement ; sinon toutes. Si les
   deux sont définis, `BOOND_MCP_OPERATIONS` gagne (un `warn` est journalisé).
-- **Tolérance aux fautes** : un domaine ou une opération inconnus sont
-  **ignorés avec un avertissement** (le serveur ne plante pas). Si
+- **Tolérance aux fautes** : un domaine, un profil ou une opération inconnus
+  sont **ignorés avec un avertissement** (le serveur ne plante pas). Si
   `BOOND_MCP_OPERATIONS` ne contient *que* des valeurs invalides, on retombe
-  sur « toutes les opérations ».
+  sur « toutes les opérations » ; si `BOOND_MCP_PROFILE` ne contient *que* des
+  profils inconnus, on retombe sur « tous les domaines » (jamais une surface
+  vide, qui ressemblerait à un serveur cassé).
+
+## Profils préconfigurés (`BOOND_MCP_PROFILE`)
+
+Composer `BOOND_MCP_DOMAINS` suppose de connaître les 38 domaines **et** de
+savoir lesquels un métier utilise réellement (un recruteur a besoin de
+`positionings` et `actions`, pas seulement de `candidates`). Les profils sont
+ces regroupements, prêts à l'emploi — définis dans
+[`src/config/profiles.ts`](../src/config/profiles.ts) :
+
+| Profil | Domaines | Outils | Prompts |
+|--------|----------|--------|---------|
+| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, application, workflows | 62 | 2 |
+| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, application, workflows | 70 | 1 |
+| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 59 | 1 |
+| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 53 | 5 |
+| `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |
+| *(aucun)* | tous | 180 | 11 |
+
+Comptages **générés** depuis les registrations réelles (les mêmes que celles
+qu'un client voit dans `tools/list`), profil seul, toutes opérations. Avec
+`BOOND_MCP_READ_ONLY=true` en plus : `recruiting` 42, `sales` 49, `finance` 40,
+`delivery` 38, `admin` 18.
+
+Notes :
+
+- `application` est dans **tous** les profils : il porte la résolution des
+  dictionnaires (libellés d'états/types) et `current-user`, dont dépendent
+  beaucoup d'outils et de prompts.
+- Le nombre de prompts chute vite parce qu'un prompt est coupé dès qu'**un**
+  des domaines de son runbook manque (règle inchangée, cf. plus bas) : 8 des 11
+  prompts orchestrent `resources`. Si les runbooks « équipe / staffing / CV »
+  vous intéressent, ajoutez `resources` — les profils ne sont qu'un point de
+  départ, `BOOND_MCP_DOMAINS` reste l'outil précis :
+  `BOOND_MCP_DOMAINS=candidates,positionings,opportunities,contacts,companies,documents,actions,resources,application`.
+- Plusieurs profils se cumulent en **union** : `BOOND_MCP_PROFILE=sales,finance`.
+- La casse est indifférente (`Finance` = `finance`).
+- Un profil ne restreint **que** l'axe domaines : combinez-le avec
+  `BOOND_MCP_READ_ONLY` / `BOOND_MCP_OPERATIONS` pour borner l'écriture.
 
 ### Comment une opération est déterminée
 
@@ -96,11 +139,25 @@ blanches.
 
 ## Exemples
 
-### Comptabilité, en lecture seule
+### Comptabilité, en lecture seule (profil)
+
+```bash
+BOOND_MCP_PROFILE=finance
+BOOND_MCP_READ_ONLY=true
+```
+
+### Comptabilité, en lecture seule (liste explicite)
 
 ```bash
 BOOND_MCP_READ_ONLY=true
 BOOND_MCP_DOMAINS=invoices,provider-invoices,payments,orders,purchases,expenses,application
+```
+
+### Profil, moins un domaine
+
+```bash
+BOOND_MCP_PROFILE=delivery
+BOOND_MCP_EXCLUDE_DOMAINS=absences
 ```
 
 ### Comptabilité, écriture autorisée mais sans suppression
