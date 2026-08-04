@@ -46,21 +46,25 @@ const pageSizeField = z
   .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`);
 const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
 const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri (asc/desc)");
-// Dictionary-backed filters take integer ids, and a model that passes labels
-// ("actif") gets an invalid_type issue. Point it at the resolution path in the
-// message itself rather than making it re-read the field description.
-const intArray = (doc: string) =>
-  z
-    .array(
-      z
-        .number({
-          error:
-            "ID entier attendu (pas un libellé) : résoudre l'ID via les ressources `boond://dictionary/*` ou `boond_application_dictionary`.",
-        })
-        .int()
-    )
-    .optional()
-    .describe(doc);
+// Integer-id filters take ids, and a model that passes labels ("actif",
+// "Acme") gets an invalid_type issue. Point it at the resolution path in the
+// message itself rather than making it re-read the field description — but at
+// the RIGHT path: `boond://dictionary/*` holds state/type code tables and no
+// entities, so sending a model there for `perimeterManagers: ["Jean Dupont"]`
+// or `companies: ["Acme"]` is a dead end. Hence two flavours.
+const DICTIONARY_ID_ERROR =
+  "ID entier attendu (pas un libellé) : résoudre l'ID via les ressources `boond://dictionary/*` ou `boond_application_dictionary`.";
+const ENTITY_ID_ERROR =
+  "ID entier attendu (pas un nom) : récupérer l'ID via la recherche de l'entité concernée " +
+  "(`boond_resources_search`, `boond_companies_search`, `boond_agencies_search`…) ou " +
+  "`boond_application_current_user` — pas via `boond://dictionary/*`, qui ne contient que des états/types.";
+
+/** Dictionary-backed filter (states, types, experience levels…). */
+const intArray = (doc: string, error: string = DICTIONARY_ID_ERROR) =>
+  z.array(z.number({ error }).int()).optional().describe(doc);
+
+/** Filter taking *entity* ids (managers, companies, agencies, tags…). */
+const entityIdArray = (doc: string) => intArray(doc, ENTITY_ID_ERROR);
 const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
 
 // Common search schema
@@ -92,15 +96,17 @@ const actionDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d
 
 // Shared "perimeter" filters available on every entity search (from RAML trait `searchable`).
 // These are the CORRECT filters for "my team / my agency / my N-1" — NOT the old `mainManagers`.
-const perimeterManagersField = intArray(
+const perimeterManagersField = entityIdArray(
   "IDs des managers (ressources). Conserve les entités dont le responsable est l'un de ces managers. " +
     "Pour 'mon équipe / N-1 d'une personne X', passer [X_id]. Obtenir son propre ID via boond_application_current_user."
 );
-const perimeterAgenciesField = intArray(
+const perimeterAgenciesField = entityIdArray(
   "IDs d'agences. Conserve les entités dont le responsable appartient à ces agences."
 );
-const perimeterPolesField = intArray("IDs de pôles. Conserve les entités dont le responsable appartient à ces pôles.");
-const perimeterBusinessUnitsField = intArray(
+const perimeterPolesField = entityIdArray(
+  "IDs de pôles. Conserve les entités dont le responsable appartient à ces pôles."
+);
+const perimeterBusinessUnitsField = entityIdArray(
   "IDs de business units. Conserve les entités dont le responsable appartient à ces BU."
 );
 const perimeterDynamicField = z
@@ -178,7 +184,7 @@ export const ResourceSearchSchema = z
     languages: strArray(
       "Langues parlées au format `langueId|niveauId` (dictionnaires setting.languageSpoken et setting.languageLevel). Ex: ['anglais|courant']."
     ),
-    flags: intArray("IDs de tags (drapeaux) attachés à la ressource."),
+    flags: entityIdArray("IDs de tags (drapeaux) attachés à la ressource."),
     period: z
       .string()
       .optional()
@@ -191,7 +197,7 @@ export const ResourceSearchSchema = z
       ),
     startDate: startDateField,
     endDate: endDateField,
-    providerCompanies: intArray("IDs de sociétés sous-traitantes (filtre pour ressources externes)."),
+    providerCompanies: entityIdArray("IDs de sociétés sous-traitantes (filtre pour ressources externes)."),
     coordinates: z
       .string()
       .optional()
@@ -272,7 +278,7 @@ export const CandidateSearchSchema = z
     languages: strArray("Langues au format `langueId|niveauId` (ex: ['anglais|courant'])."),
     evaluations: strArray("IDs d'évaluations."),
     sources: strArray("IDs de sources de recrutement (dictionnaire setting.source)."),
-    flags: intArray("IDs de tags."),
+    flags: entityIdArray("IDs de tags."),
     period: z
       .string()
       .optional()
@@ -282,7 +288,7 @@ export const CandidateSearchSchema = z
       ),
     startDate: startDateField,
     endDate: endDateField,
-    providerCompanies: intArray("IDs de sociétés sous-traitantes."),
+    providerCompanies: entityIdArray("IDs de sociétés sous-traitantes."),
     coordinates: z.string().optional().describe("Coordonnées GPS 'lat,lon'. Requiert `geoDistance`."),
     location: z.string().optional().describe("Adresse texte. Requiert `geoDistance`."),
     geoDistance: z.number().int().min(5).max(200).optional().describe("Rayon km (5-200)."),
@@ -342,8 +348,8 @@ export const ContactSearchSchema = z
     activityAreas: strArray("IDs de secteurs d'activité de la société."),
     expertiseAreas: strArray("IDs de domaines d'expertise de la société."),
     tools: toolsFilterField,
-    influencers: intArray("IDs de contacts influenceurs."),
-    flags: intArray("IDs de tags."),
+    influencers: entityIdArray("IDs de contacts influenceurs."),
+    flags: entityIdArray("IDs de tags."),
     period: z
       .string()
       .optional()
@@ -390,8 +396,8 @@ export const CompanySearchSchema = z
     states: intArray("IDs d'états de société (dictionnaire setting.state.company)."),
     expertiseAreas: strArray("IDs de domaines d'expertise (dictionnaire setting.expertiseArea)."),
     origins: strArray("IDs d'origines (dictionnaire setting.origin)."),
-    influencers: intArray("IDs d'influenceurs."),
-    flags: intArray("IDs de tags."),
+    influencers: entityIdArray("IDs d'influenceurs."),
+    flags: entityIdArray("IDs de tags."),
     period: z
       .string()
       .optional()
@@ -444,7 +450,7 @@ export const OpportunitySearchSchema = z
     places: strArray("IDs de zones (dictionnaire setting.mobilityArea)."),
     durations: intArray("IDs de durées (dictionnaire setting.duration)."),
     origins: strArray("IDs d'origines."),
-    flags: intArray("IDs de tags."),
+    flags: entityIdArray("IDs de tags."),
     period: z
       .string()
       .optional()
@@ -486,10 +492,10 @@ export const ProjectSearchSchema = z
     narrowPerimeter: narrowPerimeterField,
     projectStates: intArray("IDs d'états de projet (dictionnaire setting.state.project)."),
     projectTypes: intArray("IDs de types de projet (dictionnaire setting.typeOf.project)."),
-    companies: intArray("IDs de sociétés clientes : projets rattachés à ces sociétés."),
+    companies: entityIdArray("IDs de sociétés clientes : projets rattachés à ces sociétés."),
     expertiseAreas: strArray("IDs de domaines d'expertise."),
     activityAreas: strArray("IDs de secteurs d'activité."),
-    flags: intArray("IDs de tags."),
+    flags: entityIdArray("IDs de tags."),
     period: z
       .string()
       .optional()
@@ -1431,10 +1437,10 @@ const reportingUseCacheField = z
   .enum(["withCache", "withoutCache"])
   .optional()
   .describe("Cache de reporting : 'withCache' (valeurs mises en cache) ou 'withoutCache' (recalcul, défaut).");
-const reportingResourcesField = intArray("Filtrer sur ces IDs de ressources.");
-const reportingProjectsField = intArray("Filtrer sur ces IDs de projets.");
-const reportingContactsField = intArray("Filtrer sur ces IDs de contacts.");
-const reportingCompaniesField = intArray("Filtrer sur ces IDs de sociétés.");
+const reportingResourcesField = entityIdArray("Filtrer sur ces IDs de ressources.");
+const reportingProjectsField = entityIdArray("Filtrer sur ces IDs de projets.");
+const reportingContactsField = entityIdArray("Filtrer sur ces IDs de contacts.");
+const reportingCompaniesField = entityIdArray("Filtrer sur ces IDs de sociétés.");
 const reportingMaxField = (entity: string) =>
   z
     .number()

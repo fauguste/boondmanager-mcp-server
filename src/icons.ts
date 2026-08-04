@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ListPromptsRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { DomainName } from "./constants.js";
 import { PROMPTS } from "./prompts/index.js";
+import { isFeatureDisabled } from "./config/env-flags.js";
 import type { RegistrationIndex } from "./tools/registration-decorators.js";
 
 /**
@@ -64,9 +65,7 @@ const ICON_COLOR = "%237d8794";
  * that doesn't — hence the switch.
  */
 function iconsDisabled(): boolean {
-  const v = process.env.BOOND_MCP_ICONS;
-  if (!v) return false;
-  return ["0", "false", "no", "off"].includes(v.trim().toLowerCase());
+  return isFeatureDisabled(process.env.BOOND_MCP_ICONS);
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   apiRequest,
@@ -9,6 +10,7 @@ import {
   formatEntitySummary,
 } from "../services/boond-client.js";
 import { SearchSchema, IdSchema, IdTabSchema } from "../schemas/index.js";
+import { isFeatureDisabled } from "../config/env-flags.js";
 import type { SearchInput, IdInput, IdTabInput } from "../schemas/index.js";
 import type { JsonApiResponse, JsonApiResource } from "../types.js";
 
@@ -104,9 +106,7 @@ function entityRef(response: JsonApiResponse): z.infer<typeof MutationOutputSche
 
 /** `BOOND_MCP_CONFIRM_DELETE=0|false|no|off` opts out of the confirmation prompt. */
 function deleteConfirmationDisabled(): boolean {
-  const v = process.env.BOOND_MCP_CONFIRM_DELETE;
-  if (!v) return false;
-  return ["0", "false", "no", "off"].includes(v.trim().toLowerCase());
+  return isFeatureDisabled(process.env.BOOND_MCP_CONFIRM_DELETE);
 }
 
 /**
@@ -127,13 +127,32 @@ function deleteConfirmationDisabled(): boolean {
  * Backwards compatibility is deliberate on two axes:
  * - a client still answering the old shape (`{ confirm: true }`) is honoured;
  * - `required` is intentionally NOT set, so the SDK's Ajv validation of the
- *   response can't reject a legacy-shaped answer — a rejection there throws,
- *   and the `catch` below would fall back to *deleting*. Being lenient in the
- *   schema and strict in the interpretation (anything that isn't an explicit
- *   confirmation aborts) keeps the safe direction safe.
+ *   response can't reject a legacy-shaped answer merely for omitting the field.
+ *
+ * The response *is* still validated by the SDK against the `oneOf` above, and a
+ * rejection throws — so `isElicitationResponseRejected()` peels that specific
+ * failure out of the catch-all fallback. Without it, a host that renders the
+ * titled enum as a free-text field (SEP-1330 unaware) and a user typing
+ * "annuler" would produce an Ajv rejection that lands in the "round-trip
+ * failed → delete anyway" branch: an explicit refusal causing an irreversible
+ * delete. Lenient schema, strict interpretation, and a validation failure counts
+ * as a refusal — not as a broken transport.
  */
 const CONFIRM_DELETE_VALUE = "delete";
 const CANCEL_DELETE_VALUE = "cancel";
+
+/**
+ * Did `elicitInput` throw because the *client's answer* did not match the
+ * requested schema? The SDK raises `McpError(InvalidParams)` in that case (and
+ * `InternalError` if its own validator blew up on the schema). Both mean "we
+ * never got a usable confirmation", which must abort — unlike a transport /
+ * capability failure, which keeps the legacy direct-delete behaviour.
+ */
+function isElicitationResponseRejected(error: unknown): boolean {
+  if (!(error instanceof McpError)) return false;
+  if (error.code === ErrorCode.InvalidParams) return true;
+  return error.code === ErrorCode.InternalError && /elicitation response/i.test(error.message);
+}
 
 export async function confirmDeletion(
   server: McpServer,
@@ -179,7 +198,11 @@ export async function confirmDeletion(
       confirmed: false,
       reason: typeof content.confirmation === "string" ? `confirmation=${content.confirmation}` : "not-confirmed",
     };
-  } catch {
+  } catch (error) {
+    // An off-schema answer is a refusal, not a broken round-trip: never delete.
+    if (isElicitationResponseRejected(error)) {
+      return { confirmed: false, reason: "invalid-confirmation-response" };
+    }
     return { confirmed: true };
   }
 }

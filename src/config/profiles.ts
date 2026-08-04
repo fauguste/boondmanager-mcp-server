@@ -21,16 +21,21 @@ import type { DomainName } from "../constants.js";
  * the allow-list), but keeping it explicit documents the intent and survives a
  * future change of that rule.
  *
- * `resources` is in every profile except `admin` for the same kind of reason: 8
- * of the 11 prompts orchestrate it (`synthese_equipe`, `staffing_disponible`,
- * `fiche_consultant`, `recherche_profil_competences`, …) and a prompt is cut as
- * soon as ONE of its domains is filtered out. Leaving it out of `recruiting` /
- * `sales` bought ~10 fewer tools and cost most of the runbooks — the wrong
- * trade for a layer whose whole point is ergonomics. It is also what those jobs
- * actually need: a recruiter matches candidates against internal staff, a
- * salesperson staffs a deal.
+ * There is no blanket "`resources` everywhere" rule — the rule is **per
+ * profile, check the prompt count**. 8 of the 11 prompts orchestrate
+ * `resources` (`synthese_equipe`, `staffing_disponible`, `fiche_consultant`,
+ * `recherche_profil_competences`, …) and a prompt is cut as soon as ONE of its
+ * domains is filtered out, so leaving `resources` out of `recruiting` / `sales`
+ * bought ~10 fewer tools and cost most of their runbooks — the wrong trade for a
+ * layer whose whole point is ergonomics. It is also what those jobs actually
+ * need: a recruiter matches candidates against internal staff, a salesperson
+ * staffs a deal. `finance` and `admin` deliberately do NOT include it: neither
+ * has a runbook that touches `resources` (`finance`'s only prompt,
+ * `factures_a_relancer`, spans `invoices` + `application`), so it would add
+ * tools and no capability. When adding a profile, count the prompts it keeps —
+ * not just the tools.
  */
-export const PROFILES: Readonly<Record<string, readonly DomainName[]>> = {
+const PROFILE_TABLE = {
   /** Recrutement / sourcing : viviers, positionnements, suivi d'activité. */
   recruiting: [
     "candidates",
@@ -86,14 +91,32 @@ export const PROFILES: Readonly<Record<string, readonly DomainName[]>> = {
   ],
   /** Administration de l'outil : référentiels d'organisation et journaux. */
   admin: ["accounts", "agencies", "business-units", "poles", "roles", "logs", "webhooks", "flags", "application"],
-};
+} as const satisfies Record<string, readonly DomainName[]>;
 
-export type ProfileName = keyof typeof PROFILES;
+/** Profile name literals (`"recruiting" | "sales" | …`). */
+export type ProfileName = keyof typeof PROFILE_TABLE;
+
+/**
+ * The profile bundles. Keyed by `string` for iteration/lookup convenience;
+ * `ProfileName` above keeps the literal union available for typed callers (an
+ * index signature on the exported value would erase it).
+ */
+export const PROFILES: Readonly<Record<string, readonly DomainName[]>> = PROFILE_TABLE;
 
 /** Canonical list of profile names, for error messages and docs. */
-export const PROFILE_NAMES: readonly string[] = Object.keys(PROFILES);
+export const PROFILE_NAMES: readonly ProfileName[] = Object.keys(PROFILE_TABLE) as ProfileName[];
 
-/** Case-insensitive profile lookup (`Finance`, `FINANCE` → `finance`). */
+/**
+ * Case-insensitive profile lookup (`Finance`, `FINANCE` → `finance`).
+ *
+ * `Object.hasOwn` is what makes this safe: a plain `PROFILES[name]` returns
+ * `Object.prototype`'s own properties for `BOOND_MCP_PROFILE=constructor`
+ * (`toString`, `valueOf`, `hasOwnProperty`, `__proto__`…) — a truthy non-array
+ * that skips the caller's warn-and-ignore branch and then throws
+ * `TypeError: … is not iterable` at startup, i.e. a dead server instead of the
+ * documented warning.
+ */
 export function resolveProfile(name: string): readonly DomainName[] | undefined {
-  return PROFILES[name.toLowerCase().trim()];
+  const key = name.toLowerCase().trim();
+  return Object.hasOwn(PROFILES, key) ? PROFILES[key] : undefined;
 }

@@ -123,6 +123,32 @@ describe("resolveAccessPolicy: profiles", () => {
     expect(isDomainAllowed(p, "candidates")).toBe(false);
   });
 
+  /**
+   * `PROFILES` is an object literal, so a profile name that collides with an
+   * `Object.prototype` property used to resolve to a truthy non-array, skip the
+   * warn-and-ignore branch and throw `TypeError: … is not iterable` — a server
+   * that refuses to start instead of the documented warning. The domain axis has
+   * always been `Set`-based and therefore immune; this pins the profile axis to
+   * the same resilience rule.
+   */
+  it.each(["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"])(
+    "treats the prototype property name %s as an unknown profile, not a crash",
+    (name) => {
+      let p!: ReturnType<typeof resolveAccessPolicy>;
+      expect(() => {
+        p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: name }));
+      }).not.toThrow();
+      expect(p.allowedDomains).toBeNull();
+      expect(isDomainAllowed(p, "candidates")).toBe(true);
+    }
+  );
+
+  it("keeps the valid profile of a list containing a prototype name", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "constructor,admin" }));
+    expect(isDomainAllowed(p, "roles")).toBe(true);
+    expect(isDomainAllowed(p, "candidates")).toBe(false);
+  });
+
   it("stays orthogonal to the operation axis", () => {
     const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "delivery", BOOND_MCP_READ_ONLY: "true" }));
     expect(isDomainAllowed(p, "projects")).toBe(true);

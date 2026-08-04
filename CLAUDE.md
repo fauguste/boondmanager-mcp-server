@@ -326,11 +326,26 @@ How it is wired, and why it is wired that way:
   and `candidateStates` on `/candidates`, and `/companies` has no type filter at
   all), plus a Levenshtein "did you mean" fallback for plain typos and the
   `boond://dictionary/*` URI to read when the value is a state/type id.
-- **`src/tools/validation-wrapper.ts::withFilterHints()`** rebuilds a `*_search`
+- **`src/tools/validation-wrapper.ts::withFilterHints()`** rebuilds a search
   tool's strict object schema with that message as its unrecognized-key error.
   It is applied centrally by `src/tools/registration-decorators.ts` (a
   per-domain `registerTool` Proxy installed in `registerAll`), so no domain file
-  and no schema declaration has to know about it.
+  and no schema declaration has to know about it. "Search tool" is decided by
+  `isSearchTool(name, config)`: `*_search` **or** `annotations.openWorldHint ===
+  true` — the annotation is what the codebase reserves for paginated listing
+  tools, so the `boond_reporting_*` family (same `perimeter*` / `*States`
+  vocabulary, no `_search` suffix) is covered, and a future hand-rolled search
+  tool can't opt out by being named differently.
+- **A correction is only printed when this endpoint actually accepts the
+  replacement** (`validKeys.includes(alias.correct)`). The alias table is written
+  for the six perimeter-aware endpoints but the wrapper runs on every search
+  tool: telling `boond_invoices_search` to use `perimeterAgencies`, which it does
+  not accept, costs a second rejection and typically ends with the model dropping
+  the filter and reporting a company-wide list as a scoped one. Per-key
+  correction lines are capped (`MAX_UNKNOWN_KEYS_EXPLAINED`) with a
+  "… et N autres" tail, and both alias tables are read through `Object.hasOwn` so
+  a filter named `constructor` / `toString` can't resolve to an
+  `Object.prototype` member.
 - **It is a schema wrapper, not a handler wrapper, on purpose.** `McpServer`
   validates input *before* calling the handler, so a handler-level pre-parse can
   never run on a validation failure. The alternative — declaring a permissive
@@ -343,10 +358,15 @@ How it is wired, and why it is wired that way:
   validation failure is a *tool* error, not a protocol error. What was missing
   was a message worth self-correcting from. Both properties are pinned
   end-to-end through a real client in `src/server.test.ts`.
-- Applied to `*_search` only (that is where the vocabulary is treacherous).
-  Field-level messages are untouched — `page: 500` still answers with the
-  `MAX_SEARCH_PAGE` explanation defined on `pageField`, and `intArray` fields
-  answer an "ID entier attendu … `boond://dictionary/*`" for label-instead-of-id.
+- Applied to search-shaped tools only (that is where the vocabulary is
+  treacherous). Field-level messages are untouched — `page: 500` still answers
+  with the `MAX_SEARCH_PAGE` explanation defined on `pageField`. Integer-id
+  fields answer with the *right* resolution path: `intArray` (states, types,
+  experience levels…) points at `boond://dictionary/*`, `entityIdArray`
+  (`perimeter*`, `companies`, `flags`, `influencers`, `reporting*`…) points at the
+  entity search tools instead — the dictionaries hold code tables, not entities,
+  so sending the model there for `perimeterManagers: ["Jean Dupont"]` was a dead
+  end.
 
 ## Testing
 
@@ -361,7 +381,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 59 test files, **941 tests**
+- **Current stats**: 59 test files, **957 tests**
 
 ### Test file template (for read-only search+get domains):
 
@@ -541,11 +561,18 @@ Invariants, each with a test:
 - `required` is deliberately **absent**: the SDK validates the response against
   this schema with Ajv, and a rejection *throws* — which would land in the
   `catch` that falls back to deleting. Lenient schema, strict interpretation;
+- the SDK still Ajv-validates the answer against the `oneOf`, so a rejection is
+  possible anyway (a host that renders the titled enum as a free-text field, a
+  user typing "annuler"). `isElicitationResponseRejected()` peels that specific
+  failure — `McpError(InvalidParams)`, or `InternalError` from the validator
+  itself — out of the fallback and treats it as a **refusal**
+  (`reason: "invalid-confirmation-response"`). An off-schema answer is not a
+  broken round-trip, and deleting on an explicit "no" is irreversible;
 - interpretation is strict in the safe direction: only `confirmation:
   "delete"` (or the legacy `confirm: true`, still honoured) deletes. Anything
   else — `cancel`, an unknown value, an empty `content` — aborts with
   `deleted: false` + reason;
-- only capability-absence and round-trip *failures* fall back to deleting.
+- only capability-absence and *transport* failures fall back to deleting.
 
 ## Access Control (domain / operation restriction)
 
@@ -595,11 +622,14 @@ Key design points (so future changes don't regress them):
   security tier — a usability layer over `DOMAINS`, which stays the precise
   tool. Precedence on the domain axis: `DOMAINS` > `PROFILE` > all, then
   `EXCLUDE_DOMAINS` in every case. `application` is in every profile (it backs
-  dictionary/current-user) and `resources` in all but `admin` — a prompt is cut
-  as soon as ONE of its domains is filtered out and 8 of the 11 orchestrate
-  `resources`, so leaving it out bought ~10 fewer tools and cost most of the
-  runbooks. Keep that in mind when adding a profile: check the prompt count, not
-  just the tool count. Both are **generated** — see `docs/access-control.md`.
+  dictionary/current-user). `resources` is in `recruiting`, `sales` and
+  `delivery` but **not** in `finance` / `admin` — there is no "resources
+  everywhere" rule: a prompt is cut as soon as ONE of its domains is filtered out
+  and 8 of the 11 orchestrate `resources`, so leaving it out of the first three
+  bought ~10 fewer tools and cost most of their runbooks, while `finance` /
+  `admin` have no runbook that touches it. When adding a profile, check the
+  **prompt** count, not just the tool count. Both are **generated** — see
+  `docs/access-control.md`.
 - `registerAll(server, policy, index?)` also wraps each registrar in
   `decorateRegistrations` (search-schema hints + tool→domain index for icons).
   That wrapper is **not** merged into `withPolicy`, whose fast path returns the

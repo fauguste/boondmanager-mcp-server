@@ -76,15 +76,18 @@ Notes :
 - `application` est dans **tous** les profils : il porte la résolution des
   dictionnaires (libellés d'états/types) et `current-user`, dont dépendent
   beaucoup d'outils et de prompts.
-- `resources` est dans tous les profils **sauf `admin`**, pour une raison du
-  même ordre : un prompt est coupé dès qu'**un** des domaines de son runbook
-  manque (règle détaillée plus bas), et 8 des 11 prompts orchestrent
-  `resources`. Sans lui, `recruiting` tombait à 2 prompts et `sales` à 1 : ~10
-  outils gagnés contre la quasi-totalité des runbooks, mauvais échange pour une
-  couche dont le but est l'ergonomie. C'est aussi ce que ces métiers utilisent
-  réellement (un recruteur compare candidats et collaborateurs internes, un
-  commercial staffe son affaire). `finance` n'en a pas besoin : son seul runbook
-  (`factures_a_relancer`) ne touche que `invoices` + `application`.
+- `resources` est présent dans `recruiting`, `sales` et `delivery` — **pas** dans
+  `finance` ni `admin`. Il n'y a pas de règle « `resources` partout » : la règle
+  est **par profil, en comptant les prompts qu'il conserve**. Un prompt est coupé
+  dès qu'**un** des domaines de son runbook manque (règle détaillée plus bas), et
+  8 des 11 prompts orchestrent `resources` : sans lui, `recruiting` tombait à 2
+  prompts et `sales` à 1, soit ~10 outils gagnés contre la quasi-totalité des
+  runbooks — mauvais échange pour une couche dont le but est l'ergonomie. C'est
+  aussi ce que ces métiers utilisent réellement (un recruteur compare candidats
+  et collaborateurs internes, un commercial staffe son affaire). `finance` et
+  `admin` n'ont aucun runbook qui y touche (le seul prompt de `finance`,
+  `factures_a_relancer`, ne couvre que `invoices` + `application`) : l'ajouter
+  n'apporterait que des outils.
 - Un profil reste un **point de départ** : pour un périmètre au domaine près,
   `BOOND_MCP_DOMAINS` est l'outil précis, et `BOOND_MCP_EXCLUDE_DOMAINS`
   retranche d'un profil (ex. `BOOND_MCP_PROFILE=sales` +

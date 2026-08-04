@@ -1,10 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { describe, it, expect } from "vitest";
 import { DOMAIN_ICONS, iconsForDomain, iconsForPrompt, identityIcons, referenceIcons, iconsByteSize } from "./icons.js";
 import { REGISTERED_DOMAINS } from "./constants.js";
 import { PROMPTS } from "./prompts/index.js";
-import { createMcpServer } from "./server.js";
+import { connectMcpClient, useDefaultServerSurface } from "./tools/test-helpers.js";
 
 /**
  * Per-icon ceiling. Every tool of a domain carries a copy, so a fat glyph is
@@ -13,9 +11,10 @@ import { createMcpServer } from "./server.js";
  */
 const MAX_ICON_JSON_BYTES = 320;
 
-afterEach(() => {
-  delete process.env.BOOND_MCP_ICONS;
-});
+// Icons are read from the environment on every call, so the suite must own it:
+// an ambient `BOOND_MCP_ICONS=0` would otherwise make the "icons present"
+// assertions fail, and an ambient profile would shrink the catalogue.
+useDefaultServerSurface();
 
 describe("DOMAIN_ICONS", () => {
   it("covers every registered domain", () => {
@@ -95,16 +94,8 @@ describe("BOOND_MCP_ICONS opt-out", () => {
  * future SDK starts emitting icons itself and makes it redundant.
  */
 describe("icons over the wire", () => {
-  async function connect() {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const client = new Client({ name: "vitest", version: "1.0.0" });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    return { client, server, close: async () => Promise.all([client.close(), server.close()]) };
-  }
-
   it("attaches the domain icon to every tool, prompt and resource", async () => {
-    const { client, close } = await connect();
+    const { client, close } = await connectMcpClient();
     try {
       const tools = (await client.listTools()).tools;
       expect(tools.length).toBeGreaterThan(150);
@@ -128,7 +119,7 @@ describe("icons over the wire", () => {
   });
 
   it("leaves the rest of each entry untouched (name, description, schema)", async () => {
-    const { client, close } = await connect();
+    const { client, close } = await connectMcpClient();
     try {
       const tool = (await client.listTools()).tools.find((t) => t.name === "boond_candidates_search");
       expect(tool?.description).toBeTruthy();
@@ -141,7 +132,7 @@ describe("icons over the wire", () => {
 
   it("emits no icons at all when the opt-out is set", async () => {
     process.env.BOOND_MCP_ICONS = "0";
-    const { client, close } = await connect();
+    const { client, close } = await connectMcpClient();
     try {
       const tools = (await client.listTools()).tools;
       expect(tools.filter((t) => t.icons !== undefined)).toEqual([]);

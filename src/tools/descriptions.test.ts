@@ -39,12 +39,10 @@ import {
   registerPlanningAbsenceTools,
   registerWorkflowTools,
 } from "./index.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { registerAllPrompts } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
 import { SERVER_INSTRUCTIONS } from "../instructions.js";
-import { createMcpServer } from "../server.js";
+import { connectMcpClient, useDefaultServerSurface } from "./test-helpers.js";
 
 /**
  * Sensible upper bound for a single tool description. MCP has a ~50KB total
@@ -88,11 +86,13 @@ const MAX_TOTAL_ICON_BYTES = 48 * 1024;
 const MAX_ICON_SHARE_OF_PAYLOAD = 0.2;
 
 describe("tools/list icon budget", () => {
+  // Without this the cap is only as meaningful as the ambient environment: an
+  // exported `BOOND_MCP_ICONS=0` makes it 0 bytes (always under the cap) and a
+  // `BOOND_MCP_PROFILE` shrinks the catalogue it is measured against.
+  useDefaultServerSurface();
+
   it("stays within the cumulative byte cap and its share of the payload", async () => {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const client = new Client({ name: "vitest", version: "1.0.0" });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { client, close } = await connectMcpClient();
     try {
       const tools = (await client.listTools()).tools;
       const iconBytes = tools.reduce(
@@ -100,11 +100,12 @@ describe("tools/list icon budget", () => {
         0
       );
       const payloadBytes = JSON.stringify(tools).length;
+      // Guards against the cap passing because nothing was measured.
+      expect(iconBytes).toBeGreaterThan(0);
       expect(iconBytes, `${(iconBytes / 1024).toFixed(1)} KiB of icons`).toBeLessThanOrEqual(MAX_TOTAL_ICON_BYTES);
       expect(iconBytes / payloadBytes).toBeLessThanOrEqual(MAX_ICON_SHARE_OF_PAYLOAD);
     } finally {
-      await client.close();
-      await server.close();
+      await close();
     }
   });
 });

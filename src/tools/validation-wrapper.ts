@@ -27,23 +27,28 @@ import { unknownFilterMessage, ENDPOINT_FILTER_ALIASES, type SearchEndpoint } fr
  *   requirement is met by the SDK; what was missing, and what this adds, is a
  *   message worth self-correcting from.
  *
- * Applied to `*_search` tools only: that is where the filter vocabulary is
- * treacherous (`mainManagers` vs `perimeterManagers`, `states` vs
- * `resourceStates`). `get`/`create`/`update` take ids and attribute names the
- * model reads straight off the schema.
+ * Applied to search-shaped tools only (see `isSearchTool`): that is where the
+ * filter vocabulary is treacherous (`mainManagers` vs `perimeterManagers`,
+ * `states` vs `resourceStates`). `get`/`create`/`update` take ids and attribute
+ * names the model reads straight off the schema.
  */
 
 /** Does the domain have an endpoint-specific filter vocabulary? */
 function searchEndpointOf(domain: DomainName | undefined): SearchEndpoint | undefined {
-  if (domain !== undefined && domain in ENDPOINT_FILTER_ALIASES) return domain as SearchEndpoint;
+  if (domain !== undefined && Object.hasOwn(ENDPOINT_FILTER_ALIASES, domain)) return domain as SearchEndpoint;
   return undefined;
 }
 
-/** A Zod v4 object schema that rejects unknown keys (`catchall` = `never`). */
+/**
+ * A Zod v4 object schema that *rejects* unknown keys — i.e. `catchall` is
+ * `ZodNever`, not merely present. `.catchall(z.string())` also sets it, and
+ * rebuilding such a schema as `strictObject` would silently turn a permissive
+ * schema into a strict one.
+ */
 function isStrictObject(schema: unknown): schema is z.ZodObject {
   if (!(schema instanceof z.ZodObject)) return false;
   const def = (schema as unknown as { _zod?: { def?: { catchall?: unknown } } })._zod?.def;
-  return def?.catchall !== undefined;
+  return def?.catchall instanceof z.ZodNever;
 }
 
 /**
@@ -71,13 +76,27 @@ export function withFilterHints<T>(schema: T, domain?: DomainName): T {
   }) as unknown as T;
 }
 
-/** Search tools are the ones whose filter names are worth explaining. */
-export function isSearchToolName(name: string): boolean {
-  return name.endsWith("_search");
-}
-
 interface ToolConfigLike {
   inputSchema?: unknown;
+  annotations?: { openWorldHint?: boolean };
+}
+
+/**
+ * Is this a search-shaped tool, i.e. one whose filter vocabulary is worth
+ * explaining?
+ *
+ * Keyed on the *registration* rather than the name only. `openWorldHint: true`
+ * is exactly the annotation the codebase reserves for paginated,
+ * keyword-filtered listing tools (see CLAUDE.md §MCP Annotations), so it catches
+ * `boond_reporting_{companies,projects,resources,synthesis,production_plans}` —
+ * strict schemas carrying the same treacherous `perimeter*` / `*States`
+ * vocabulary, which a `_search` suffix test silently skipped — and any future
+ * hand-rolled search tool that doesn't happen to be named `*_search`. The name
+ * check is kept as an OR so a listing tool that omits the annotation is still
+ * covered.
+ */
+export function isSearchTool(name: string, config?: ToolConfigLike): boolean {
+  return name.endsWith("_search") || config?.annotations?.openWorldHint === true;
 }
 
 /**
@@ -87,7 +106,7 @@ interface ToolConfigLike {
  * untouched (same reference), so this is a no-op for the ~150 other tools.
  */
 export function withValidationFeedback<C extends ToolConfigLike>(name: string, config: C, domain?: DomainName): C {
-  if (!isSearchToolName(name) || config?.inputSchema === undefined) return config;
+  if (!isSearchTool(name, config) || config?.inputSchema === undefined) return config;
   const enriched = withFilterHints(config.inputSchema, domain);
   if (enriched === config.inputSchema) return config;
   return { ...config, inputSchema: enriched };

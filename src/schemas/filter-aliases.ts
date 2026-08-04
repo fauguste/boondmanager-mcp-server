@@ -130,6 +130,10 @@ export const ENDPOINT_FILTER_ALIASES: Readonly<Record<SearchEndpoint, Readonly<R
     types: {
       hint: "/companies n'expose aucun filtre de type — filtrer sur `states`, `activityAreas` ou après lecture",
     },
+    // `typesOf` is the correct name on /contacts, so the model transfers it here.
+    typesof: {
+      hint: "/companies n'expose aucun filtre de type (`typesOf` n'existe que sur /contacts) — filtrer sur `states` ou `activityAreas`",
+    },
     companystates: {
       correct: "states",
       hint: "sur /companies le filtre s'appelle `states`",
@@ -158,14 +162,24 @@ function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[-_\s]/g, "");
 }
 
+/**
+ * Own-property lookup. The tables are object literals, so a plain `table[norm]`
+ * happily returns `Object.prototype.constructor` / `toString` / `hasOwnProperty`
+ * for a filter named after them — a truthy value with no `.correct`/`.hint`,
+ * which used to print "Filtre inconnu « constructor » : undefined.".
+ */
+function lookupAlias(table: Readonly<Record<string, FilterAlias>>, norm: string): FilterAlias | undefined {
+  return Object.hasOwn(table, norm) ? table[norm] : undefined;
+}
+
 /** Resolve a wrong filter name to its correction, endpoint-specific table first. */
 export function resolveFilterAlias(key: string, endpoint?: SearchEndpoint): FilterAlias | undefined {
   const norm = normalizeKey(key);
-  if (endpoint) {
-    const specific = ENDPOINT_FILTER_ALIASES[endpoint][norm];
+  if (endpoint !== undefined && Object.hasOwn(ENDPOINT_FILTER_ALIASES, endpoint)) {
+    const specific = lookupAlias(ENDPOINT_FILTER_ALIASES[endpoint], norm);
     if (specific) return specific;
   }
-  return GLOBAL_FILTER_ALIASES[norm];
+  return lookupAlias(GLOBAL_FILTER_ALIASES, norm);
 }
 
 /** Levenshtein distance, capped: we only care about "is it within 2 edits". */
@@ -202,6 +216,14 @@ export function closestKey(key: string, validKeys: readonly string[]): string | 
 const MAX_ACCEPTED_KEYS_LISTED = 25;
 
 /**
+ * Cap the number of per-key correction lines, for the same reason: the message
+ * is read by a model mid-call. A stray 40-key filter object would otherwise emit
+ * 40 lines (and 40 full Levenshtein scans) — several thousand characters on a
+ * path whose whole point is a short, actionable correction.
+ */
+const MAX_UNKNOWN_KEYS_EXPLAINED = 6;
+
+/**
  * Build the text returned to the model when a search call carries unknown
  * filter names. Shape, per unknown key:
  *
@@ -210,6 +232,13 @@ const MAX_ACCEPTED_KEYS_LISTED = 25;
  * plus, when the correction is a state/type filter, the dictionary resource to
  * read for the ids. Ends with the accepted filter list so the model can retry
  * from the error alone rather than re-reading the whole tool schema.
+ *
+ * A correction is only printed when the replacement is **actually accepted by
+ * this endpoint**. The wrapper runs on every search tool, not just the six
+ * perimeter-aware ones, and the global table is written for those: telling
+ * `boond_invoices_search` to use `perimeterAgencies` (which it does not accept)
+ * sends the model into a second rejection, after which it typically drops the
+ * filter and reports a company-wide list as if it were scoped.
  */
 export function unknownFilterMessage(
   keys: readonly string[],
@@ -217,14 +246,18 @@ export function unknownFilterMessage(
   endpoint?: SearchEndpoint
 ): string {
   const lines: string[] = [];
-  for (const key of keys) {
+  const explained = keys.slice(0, MAX_UNKNOWN_KEYS_EXPLAINED);
+  for (const key of explained) {
     const alias = resolveFilterAlias(key, endpoint);
-    if (alias?.correct) {
+    if (alias?.correct !== undefined && validKeys.includes(alias.correct)) {
       const dict = alias.dictionary ? ` — IDs via ${alias.dictionary}` : "";
       lines.push(`Filtre inconnu « ${key} » → utiliser \`${alias.correct}\` : ${alias.hint}${dict}.`);
       continue;
     }
-    if (alias) {
+    // An endpoint-specific entry without `correct` says "this filter does not
+    // exist here" — that hint is always safe to print. A global correction whose
+    // replacement this endpoint doesn't accept is not, so it falls through.
+    if (alias !== undefined && alias.correct === undefined) {
       lines.push(`Filtre inconnu « ${key} » : ${alias.hint}.`);
       continue;
     }
@@ -234,6 +267,9 @@ export function unknownFilterMessage(
         ? `Filtre inconnu « ${key} » → vouliez-vous dire \`${near}\` ?`
         : `Filtre inconnu « ${key} » : non supporté par cet endpoint (ne pas le renvoyer).`
     );
+  }
+  if (keys.length > explained.length) {
+    lines.push(`… et ${keys.length - explained.length} autre(s) filtre(s) inconnu(s) à retirer.`);
   }
 
   const listed = validKeys.slice(0, MAX_ACCEPTED_KEYS_LISTED);

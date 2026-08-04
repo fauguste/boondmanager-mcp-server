@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import {
   buildJsonApiBody,
   buildListStructured,
@@ -423,6 +424,39 @@ describe("registerDeleteTool handler (elicitation)", () => {
     const result = await registeredHandler(server)({ id: "12" });
     expect(apiRequest).not.toHaveBeenCalled();
     expect(result.structuredContent).toMatchObject({ id: "12", deleted: false, reason: "not-confirmed" });
+  });
+
+  /**
+   * The `oneOf` schema is validated against the answer by the SDK (Ajv) and a
+   * mismatch *throws* — a host that renders the titled enum as a free-text field
+   * and a user typing "annuler" lands here. That is a refusal; routing it into
+   * the "round-trip failed → delete anyway" fallback would delete on an explicit
+   * no, irreversibly.
+   */
+  it("aborts when the client's answer is rejected by the response schema", async () => {
+    const { server } = createMockServerWithClient(
+      true,
+      new McpError(ErrorCode.InvalidParams, "Elicitation response content does not match requested schema: …")
+    );
+    registerDeleteTool(server, OPTS);
+    const result = await registeredHandler(server)({ id: "12" });
+    expect(apiRequest).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      id: "12",
+      deleted: false,
+      reason: "invalid-confirmation-response",
+    });
+  });
+
+  it("aborts when the SDK's own response validator blows up", async () => {
+    const { server } = createMockServerWithClient(
+      true,
+      new McpError(ErrorCode.InternalError, "Error validating elicitation response: boom")
+    );
+    registerDeleteTool(server, OPTS);
+    const result = await registeredHandler(server)({ id: "12" });
+    expect(apiRequest).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({ id: "12", deleted: false });
   });
 
   it("falls back to deleting when the elicitation round-trip fails", async () => {

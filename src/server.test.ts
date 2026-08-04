@@ -3,8 +3,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   createMcpServer,
   registerAll,
@@ -16,6 +14,7 @@ import {
 } from "./server.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { resolveAccessPolicy } from "./config/access-policy.js";
+import { connectMcpClient, useDefaultServerSurface } from "./tools/test-helpers.js";
 
 /** Counting stub that records every registration call. */
 function createCountingServer() {
@@ -156,12 +155,7 @@ describe("SERVER_INSTRUCTIONS", () => {
 
 describe("MCP initialize result", () => {
   it("advertises instructions, name, version and description to a connected client", async () => {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const client = new Client({ name: "vitest", version: "1.0.0" });
-
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-
+    const { client, close } = await connectMcpClient();
     try {
       expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
       const info = client.getServerVersion();
@@ -169,8 +163,7 @@ describe("MCP initialize result", () => {
       expect(info?.version).toBe(SERVER_VERSION);
       expect(info?.description).toBe(SERVER_DESCRIPTION);
     } finally {
-      await client.close();
-      await server.close();
+      await close();
     }
   });
 });
@@ -191,6 +184,11 @@ describe("TOOL_REGISTRARS", () => {
  * it silently.
  */
 describe("deterministic tools/list order", () => {
+  // `createMcpServer()` resolves the access policy from the real environment, so
+  // an ambient `BOOND_MCP_PROFILE` / `BOOND_MCP_DOMAINS` would shrink the
+  // catalogue and fail the count assertion below for an unrelated reason.
+  useDefaultServerSurface();
+
   it("two successive registrations produce the identical tool sequence", () => {
     const first = createCountingServer();
     const second = createCountingServer();
@@ -201,15 +199,11 @@ describe("deterministic tools/list order", () => {
 
   it("two successive servers advertise the identical order over the wire", async () => {
     async function listToolNames() {
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      const server = createMcpServer();
-      const client = new Client({ name: "vitest", version: "1.0.0" });
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const { client, close } = await connectMcpClient();
       try {
         return (await client.listTools()).tools.map((t) => t.name);
       } finally {
-        await client.close();
-        await server.close();
+        await close();
       }
     }
     const first = await listToolNames();
@@ -256,19 +250,17 @@ describe("deterministic tools/list order", () => {
  * message worth correcting from (see `tools/validation-wrapper.ts`).
  */
 describe("search filter validation feedback (end to end)", () => {
+  useDefaultServerSurface();
+
   async function callTool(name: string, args: Record<string, unknown>) {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const client = new Client({ name: "vitest", version: "1.0.0" });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { client, close } = await connectMcpClient();
     try {
       return (await client.callTool({ name, arguments: args })) as {
         isError?: boolean;
         content?: Array<{ type: string; text?: string }>;
       };
     } finally {
-      await client.close();
-      await server.close();
+      await close();
     }
   }
 
@@ -288,6 +280,18 @@ describe("search filter validation feedback (end to end)", () => {
     expect(text).toContain("boond://dictionary/states/candidates");
   });
 
+  /**
+   * The reporting tools are not named `*_search` but carry the same
+   * `perimeter*` / `*States` vocabulary behind a strict schema. A suffix-based
+   * gate skipped them; the annotation-based one covers them.
+   */
+  it("covers the reporting tools, which are not named *_search", async () => {
+    const result = await callTool("boond_reporting_resources", { mainManagers: [42] });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("perimeterManagers");
+  });
+
   it("the page ceiling explains itself instead of just refusing", async () => {
     const result = await callTool("boond_resources_search", { page: 500 });
     expect(result.isError).toBe(true);
@@ -296,16 +300,12 @@ describe("search filter validation feedback (end to end)", () => {
   });
 
   it("keeps advertising a strict inputSchema (the client can pre-validate)", async () => {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const client = new Client({ name: "vitest", version: "1.0.0" });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { client, close } = await connectMcpClient();
     try {
       const tool = (await client.listTools()).tools.find((t) => t.name === "boond_resources_search");
       expect(tool?.inputSchema).toMatchObject({ type: "object", additionalProperties: false });
     } finally {
-      await client.close();
-      await server.close();
+      await close();
     }
   });
 });

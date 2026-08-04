@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import * as z4mini from "zod/v4-mini";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { withFilterHints, withValidationFeedback, isSearchToolName } from "./validation-wrapper.js";
+import { withFilterHints, withValidationFeedback, isSearchTool } from "./validation-wrapper.js";
 import { decorateRegistrations, createRegistrationIndex } from "./registration-decorators.js";
-import { ResourceSearchSchema, SearchSchema } from "../schemas/index.js";
+import { ResourceSearchSchema, CandidateSearchSchema, InvoiceSearchSchema, SearchSchema } from "../schemas/index.js";
 import { MAX_SEARCH_PAGE } from "../constants.js";
 
 /** Messages as the SDK would surface them: every issue message, newline-joined. */
@@ -28,8 +28,55 @@ describe("withFilterHints", () => {
   it("uses the endpoint's own state filter name", () => {
     expect(messagesOf(withFilterHints(ResourceSearchSchema, "resources"), { states: [1] })).toContain("resourceStates");
     // Same wrong key, different endpoint, different correction.
-    const candidateSchema = withFilterHints(ResourceSearchSchema, "candidates");
+    const candidateSchema = withFilterHints(CandidateSearchSchema, "candidates");
     expect(messagesOf(candidateSchema, { states: [1] })).toContain("candidateStates");
+  });
+
+  /**
+   * The wrapper runs on every search tool, not just the six perimeter-aware
+   * ones, and the alias table is written for those. Naming a replacement the
+   * endpoint also rejects costs the model a second rejection, after which it
+   * typically drops the filter — and reports an unscoped list as a scoped one.
+   */
+  it("never names a replacement the endpoint does not accept", () => {
+    const msg = messagesOf(withFilterHints(InvoiceSearchSchema), { agencies: [3] });
+    expect(msg).toContain("agencies");
+    expect(msg).not.toContain("perimeterAgencies");
+    expect(msg).toContain("non supporté par cet endpoint");
+    // …while the endpoint that DOES accept it still gets the correction.
+    expect(messagesOf(withFilterHints(ResourceSearchSchema, "resources"), { agencies: [3] })).toContain(
+      "perimeterAgencies"
+    );
+  });
+
+  it("keeps an endpoint-specific 'no such filter' hint (it names no replacement)", () => {
+    const msg = messagesOf(withFilterHints(ResourceSearchSchema, "companies"), { typeOf: [1] });
+    expect(msg).toContain("aucun filtre de type");
+  });
+
+  it("caps the correction lines instead of emitting one per stray key", () => {
+    const junk = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`zzUnknown${i}`, 1]));
+    const msg = messagesOf(withFilterHints(SearchSchema), junk);
+    const corrections = msg.split("\n").filter((l) => l.startsWith("Filtre inconnu"));
+    expect(corrections.length).toBeLessThanOrEqual(6);
+    expect(msg).toContain("autre(s) filtre(s) inconnu(s)");
+  });
+
+  it("does not treat a prototype property name as a known filter", () => {
+    for (const key of ["constructor", "toString", "hasOwnProperty", "valueOf"]) {
+      const msg = messagesOf(withFilterHints(ResourceSearchSchema, "resources"), { [key]: 1 });
+      expect(msg, key).toContain("non supporté par cet endpoint");
+      expect(msg, key).not.toContain("undefined");
+    }
+  });
+
+  it("points entity-id filters at entity search, not at the dictionary", () => {
+    const msg = messagesOf(withFilterHints(ResourceSearchSchema, "resources"), { perimeterManagers: ["Jean Dupont"] });
+    expect(msg).toContain("boond_resources_search");
+    expect(msg).toContain("pas via `boond://dictionary/*`");
+    // …while a genuinely dictionary-backed filter still sends it there.
+    const dictMsg = messagesOf(withFilterHints(ResourceSearchSchema, "resources"), { resourceStates: ["actif"] });
+    expect(dictMsg).toContain("résoudre l'ID via les ressources `boond://dictionary/*`");
   });
 
   it("leaves the advertised JSON Schema byte-for-byte identical", () => {
@@ -65,11 +112,22 @@ describe("withFilterHints", () => {
   });
 });
 
-describe("isSearchToolName", () => {
+describe("isSearchTool", () => {
   it("targets search tools only", () => {
-    expect(isSearchToolName("boond_resources_search")).toBe(true);
-    expect(isSearchToolName("boond_resources_get")).toBe(false);
-    expect(isSearchToolName("boond_candidates_technical_data")).toBe(false);
+    expect(isSearchTool("boond_resources_search")).toBe(true);
+    expect(isSearchTool("boond_resources_get")).toBe(false);
+    expect(isSearchTool("boond_candidates_technical_data")).toBe(false);
+  });
+
+  /**
+   * The reporting tools carry the same treacherous perimeter/state vocabulary but
+   * are not named `*_search`; `openWorldHint` is what the codebase reserves for
+   * listing tools, so keying on it covers them (and any future hand-rolled
+   * search tool) instead of silently excluding them.
+   */
+  it("covers a listing tool that is not named *_search, via openWorldHint", () => {
+    expect(isSearchTool("boond_reporting_companies", { annotations: { openWorldHint: true } })).toBe(true);
+    expect(isSearchTool("boond_candidates_get", { annotations: { readOnlyHint: true } })).toBe(false);
   });
 });
 
