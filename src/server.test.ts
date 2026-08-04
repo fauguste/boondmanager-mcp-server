@@ -181,6 +181,135 @@ describe("TOOL_REGISTRARS", () => {
   });
 });
 
+/**
+ * `tools/list` ordering is a protocol guarantee (recommended by the 2026-07-28
+ * revision): clients cache the catalogue and the prompt cache only keeps
+ * hitting if the sequence is stable. The SDK lists tools in registration order,
+ * so "stable" means: same order on every instantiation, and that order is
+ * exactly TOOL_REGISTRARS. Nothing else in the codebase enforces it — a `Set`
+ * or `Object.keys` on a dynamically built object inside a registrar would break
+ * it silently.
+ */
+describe("deterministic tools/list order", () => {
+  it("two successive registrations produce the identical tool sequence", () => {
+    const first = createCountingServer();
+    const second = createCountingServer();
+    registerAll(first, resolveAccessPolicy(fakeEnv({})));
+    registerAll(second, resolveAccessPolicy(fakeEnv({})));
+    expect(registeredToolNames(second)).toEqual(registeredToolNames(first));
+  });
+
+  it("two successive servers advertise the identical order over the wire", async () => {
+    async function listToolNames() {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer();
+      const client = new Client({ name: "vitest", version: "1.0.0" });
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      try {
+        return (await client.listTools()).tools.map((t) => t.name);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    }
+    const first = await listToolNames();
+    const second = await listToolNames();
+    expect(second).toEqual(first);
+    expect(first.length).toBeGreaterThan(150);
+  });
+
+  it("prompt order is stable too", () => {
+    const first = createCountingServer();
+    const second = createCountingServer();
+    registerAll(first, resolveAccessPolicy(fakeEnv({})));
+    registerAll(second, resolveAccessPolicy(fakeEnv({})));
+    expect(registeredPromptNames(second)).toEqual(registeredPromptNames(first));
+  });
+
+  it("follows TOOL_REGISTRARS: domains appear in declaration order, grouped", () => {
+    const s = createCountingServer();
+    registerAll(s, resolveAccessPolicy(fakeEnv({})));
+    const names = registeredToolNames(s);
+
+    // Rebuild the domain sequence from the registration order, then compare it
+    // to TOOL_REGISTRARS filtered to the domains that actually register tools.
+    const domainOfCall: string[] = [];
+    const perDomain = new Map<string, string[]>();
+    for (const [domain, register] of TOOL_REGISTRARS) {
+      const probe = createCountingServer();
+      register(probe);
+      const owned = registeredToolNames(probe);
+      if (owned.length === 0) continue;
+      perDomain.set(domain, owned);
+      domainOfCall.push(domain);
+    }
+
+    const expected = domainOfCall.flatMap((d) => perDomain.get(d)!);
+    expect(names).toEqual(expected);
+  });
+});
+
+/**
+ * SEP-1303: an argument-validation failure must reach the model as a *tool*
+ * error it can correct from, not as a protocol error. The SDK already converts
+ * its own `McpError(InvalidParams)` into `isError: true`; what we add is a
+ * message worth correcting from (see `tools/validation-wrapper.ts`).
+ */
+describe("search filter validation feedback (end to end)", () => {
+  async function callTool(name: string, args: Record<string, unknown>) {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "vitest", version: "1.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      return (await client.callTool({ name, arguments: args })) as {
+        isError?: boolean;
+        content?: Array<{ type: string; text?: string }>;
+      };
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  }
+
+  it("a wrong perimeter filter comes back as isError naming the right one", async () => {
+    const result = await callTool("boond_resources_search", { mainManagers: [42] });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("perimeterManagers");
+    expect(text).toContain("mainManagers");
+  });
+
+  it("the endpoint's own state filter is suggested, with its dictionary resource", async () => {
+    const result = await callTool("boond_candidates_search", { states: [1] });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("candidateStates");
+    expect(text).toContain("boond://dictionary/states/candidates");
+  });
+
+  it("the page ceiling explains itself instead of just refusing", async () => {
+    const result = await callTool("boond_resources_search", { page: 500 });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("MAX_SEARCH_PAGE");
+  });
+
+  it("keeps advertising a strict inputSchema (the client can pre-validate)", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "vitest", version: "1.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const tool = (await client.listTools()).tools.find((t) => t.name === "boond_resources_search");
+      expect(tool?.inputSchema).toMatchObject({ type: "object", additionalProperties: false });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
+
 describe("registerAll — access policy filtering", () => {
   it("unrestricted policy registers the full surface (writes + all domains + prompts)", () => {
     const s = createCountingServer();

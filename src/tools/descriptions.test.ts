@@ -39,9 +39,12 @@ import {
   registerPlanningAbsenceTools,
   registerWorkflowTools,
 } from "./index.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { registerAllPrompts } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
 import { SERVER_INSTRUCTIONS } from "../instructions.js";
+import { createMcpServer } from "../server.js";
 
 /**
  * Sensible upper bound for a single tool description. MCP has a ~50KB total
@@ -71,6 +74,40 @@ const MAX_RESOURCE_DESCRIPTION_LENGTH = 1000;
  * grow past this, the content probably belongs in a prompt or a resource.
  */
 const MAX_SERVER_INSTRUCTIONS_LENGTH = 4000;
+
+/**
+ * Cumulative budget for SEP-973 icons in `tools/list`. Icons are per-domain but
+ * shipped per-tool, so the total scales with the catalogue (~180 tools × ~230 B
+ * ≈ 40 KiB today). This cap is what stops a "nicer" glyph set from quietly
+ * costing more than the tool descriptions it decorates; the second assertion
+ * bounds it relative to the payload so growing the catalogue alone can't trip
+ * it. Operators who don't render icons can drop them entirely with
+ * `BOOND_MCP_ICONS=0`.
+ */
+const MAX_TOTAL_ICON_BYTES = 48 * 1024;
+const MAX_ICON_SHARE_OF_PAYLOAD = 0.2;
+
+describe("tools/list icon budget", () => {
+  it("stays within the cumulative byte cap and its share of the payload", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "vitest", version: "1.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const tools = (await client.listTools()).tools;
+      const iconBytes = tools.reduce(
+        (n, t) => n + (t.icons ? JSON.stringify(t.icons).length + '"icons":,'.length : 0),
+        0
+      );
+      const payloadBytes = JSON.stringify(tools).length;
+      expect(iconBytes, `${(iconBytes / 1024).toFixed(1)} KiB of icons`).toBeLessThanOrEqual(MAX_TOTAL_ICON_BYTES);
+      expect(iconBytes / payloadBytes).toBeLessThanOrEqual(MAX_ICON_SHARE_OF_PAYLOAD);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
 
 describe("server instructions length", () => {
   it("does not exceed the length limit", () => {

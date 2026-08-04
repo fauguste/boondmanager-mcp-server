@@ -16,50 +16,62 @@ export const fieldsField = z
       "Absent = résumé standard. Noms inconnus ignorés."
   );
 
-// Common search schema
-export const SearchSchema = z
-  .object({
-    keywords: z.string().optional().describe("Mots-clés de recherche (nom, email, compétences...)"),
-    page: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_SEARCH_PAGE)
-      .default(1)
-      .describe(`Numéro de page (défaut: 1, max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_PAGE_SIZE)
-      .default(DEFAULT_PAGE_SIZE)
-      .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
-    fields: fieldsField,
-  })
-  .strict();
-
 // ---- Reusable filter field helpers ----
 // IMPORTANT: input field names below MUST match the BoondManager API query parameter names
 // exactly (e.g., perimeterManagers, resourceStates, opportunityStates). buildSearchQuery
 // passes them through as `key[]=value` for arrays. See https://doc.boondmanager.com/api-externe/
+//
+// Declared before `SearchSchema` (which embeds them) so module init doesn't hit
+// the temporal dead zone — same reason as `fieldsField` above.
+//
+// The pagination ceilings carry an explicit message: the default Zod wording
+// ("Too big: expected number to be <=100") says what was refused but not what
+// to do instead, and a model that hit the page ceiling should refine its
+// filters rather than retry one page lower.
 const pageField = z
   .number()
   .int()
   .min(1)
-  .max(MAX_SEARCH_PAGE)
+  .max(MAX_SEARCH_PAGE, {
+    error: `page > ${MAX_SEARCH_PAGE} refusé (plafond MAX_SEARCH_PAGE) : affiner les filtres plutôt que paginer plus loin.`,
+  })
   .default(1)
   .describe(`Numéro de page (défaut: 1, max: ${MAX_SEARCH_PAGE})`);
 const pageSizeField = z
   .number()
   .int()
   .min(1)
-  .max(MAX_PAGE_SIZE)
+  .max(MAX_PAGE_SIZE, { error: `pageSize > ${MAX_PAGE_SIZE} refusé : maximum ${MAX_PAGE_SIZE} résultats par page.` })
   .default(DEFAULT_PAGE_SIZE)
   .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`);
 const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
 const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri (asc/desc)");
-const intArray = (doc: string) => z.array(z.number().int()).optional().describe(doc);
+// Dictionary-backed filters take integer ids, and a model that passes labels
+// ("actif") gets an invalid_type issue. Point it at the resolution path in the
+// message itself rather than making it re-read the field description.
+const intArray = (doc: string) =>
+  z
+    .array(
+      z
+        .number({
+          error:
+            "ID entier attendu (pas un libellé) : résoudre l'ID via les ressources `boond://dictionary/*` ou `boond_application_dictionary`.",
+        })
+        .int()
+    )
+    .optional()
+    .describe(doc);
 const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
+
+// Common search schema
+export const SearchSchema = z
+  .object({
+    keywords: z.string().optional().describe("Mots-clés de recherche (nom, email, compétences...)"),
+    page: pageField,
+    pageSize: pageSizeField,
+    fields: fieldsField,
+  })
+  .strict();
 
 // Shared `tools` (technologies/skills) filter. Centralised so every entity
 // search exposes the same `#AND#` semantics to the model — previously the

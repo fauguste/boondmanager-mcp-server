@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiRequest } from "../services/boond-client.js";
 import { getDictionary, resolveDictionaryPath } from "../services/dictionary.js";
 import { getDictionaryOverrides } from "../config/dictionary-overrides.js";
+import { identityIcons, referenceIcons } from "../icons.js";
 
 /**
  * MCP resources for BoondManager reference data.
@@ -190,6 +191,9 @@ export function registerAllResources(server: McpServer): void {
         title: dict.title,
         description: dict.description,
         mimeType: "application/json",
+        // SEP-973. Unlike tools/prompts, the SDK's resource listing spreads the
+        // whole config, so `icons` reaches the client with no shim needed.
+        icons: referenceIcons(),
       },
       async () => {
         const { payload } = await getDictionary();
@@ -226,6 +230,7 @@ export function registerAllResources(server: McpServer): void {
         "Mapping libellé→ID configuré via BOOND_DICTIONARY_OVERRIDES (types d'action et états). " +
         'Renvoie { "configured": false } si aucun override n\'est configuré.',
       mimeType: "application/json",
+      icons: referenceIcons(),
     },
     () => {
       const overrides = getDictionaryOverrides();
@@ -253,6 +258,7 @@ export function registerAllResources(server: McpServer): void {
         "Profil de l'utilisateur authentifié auprès de l'API BoondManager (id, agence, permissions). " +
         "Utile pour résoudre 'mon ID' avant un appel filtré par perimeterManagers.",
       mimeType: "application/json",
+      icons: identityIcons(),
     },
     async () => {
       const response = await apiRequest("/application/current-user");
