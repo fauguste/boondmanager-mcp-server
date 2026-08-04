@@ -30,6 +30,7 @@
         "BOOND_API_TOKEN": "${user_config.api_token}",
         "BOOND_USER": "${user_config.user}",
         "BOOND_PASSWORD": "${user_config.password}",
+        "BOOND_MCP_PROFILE": "${user_config.mcp_profile}",
         "BOOND_MCP_DOMAINS": "${user_config.mcp_domains}",
         "BOOND_MCP_EXCLUDE_DOMAINS": "${user_config.mcp_exclude_domains}",
         "BOOND_MCP_OPERATIONS": "${user_config.mcp_operations}",
@@ -86,6 +87,12 @@
       "title": "Mot de passe (Option 3 : BasicAuth)",
       "description": "Mot de passe BoondManager pour l'authentification BasicAuth.",
       "sensitive": true,
+      "required": false
+    },
+    "mcp_profile": {
+      "type": "string",
+      "title": "Restriction : profil d'accès",
+      "description": "Profil préconfiguré parmi recruiting, sales, finance, delivery, admin (plusieurs = séparés par des virgules, union). Raccourci pour ne pas lister les domaines un par un. Ignoré si 'domaines autorisés' est renseigné. Voir docs/access-control.md.",
       "required": false
     },
     "mcp_domains": {
