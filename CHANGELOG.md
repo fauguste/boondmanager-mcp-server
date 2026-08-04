@@ -3,6 +3,37 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Remise à niveau sur la révision de spec MCP **2025-11-25** (celle que le SDK négocie déjà), fermeture d'un trou de validation HTTP et sortie de la fenêtre EOL de Node 20 ([#167](https://github.com/fauguste/boondmanager-mcp-server/issues/167)). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
+
+> ⚠️ **BREAKING** : le prérequis runtime passe à **Node.js >= 22**. Node 20 est en fin de vie depuis le 2026-04-30 et n'est plus testé en CI. Les utilisateurs restés en 20 doivent mettre à jour leur runtime (l'image Docker tournait déjà sur Node 26).
+
+### Added
+
+- **`instructions` au niveau serveur** : le serveur annonce désormais, dans le résultat d'`initialize`, un jeu de règles transverses (`src/instructions.ts`) — convention de nommage `boond_{domaine}_{opération}`, filtres de périmètre (`perimeterDynamic` / `perimeterManagers` / `perimeterAgencies` + `narrowPerimeter`, et le rejet de `mainManagers` & co par les schémas `.strict()`), vocabulaire préfixé de `keywords` (`CSOC`, `CCON`, `CAND`, `COMP`, `AO`, `PRJ`, `MIS`, `PROD`, `CTR`), économie de contexte (`fields`, `pageSize`, plafond `page ≤ 100`) et résolution des états/types via les ressources `boond://dictionary/*`. Chaque règle est **rattachée aux endpoints qui l'acceptent réellement** : le périmètre aux 6 recherches principales + `boond_reporting_*` (les domaines de référence n'exposent que `keywords`/`page`/`pageSize`), `keywordsType` aux 4 schémas qui le déclarent, `typesOf` aux contacts seuls — les sociétés n'ont pas de filtre de type. Le bloc dit aussi qu'un rejet `.strict()` peut signifier « filtre non supporté par cet endpoint » et pas seulement « mauvais nom », et qu'un préfixe `keywords` hors liste n'est pas rejeté mais renvoie 0 résultat (à ne pas lire comme « aucune entité liée »). Un nouveau `src/instructions.test.ts` épingle ces affirmations aux schémas Zod correspondants pour qu'elles ne puissent pas diverger. Longueur plafonnée à 4000 caractères et testée (3,7 Ko aujourd'hui).
+- **`Implementation.description`** (nouveauté 2025-11-25) : l'identité annoncée à l'`initialize` porte désormais une description, lue depuis `package.json` — pas de source de vérité supplémentaire à synchroniser au moment des releases.
+
+### Security
+
+- **Validation de l'en-tête `Origin`** (exigence de la spec 2025-11-25) : le transport HTTP renvoie désormais un `403 Forbidden` sur un `Origin` hors liste blanche, en complément de la validation `Host` déjà en place (anti DNS rebinding). Nouvelle variable `MCP_HTTP_ALLOWED_ORIGINS`, mêmes sémantiques que `MCP_HTTP_ALLOWED_HOSTS` (`*` seul = désactivation explicite, `*` mélangé = ignoré + warning ; une valeur vide n'est **pas** une désactivation et retombe sur le défaut). En écoute loopback, le défaut accepte **toute origine loopback quel que soit le port** (`http`/`https` sur `localhost` / `127.0.0.1` / `[::1]`) plus l'origine de `MCP_HTTP_PUBLIC_URL` si elle est définie : rien n'est *servi* depuis le port MCP, donc les origines légitimes sont d'autres ports locaux (MCP Inspector sur `:6274`, un serveur de dev sur `:5173`) ou l'URL publique du reverse proxy. La propriété anti-rebinding est intacte — une origine distante reçoit toujours un `403`, la comparaison portant sur le *littéral* du hostname (`http://127.0.0.1.nip.io` est rejeté). Une liste explicitement configurée reste, elle, comparée à l'identique (port compris). **Une requête sans `Origin` reste acceptée** (curl, gateways, clients MCP non-navigateur) ; `/healthz` et le document de découverte RFC 9728 (`/.well-known/oauth-protected-resource*`) sont exemptés — ce dernier est public, sans credential, et n'est consulté par un navigateur que parce qu'un `401` l'y a envoyé : un `403` y bloquerait le bootstrap OAuth.
+
+### Changed
+
+- **Prérequis Node.js : >= 22** (`package.json::engines`, `manifest.json::compatibility.runtimes`). Matrice CI `[20, 22, 24]` → `[22, 24, 26]` ; les étapes épinglées sur Node 22 (validation MCPB, drift check `TOOLS.md`, cohérence des versions, upload de couverture) restent dans la matrice. Workflows `api-monitor` passés de Node 20 à 22.
+- **Boilerplate transverse retiré des descriptions d'outils** : la ligne « Périmètre orga : `perimeterAgencies`… » et l'avertissement « utilisez les filtres structurés / noms exacts de l'API », identiques dans les 6 descriptions de recherche, sont supprimés au profit du bloc `instructions` — 1,9 Ko de moins dans `tools/list`. Le bilan net sur le budget de contexte reste **+1,8 Ko par session** (bloc de 3,7 Ko) : les spécificités par endpoint (préfixes `keywords` admis, valeurs de `keywordsType`, tri) restent volontairement dans les descriptions, puisque c'est précisément là que le modèle doit aller les chercher. Un test vérifie que ces deux formulations ne réapparaissent pas côté outils. Au passage, `resources.ts` affirmait qu'un nom de filtre inconnu était « silencieusement ignoré » — c'est faux, les schémas sont `.strict()`.
+- **Dev-dependencies** : bump de `typescript-eslint` (8.65.0 → 8.66.0) et `lint-staged` (17.2.0 → 17.3.0) — lockfile uniquement, rien n'est embarqué dans le paquet publié.
+
+### Fixed
+
+- **Démarrage résilient à un `package.json` malformé** : `readPackageManifest()` faisait ses accès de propriétés hors du `try`, si bien qu'un fichier se parsant en `null` (ou en scalaire) provoquait un `TypeError` à l'évaluation du module — serveur qui ne démarre plus, avec une pile d'import opaque. Le résultat du parse est désormais validé comme objet avant usage, et les placeholders (`0.0.0-unknown`) reprennent leur rôle. Trois cas de dégradation sont couverts par des tests.
+
+### Documentation
+
+- `CLAUDE.md` : nouvelles sections *MCP Spec Level* (révision négociée = celle du SDK, `2025-11-25` ; révision publiée = `2026-07-28`, suivie dans [#170](https://github.com/fauguste/boondmanager-mcp-server/issues/170)) et *Server Identity & Instructions* ; références obsolètes « 2025-03-26 » / « 2025-06-18 » corrigées.
+- `README.md`, `README-docker.md` : `MCP_HTTP_ALLOWED_ORIGINS` documentée (défaut loopback port-agnostique, exemptions, sémantique de la valeur vide), prérequis Node mis à jour.
+- `docs/oauth.md` : note à l'attention des intégrateurs — la DCR ([RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)) est dépréciée dans la révision 2026-07-28 au profit des *Client ID Metadata Documents*, et les clients doivent valider le paramètre `iss` ([RFC 9207](https://datatracker.ietf.org/doc/html/rfc9207)). Côté serveur (protected resource), rien à changer.
+
 ## [2.9.0] - 2026-08-03
 
 Lisibilité des résultats de recherche sur les entités transactionnelles et généralisation de la projection `fields` à l'ensemble des outils de recherche. Catalogue inchangé : **180 outils, 11 prompts, 22 ressources** — l'évolution porte sur les schémas d'entrée et le rendu des listes.

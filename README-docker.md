@@ -99,6 +99,7 @@ Documentation complète : [`docs/oauth.md`](https://github.com/fauguste/boondman
 | `MCP_HTTP_SESSION_TTL_MS` | `1800000` (30 min) | Stateful only : idle window avant fermeture session |
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only : fréquence du sweep des sessions idle |
 | `MCP_HTTP_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` (loopback) ou disabled (other) | Comma-separated allowlist de `Host` header hostnames (protection DNS rebinding CVE-2025-66414). `*` = opt-out explicite (reverse proxy only). |
+| `MCP_HTTP_ALLOWED_ORIGINS` | toute origine loopback + `MCP_HTTP_PUBLIC_URL` (loopback) ou disabled (other) | Comma-separated allowlist de valeurs `Origin` (scheme + host + port) ; `Origin` hors liste → `403` (exigence spec MCP 2025-11-25). Requête **sans** `Origin` toujours acceptée (curl, gateways) ; `/healthz` et `/.well-known/oauth-protected-resource` exemptés. `*` = opt-out explicite (une valeur vide n'en est pas une). Dans l'image Docker (`MCP_HTTP_HOST=0.0.0.0`), la validation est désactivée par défaut : la définir explicitement si le serveur est appelé depuis un navigateur. |
 
 ## Variables d'environnement – BoondManager API
 

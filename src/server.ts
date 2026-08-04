@@ -44,6 +44,7 @@ import {
 } from "./tools/index.js";
 import { registerAllPrompts } from "./prompts/index.js";
 import { registerAllResources } from "./resources/index.js";
+import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import type { DomainName } from "./constants.js";
 import { resolveAccessPolicy, isDomainAllowed, withPolicy, type AccessPolicy } from "./config/access-policy.js";
 
@@ -54,28 +55,50 @@ export type { DomainName } from "./constants.js";
 export const SERVER_NAME = "boondmanager-mcp-server";
 
 /**
- * Read the package version from `package.json` so the value advertised over
- * MCP `initialize` always matches the published artefact. CI already enforces
- * version parity between `package.json`, `manifest.json`, and `server.json`,
- * so resolving from `package.json` is sufficient.
+ * Read `package.json` so the identity advertised over MCP `initialize` always
+ * matches the published artefact. CI already enforces version parity between
+ * `package.json`, `manifest.json`, `server.json` and `gemini-extension.json`,
+ * so `package.json` is the single source of truth here — no extra file to keep
+ * in sync at release time.
  *
  * The compiled file lives at `dist/server.js`, mirroring `src/server.ts`,
- * so `../package.json` is correct in both layouts.
+ * so `../package.json` is correct in both layouts. On any failure we fall back
+ * to recognisable placeholders rather than crashing the server.
  */
-function readPackageVersion(): string {
+function readPackageManifest(): { version?: unknown; description?: unknown } {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
     const pkgPath = resolve(here, "..", "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: unknown };
-    if (typeof pkg.version === "string" && pkg.version.length > 0) return pkg.version;
+    const parsed: unknown = JSON.parse(readFileSync(pkgPath, "utf8"));
+    // `JSON.parse` happily returns `null` (or a string, or a number) for a
+    // well-formed but non-object file. Those reach the property accesses below,
+    // which run at module evaluation time — a `TypeError` there means the
+    // server never starts, with an opaque import stack. Degrade instead.
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return parsed as { version?: unknown; description?: unknown };
   } catch {
-    // Fall through to the placeholder — surface a recognisable value rather
-    // than crashing the server on a missing package.json.
+    return {};
   }
-  return "0.0.0-unknown";
 }
 
-export const SERVER_VERSION = readPackageVersion();
+function readStringField(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+const packageManifest = readPackageManifest();
+
+export const SERVER_VERSION = readStringField(packageManifest.version, "0.0.0-unknown");
+
+/**
+ * `Implementation.description` (MCP 2025-11-25) — a human-readable summary of
+ * what this server does, returned in the `initialize` result alongside the
+ * name/version. Sourced from `package.json` so it matches the npm listing and
+ * `server.json` (the registry manifest) without a fifth source of truth.
+ */
+export const SERVER_DESCRIPTION = readStringField(
+  packageManifest.description,
+  "MCP server for the BoondManager API (ERP/CRM)"
+);
 
 /**
  * Domain → registration function, in the canonical order of REGISTERED_DOMAINS.
@@ -162,10 +185,18 @@ export function registerAll(server: McpServer, policy: AccessPolicy): void {
 }
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({
-    name: SERVER_NAME,
-    version: SERVER_VERSION,
-  });
+  const server = new McpServer(
+    {
+      name: SERVER_NAME,
+      version: SERVER_VERSION,
+      description: SERVER_DESCRIPTION,
+    },
+    {
+      // Cross-cutting usage rules (filter naming, pagination ceilings,
+      // dictionary resources) stated once here instead of once per tool.
+      instructions: SERVER_INSTRUCTIONS,
+    }
+  );
 
   // Operator-configured restrictions (env-driven). Absent config = full surface.
   registerAll(server, resolveAccessPolicy());

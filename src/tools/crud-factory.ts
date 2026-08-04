@@ -111,7 +111,7 @@ function deleteConfirmationDisabled(): boolean {
 
 /**
  * Ask the end user to confirm a destructive delete through MCP elicitation
- * (spec 2025-06-18). Clients that don't declare the `elicitation` capability
+ * (spec 2025-11-25). Clients that don't declare the `elicitation` capability
  * keep the legacy behaviour (delete proceeds — `destructiveHint` already lets
  * hosts gate the call). A failed elicitation round-trip (e.g. stateless HTTP
  * quirks) also falls back to legacy rather than breaking deletes; only an
