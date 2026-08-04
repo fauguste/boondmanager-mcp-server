@@ -115,8 +115,26 @@ function deleteConfirmationDisabled(): boolean {
  * keep the legacy behaviour (delete proceeds — `destructiveHint` already lets
  * hosts gate the call). A failed elicitation round-trip (e.g. stateless HTTP
  * quirks) also falls back to legacy rather than breaking deletes; only an
- * explicit decline/cancel/`confirm=false` aborts.
+ * explicit decline/cancel, or an answer that isn't "delete", aborts.
+ *
+ * The requested schema is a **titled single-select enum** with a default
+ * (SEP-1330 / SEP-1034), not the boolean it used to be. Rationale: a checkbox
+ * labelled "Confirmer la suppression" is trivially mis-clicked and pre-checked
+ * by some hosts, whereas `oneOf: [{const,title}]` + `default: "cancel"` makes
+ * the safe answer the pre-selected one and puts the consequence
+ * ("Supprimer définitivement") in the option label itself.
+ *
+ * Backwards compatibility is deliberate on two axes:
+ * - a client still answering the old shape (`{ confirm: true }`) is honoured;
+ * - `required` is intentionally NOT set, so the SDK's Ajv validation of the
+ *   response can't reject a legacy-shaped answer — a rejection there throws,
+ *   and the `catch` below would fall back to *deleting*. Being lenient in the
+ *   schema and strict in the interpretation (anything that isn't an explicit
+ *   confirmation aborts) keeps the safe direction safe.
  */
+const CONFIRM_DELETE_VALUE = "delete";
+const CANCEL_DELETE_VALUE = "cancel";
+
 export async function confirmDeletion(
   server: McpServer,
   entityName: string,
@@ -138,19 +156,29 @@ export async function confirmDeletion(
       requestedSchema: {
         type: "object",
         properties: {
-          confirm: {
-            type: "boolean",
-            title: "Confirmer la suppression",
-            description: `Supprimer ${entityName} #${id}`,
+          confirmation: {
+            type: "string",
+            title: `Suppression de ${entityName} #${id}`,
+            description: "Choisir « Supprimer définitivement » pour confirmer, sinon rien ne sera supprimé.",
+            oneOf: [
+              { const: CONFIRM_DELETE_VALUE, title: "Supprimer définitivement" },
+              { const: CANCEL_DELETE_VALUE, title: "Annuler" },
+            ],
+            default: CANCEL_DELETE_VALUE,
           },
         },
-        required: ["confirm"],
       },
     });
-    if (result.action === "accept" && result.content?.confirm === true) {
-      return { confirmed: true };
-    }
-    return { confirmed: false, reason: result.action === "accept" ? "confirm=false" : result.action };
+    if (result.action !== "accept") return { confirmed: false, reason: result.action };
+
+    const content = result.content ?? {};
+    if (content.confirmation === CONFIRM_DELETE_VALUE) return { confirmed: true };
+    // Legacy boolean answer from a client built against the previous schema.
+    if (content.confirmation === undefined && content.confirm === true) return { confirmed: true };
+    return {
+      confirmed: false,
+      reason: typeof content.confirmation === "string" ? `confirmation=${content.confirmation}` : "not-confirmed",
+    };
   } catch {
     return { confirmed: true };
   }

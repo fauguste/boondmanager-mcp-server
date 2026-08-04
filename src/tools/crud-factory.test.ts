@@ -32,7 +32,7 @@ interface ElicitResult {
 function createMockServerWithClient(elicitation: boolean, elicitResult?: ElicitResult | Error) {
   const elicitInput = vi.fn(async () => {
     if (elicitResult instanceof Error) throw elicitResult;
-    return elicitResult ?? { action: "accept", content: { confirm: true } };
+    return elicitResult ?? { action: "accept", content: { confirmation: "delete" } };
   });
   const server = {
     registerTool: vi.fn(),
@@ -349,12 +349,63 @@ describe("registerDeleteTool handler (elicitation)", () => {
   });
 
   it("deletes after an accepted confirmation", async () => {
-    const { server, elicitInput } = createMockServerWithClient(true, { action: "accept", content: { confirm: true } });
+    const { server, elicitInput } = createMockServerWithClient(true, {
+      action: "accept",
+      content: { confirmation: "delete" },
+    });
     registerDeleteTool(server, OPTS);
     const result = await registeredHandler(server)({ id: "12" });
     expect(elicitInput).toHaveBeenCalledOnce();
     expect(apiRequest).toHaveBeenCalledWith("/tests/12", "DELETE");
     expect(result.structuredContent).toEqual({ id: "12", deleted: true });
+  });
+
+  it("requests a titled single-select enum defaulting to cancel (SEP-1330/1034)", async () => {
+    const { server, elicitInput } = createMockServerWithClient(true, { action: "cancel" });
+    registerDeleteTool(server, OPTS);
+    await registeredHandler(server)({ id: "12" });
+    const params = elicitInput.mock.calls[0]?.[0] as unknown as {
+      requestedSchema: {
+        properties: {
+          confirmation: { type: string; default: string; oneOf: Array<{ const: string; title: string }> };
+        };
+        required?: string[];
+      };
+    };
+    const field = params.requestedSchema.properties.confirmation;
+    expect(field.type).toBe("string");
+    expect(field.default).toBe("cancel");
+    expect(field.oneOf).toEqual([
+      { const: "delete", title: "Supprimer définitivement" },
+      { const: "cancel", title: "Annuler" },
+    ]);
+    // No `required`: the SDK validates the response against this schema with
+    // Ajv, and a rejection would throw us into the "delete anyway" fallback.
+    expect(params.requestedSchema.required).toBeUndefined();
+  });
+
+  it("aborts when the user picks cancel", async () => {
+    const { server } = createMockServerWithClient(true, { action: "accept", content: { confirmation: "cancel" } });
+    registerDeleteTool(server, OPTS);
+    const result = await registeredHandler(server)({ id: "12" });
+    expect(apiRequest).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({ id: "12", deleted: false, reason: "confirmation=cancel" });
+  });
+
+  it("still honours the legacy boolean answer (confirm: true)", async () => {
+    const { server } = createMockServerWithClient(true, { action: "accept", content: { confirm: true } });
+    registerDeleteTool(server, OPTS);
+    const result = await registeredHandler(server)({ id: "12" });
+    expect(apiRequest).toHaveBeenCalledWith("/tests/12", "DELETE");
+    expect(result.structuredContent).toEqual({ id: "12", deleted: true });
+  });
+
+  it("aborts on an accepted-but-uninterpretable answer (safe direction)", async () => {
+    const { server } = createMockServerWithClient(true, { action: "accept", content: {} });
+    registerDeleteTool(server, OPTS);
+    const result = await registeredHandler(server)({ id: "12" });
+    expect(apiRequest).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({ id: "12", deleted: false, reason: "not-confirmed" });
   });
 
   it("aborts when the user declines", async () => {
@@ -366,12 +417,12 @@ describe("registerDeleteTool handler (elicitation)", () => {
     expect(result.content[0].text).toContain("annulée");
   });
 
-  it("aborts when the user answers confirm=false", async () => {
+  it("aborts when a legacy client answers confirm=false", async () => {
     const { server } = createMockServerWithClient(true, { action: "accept", content: { confirm: false } });
     registerDeleteTool(server, OPTS);
     const result = await registeredHandler(server)({ id: "12" });
     expect(apiRequest).not.toHaveBeenCalled();
-    expect(result.structuredContent).toMatchObject({ id: "12", deleted: false, reason: "confirm=false" });
+    expect(result.structuredContent).toMatchObject({ id: "12", deleted: false, reason: "not-confirmed" });
   });
 
   it("falls back to deleting when the elicitation round-trip fails", async () => {
