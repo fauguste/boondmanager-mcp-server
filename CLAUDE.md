@@ -595,9 +595,11 @@ Key design points (so future changes don't regress them):
   security tier — a usability layer over `DOMAINS`, which stays the precise
   tool. Precedence on the domain axis: `DOMAINS` > `PROFILE` > all, then
   `EXCLUDE_DOMAINS` in every case. `application` is in every profile (it backs
-  dictionary/current-user). Per-profile tool counts are **generated**, not
-  estimated — see `docs/access-control.md`; note that a profile without
-  `resources` cuts 8 of the 11 prompts, since a prompt needs *all* its domains.
+  dictionary/current-user) and `resources` in all but `admin` — a prompt is cut
+  as soon as ONE of its domains is filtered out and 8 of the 11 orchestrate
+  `resources`, so leaving it out bought ~10 fewer tools and cost most of the
+  runbooks. Keep that in mind when adding a profile: check the prompt count, not
+  just the tool count. Both are **generated** — see `docs/access-control.md`.
 - `registerAll(server, policy, index?)` also wraps each registrar in
   `decorateRegistrations` (search-schema hints + tool→domain index for icons).
   That wrapper is **not** merged into `withPolicy`, whose fast path returns the

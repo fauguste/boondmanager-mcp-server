@@ -384,6 +384,24 @@ describe("registerAll — access policy filtering", () => {
     expect(prompts).not.toContain("synthese_equipe");
   });
 
+  /**
+   * Profiles exist for ergonomics, so a profile that keeps the tools but drops
+   * the runbooks has failed at its job. `resources` is in every profile but
+   * `admin` precisely because 8 of the 11 prompts orchestrate it — this test is
+   * what stops that from being silently undone.
+   */
+  it("a profile keeps the runbooks its domains can serve", () => {
+    const s = createCountingServer();
+    registerAll(s, resolveAccessPolicy(fakeEnv({ BOOND_MCP_PROFILE: "recruiting" })));
+    const prompts = registeredPromptNames(s);
+    expect(prompts).toContain("candidats_pour_opportunite");
+    expect(prompts).toContain("recherche_profil_competences");
+    expect(prompts).toContain("cartographie_competences");
+    // Still a restricted surface: the finance runbook is gone with its domain.
+    expect(prompts).not.toContain("factures_a_relancer");
+    expect(registeredToolNames(s)).toContain("boond_application_dictionary");
+  });
+
   it("cuts the mirror workflow tool when its prompt's domain is filtered out", () => {
     const s = createCountingServer();
     registerAll(s, resolveAccessPolicy(fakeEnv({ BOOND_MCP_DOMAINS: "invoices,application" })));

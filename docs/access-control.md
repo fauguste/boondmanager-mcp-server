@@ -59,8 +59,8 @@ ces regroupements, prêts à l'emploi — définis dans
 
 | Profil | Domaines | Outils | Prompts |
 |--------|----------|--------|---------|
-| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, application, workflows | 62 | 2 |
-| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, application, workflows | 70 | 1 |
+| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 88 | 9 |
+| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, application, workflows | 96 | 8 |
 | `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 59 | 1 |
 | `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 53 | 5 |
 | `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |
@@ -68,7 +68,7 @@ ces regroupements, prêts à l'emploi — définis dans
 
 Comptages **générés** depuis les registrations réelles (les mêmes que celles
 qu'un client voit dans `tools/list`), profil seul, toutes opérations. Avec
-`BOOND_MCP_READ_ONLY=true` en plus : `recruiting` 42, `sales` 49, `finance` 40,
+`BOOND_MCP_READ_ONLY=true` en plus : `recruiting` 61, `sales` 68, `finance` 40,
 `delivery` 38, `admin` 18.
 
 Notes :
@@ -76,12 +76,20 @@ Notes :
 - `application` est dans **tous** les profils : il porte la résolution des
   dictionnaires (libellés d'états/types) et `current-user`, dont dépendent
   beaucoup d'outils et de prompts.
-- Le nombre de prompts chute vite parce qu'un prompt est coupé dès qu'**un**
-  des domaines de son runbook manque (règle inchangée, cf. plus bas) : 8 des 11
-  prompts orchestrent `resources`. Si les runbooks « équipe / staffing / CV »
-  vous intéressent, ajoutez `resources` — les profils ne sont qu'un point de
-  départ, `BOOND_MCP_DOMAINS` reste l'outil précis :
-  `BOOND_MCP_DOMAINS=candidates,positionings,opportunities,contacts,companies,documents,actions,resources,application`.
+- `resources` est dans tous les profils **sauf `admin`**, pour une raison du
+  même ordre : un prompt est coupé dès qu'**un** des domaines de son runbook
+  manque (règle détaillée plus bas), et 8 des 11 prompts orchestrent
+  `resources`. Sans lui, `recruiting` tombait à 2 prompts et `sales` à 1 : ~10
+  outils gagnés contre la quasi-totalité des runbooks, mauvais échange pour une
+  couche dont le but est l'ergonomie. C'est aussi ce que ces métiers utilisent
+  réellement (un recruteur compare candidats et collaborateurs internes, un
+  commercial staffe son affaire). `finance` n'en a pas besoin : son seul runbook
+  (`factures_a_relancer`) ne touche que `invoices` + `application`.
+- Un profil reste un **point de départ** : pour un périmètre au domaine près,
+  `BOOND_MCP_DOMAINS` est l'outil précis, et `BOOND_MCP_EXCLUDE_DOMAINS`
+  retranche d'un profil (ex. `BOOND_MCP_PROFILE=sales` +
+  `BOOND_MCP_EXCLUDE_DOMAINS=resources` revient au périmètre commercial strict,
+  au prix des runbooks concernés).
 - Plusieurs profils se cumulent en **union** : `BOOND_MCP_PROFILE=sales,finance`.
 - La casse est indifférente (`Finance` = `finance`).
 - Un profil ne restreint **que** l'axe domaines : combinez-le avec

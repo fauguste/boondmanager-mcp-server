@@ -20,6 +20,15 @@ import type { DomainName } from "../constants.js";
  * strictly required (workflow tools follow their source prompt's domains, not
  * the allow-list), but keeping it explicit documents the intent and survives a
  * future change of that rule.
+ *
+ * `resources` is in every profile except `admin` for the same kind of reason: 8
+ * of the 11 prompts orchestrate it (`synthese_equipe`, `staffing_disponible`,
+ * `fiche_consultant`, `recherche_profil_competences`, …) and a prompt is cut as
+ * soon as ONE of its domains is filtered out. Leaving it out of `recruiting` /
+ * `sales` bought ~10 fewer tools and cost most of the runbooks — the wrong
+ * trade for a layer whose whole point is ergonomics. It is also what those jobs
+ * actually need: a recruiter matches candidates against internal staff, a
+ * salesperson staffs a deal.
  */
 export const PROFILES: Readonly<Record<string, readonly DomainName[]>> = {
   /** Recrutement / sourcing : viviers, positionnements, suivi d'activité. */
@@ -31,6 +40,7 @@ export const PROFILES: Readonly<Record<string, readonly DomainName[]>> = {
     "companies",
     "documents",
     "actions",
+    "resources",
     "application",
     "workflows",
   ],
@@ -44,6 +54,7 @@ export const PROFILES: Readonly<Record<string, readonly DomainName[]>> = {
     "orders",
     "products",
     "reporting",
+    "resources",
     "application",
     "workflows",
   ],
