@@ -216,7 +216,52 @@ Exemples d'invocation des prompts ressources / competences / CV :
 
 Telechargez le fichier `.mcpb` depuis la [derniere release GitHub](https://github.com/fauguste/boondmanager-mcp-server/releases/latest), puis dans Claude Desktop : **Fichier > Installer une extension...** et selectionnez le fichier. Les identifiants sont demandes a l'installation et stockes de maniere chiffree (Keychain macOS / Credential Manager Windows).
 
-### Claude Code
+### Claude Code (plugin, recommande)
+
+Meme confort que le one-click Desktop : un formulaire de configuration, aucune
+variable d'environnement a poser soi-meme.
+
+```
+/plugin marketplace add fauguste/boondmanager-mcp-server
+/plugin install boondmanager-mcp@boondmanager
+```
+
+Claude Code affiche alors le formulaire des 14 options (identifiants, URL de
+base, restrictions d'acces). Tout est optionnel a l'ecran, mais il faut
+renseigner **un** des trois modes d'authentification : le trio `User Token` +
+`Client Token` + `Client Key` (JWT genere automatiquement, recommande), ou le
+`Token JWT` pre-construit, ou le couple `Utilisateur` + `Mot de passe`
+(BasicAuth). Les champs laisses vides retombent sur les valeurs par defaut.
+
+Si le serveur n'apparait pas immediatement dans `/mcp`, un `/reload-plugins`
+suffit — inutile de relancer Claude Code.
+
+Details utiles :
+
+- **Ou vont les secrets** : les 5 champs sensibles (`User Token`, `Client
+  Token`, `Client Key`, `Token JWT`, `Mot de passe`) vont dans le Keychain macOS
+  (ou `~/.claude/.credentials.json` a defaut), **pas** dans `settings.json`. Les
+  options non sensibles (URL, restrictions) sont stockees en clair dans
+  `pluginConfigs` de votre `~/.claude/settings.json`.
+- **Nommage des outils** : cote client les outils sont prefixes
+  `mcp__boondmanager__`, par exemple `mcp__boondmanager__boond_candidates_search`.
+  C'est ce nom qu'il faut utiliser dans une allow-list de permissions.
+- **Version** : le plugin lance la version npm epinglee dans son manifeste. Pour
+  passer a une nouvelle release : `/plugin marketplace update boondmanager` puis
+  reinstaller le plugin.
+- **Restreindre la surface** : les champs *Restriction* du formulaire mappent sur
+  les variables `BOOND_MCP_*` (profil metier, domaines, operations, lecture
+  seule). Voir [docs/access-control.md](./docs/access-control.md).
+- **Suppressions** : Claude Code supporte l'elicitation MCP, donc chaque
+  `boond_*_delete` demande une confirmation avant d'agir (option *Confirmer les
+  suppressions*, activee par defaut).
+
+Pour desinstaller : `/plugin uninstall boondmanager-mcp@boondmanager`.
+
+### Claude Code (manuel, `claude mcp add`)
+
+A privilegier si vous voulez piloter vous-meme les variables d'environnement,
+ou epingler une version differente de celle du plugin.
 
 ```bash
 # Avec un token API (recommande)

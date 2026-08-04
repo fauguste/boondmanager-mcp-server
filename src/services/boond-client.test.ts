@@ -29,6 +29,7 @@ import {
 import { oauthContext } from "./oauth.js";
 import {
   CHARACTER_LIMIT,
+  DEFAULT_BASE_URL,
   DEFAULT_HTTP_TIMEOUT_MS,
   DEFAULT_HTTP_MAX_RETRIES,
   DEFAULT_HTTP_RETRY_BASE_MS,
@@ -619,6 +620,64 @@ describe("initClient", () => {
     process.env.BOOND_API_TOKEN = "${user_config.api_token}";
     process.env.BOOND_USER = "${user_config.user}";
     expect(() => initClient()).toThrow("Authentication required");
+  });
+});
+
+/**
+ * `BOOND_BASE_URL` is the one env var where a bad fallback is silent: an empty
+ * or blank value would make every request target a relative path instead of
+ * BoondManager, and the failure surfaces as an opaque fetch error rather than
+ * "you left the URL blank".
+ *
+ * Both packaged install channels — the MCPB extension and the Claude Code plugin
+ * — substitute `${user_config.base_url}` into the var unconditionally, so it is
+ * always *defined*, even when the user cleared the field. Three shapes must all
+ * fall back to `DEFAULT_BASE_URL`.
+ */
+describe("initClient: base URL resolution", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    resetClientForTests();
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env = { ...originalEnv };
+    resetClientForTests();
+    resetRateLimiterForTests();
+  });
+
+  /** Resolve the effective base URL by looking at the URL `apiRequest` fetches. */
+  async function requestedUrl(): Promise<string> {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-length": "2" }),
+      json: () => Promise.resolve({}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    initClient();
+    await apiRequest("/candidates/1");
+    return String(fetchMock.mock.calls[0][0]);
+  }
+
+  it.each([
+    ["empty string", ""],
+    ["whitespace only", "   "],
+    ["unsubstituted placeholder", "${user_config.base_url}"],
+  ])("falls back to the default base URL when BOOND_BASE_URL is %s", async (_label, raw) => {
+    process.env.BOOND_BASE_URL = raw;
+    expect(await requestedUrl()).toBe(`${DEFAULT_BASE_URL}/candidates/1`);
+  });
+
+  it("honours a real custom base URL (dedicated instance)", async () => {
+    process.env.BOOND_BASE_URL = "https://acme.boondmanager.com/api";
+    expect(await requestedUrl()).toBe("https://acme.boondmanager.com/api/candidates/1");
   });
 });
 

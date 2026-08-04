@@ -1,0 +1,116 @@
+{
+  "name": "boondmanager-mcp",
+  "displayName": "BoondManager MCP Server",
+  "version": "2.11.0",
+  "description": "MCP Server for BoondManager API - 180 tools, 11 prompts, 22 resources (ERP/CRM)",
+  "author": {
+    "name": "Frédéric Auguste",
+    "url": "https://github.com/fauguste/boondmanager-mcp-server"
+  },
+  "homepage": "https://github.com/fauguste/boondmanager-mcp-server#readme",
+  "repository": "https://github.com/fauguste/boondmanager-mcp-server.git",
+  "license": "Apache-2.0",
+  "keywords": [
+    "boondmanager",
+    "esn",
+    "crm",
+    "erp",
+    "candidates",
+    "resources",
+    "mcp"
+  ],
+  "userConfig": {
+    "base_url": {
+      "type": "string",
+      "title": "BoondManager URL",
+      "description": "URL de base de l'API BoondManager (ex: https://ui.boondmanager.com/api). Laissez vide pour utiliser l'URL par défaut.",
+      "required": false,
+      "default": "https://ui.boondmanager.com/api"
+    },
+    "user_token": {
+      "type": "string",
+      "title": "User Token (Option 1 : JWT auto)",
+      "description": "Token utilisateur BoondManager. Mon compte > Informations de connexion > Clé d'API. Remplir avec Client Token et Client Key pour générer le JWT automatiquement.",
+      "sensitive": true,
+      "required": false
+    },
+    "client_token": {
+      "type": "string",
+      "title": "Client Token (Option 1 : JWT auto)",
+      "description": "Token client BoondManager. Administration > Espace Développeur > API / Sandbox.",
+      "sensitive": true,
+      "required": false
+    },
+    "client_key": {
+      "type": "string",
+      "title": "Client Key (Option 1 : JWT auto)",
+      "description": "Clé secrète client BoondManager. Administration > Espace Développeur > API / Sandbox.",
+      "sensitive": true,
+      "required": false
+    },
+    "api_token": {
+      "type": "string",
+      "title": "Token JWT (Option 2 : JWT pré-construit)",
+      "description": "Token JWT BoondManager déjà construit. Alternatif à l'option 1.",
+      "sensitive": true,
+      "required": false
+    },
+    "user": {
+      "type": "string",
+      "title": "Utilisateur (Option 3 : BasicAuth)",
+      "description": "Nom d'utilisateur BoondManager pour l'authentification BasicAuth.",
+      "required": false
+    },
+    "password": {
+      "type": "string",
+      "title": "Mot de passe (Option 3 : BasicAuth)",
+      "description": "Mot de passe BoondManager pour l'authentification BasicAuth.",
+      "sensitive": true,
+      "required": false
+    },
+    "mcp_profile": {
+      "type": "string",
+      "title": "Restriction : profil d'accès",
+      "description": "Profil préconfiguré parmi recruiting, sales, finance, delivery, admin (plusieurs = séparés par des virgules, union). Raccourci pour ne pas lister les domaines un par un. Ignoré si 'domaines autorisés' est renseigné. Voir docs/access-control.md.",
+      "required": false
+    },
+    "mcp_domains": {
+      "type": "string",
+      "title": "Restriction : domaines autorisés",
+      "description": "Liste blanche de domaines séparés par des virgules (ex: invoices,payments,application). Vide = tous les domaines. Voir docs/access-control.md.",
+      "required": false
+    },
+    "mcp_exclude_domains": {
+      "type": "string",
+      "title": "Restriction : domaines exclus",
+      "description": "Liste noire de domaines séparés par des virgules (ex: candidates,resources), appliquée après la liste blanche. Vide = aucune exclusion.",
+      "required": false
+    },
+    "mcp_operations": {
+      "type": "string",
+      "title": "Restriction : opérations autorisées",
+      "description": "Opérations autorisées séparées par des virgules parmi read,create,update,delete. Vide = toutes. Ignoré si 'Lecture seule' est activé.",
+      "required": false
+    },
+    "mcp_read_only": {
+      "type": "boolean",
+      "title": "Restriction : lecture seule",
+      "description": "Si activé, expose uniquement les outils de lecture (bloque création, modification et suppression). N'est pas une frontière de sécurité dure : les droits du compte BoondManager s'appliquent en plus.",
+      "required": false,
+      "default": false
+    },
+    "confirm_delete": {
+      "type": "boolean",
+      "title": "Confirmer les suppressions",
+      "description": "Si activé (défaut), une confirmation est demandée avant chaque suppression lorsque le client MCP supporte l'élicitation. Désactiver pour retrouver le comportement historique (suppression directe).",
+      "required": false,
+      "default": true
+    },
+    "dictionary_overrides": {
+      "type": "string",
+      "title": "Libellés personnalisés du dictionnaire",
+      "description": "Mapping libellé→ID pour les instances BoondManager aux dictionnaires personnalisés : JSON inline (commence par {) ou chemin vers un fichier JSON UTF-8. Ex: {\"action\":{\"contact\":{\"Call\":61}},\"state\":{\"candidate\":{\"Interviewed\":2}}}. Voir docs/dictionary-overrides.md.",
+      "required": false
+    }
+  }
+}

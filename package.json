@@ -40,6 +40,8 @@
     "typecheck": "tsc --noEmit",
     "docs:tools": "npm run build && node scripts/generate-tools-catalog.mjs",
     "docs:tools:check": "npm run build && node scripts/generate-tools-catalog.mjs --check",
+    "plugin:manifest": "node scripts/generate-plugin-manifest.mjs",
+    "plugin:manifest:check": "node scripts/generate-plugin-manifest.mjs --check",
     "api:monitor:test": "node scripts/test-api-monitor.cjs",
     "api:monitor:save": "node scripts/test-api-monitor.cjs --save",
     "prepare": "husky || true",

@@ -68,10 +68,25 @@ export function buildJwt(
   return `${header}.${payload}.${signature}`;
 }
 
-/** Return the env value if it is a real user-supplied value, or undefined otherwise. */
+/**
+ * Return the env value if it is a real user-supplied value, or undefined otherwise.
+ *
+ * "Real" excludes three things a config form can produce for an option the user
+ * left alone — and the MCPB extension and the Claude Code plugin both build
+ * their env block by substituting `${user_config.*}` into every var, so all
+ * fourteen are always *defined*:
+ *
+ *  - `""` — an untouched optional field;
+ *  - whitespace only — a field that got a stray space or a pasted newline
+ *    (`BOOND_BASE_URL=" "` would otherwise become the request base URL);
+ *  - `"${…}"` — a placeholder no host resolved.
+ *
+ * All three must read as "not configured" so the defaults apply. Same rule as
+ * `readEnv` in `config/access-policy.ts` and `config/dictionary-overrides.ts`.
+ */
 function envOrUndefined(key: string): string | undefined {
   const v = process.env[key];
-  if (!v || v.startsWith("${")) return undefined;
+  if (!v || v.startsWith("${") || v.trim().length === 0) return undefined;
   return v;
 }
 
