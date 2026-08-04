@@ -313,7 +313,7 @@ schema rejection rather than a silently unfiltered result.
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 54 test files, **759 tests**
+- **Current stats**: 56 test files, **867 tests**
 
 ### Test file template (for read-only search+get domains):
 

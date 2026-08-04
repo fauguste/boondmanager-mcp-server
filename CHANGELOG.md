@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.10.0] - 2026-08-04
 
 Remise à niveau sur la révision de spec MCP **2025-11-25** (celle que le SDK négocie déjà), fermeture d'un trou de validation HTTP et sortie de la fenêtre EOL de Node 20 ([#167](https://github.com/fauguste/boondmanager-mcp-server/issues/167)). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
 
