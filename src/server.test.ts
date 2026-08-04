@@ -3,8 +3,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   createMcpServer,
   registerAll,
@@ -16,6 +14,7 @@ import {
 } from "./server.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { resolveAccessPolicy } from "./config/access-policy.js";
+import { connectMcpClient, useDefaultServerSurface } from "./tools/test-helpers.js";
 
 /** Counting stub that records every registration call. */
 function createCountingServer() {
@@ -156,12 +155,7 @@ describe("SERVER_INSTRUCTIONS", () => {
 
 describe("MCP initialize result", () => {
   it("advertises instructions, name, version and description to a connected client", async () => {
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const client = new Client({ name: "vitest", version: "1.0.0" });
-
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-
+    const { client, close } = await connectMcpClient();
     try {
       expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
       const info = client.getServerVersion();
@@ -169,8 +163,7 @@ describe("MCP initialize result", () => {
       expect(info?.version).toBe(SERVER_VERSION);
       expect(info?.description).toBe(SERVER_DESCRIPTION);
     } finally {
-      await client.close();
-      await server.close();
+      await close();
     }
   });
 });
@@ -178,6 +171,142 @@ describe("MCP initialize result", () => {
 describe("TOOL_REGISTRARS", () => {
   it("lists the same domains, in the same order, as REGISTERED_DOMAINS", () => {
     expect(TOOL_REGISTRARS.map(([d]) => d)).toEqual([...REGISTERED_DOMAINS]);
+  });
+});
+
+/**
+ * `tools/list` ordering is a protocol guarantee (recommended by the 2026-07-28
+ * revision): clients cache the catalogue and the prompt cache only keeps
+ * hitting if the sequence is stable. The SDK lists tools in registration order,
+ * so "stable" means: same order on every instantiation, and that order is
+ * exactly TOOL_REGISTRARS. Nothing else in the codebase enforces it — a `Set`
+ * or `Object.keys` on a dynamically built object inside a registrar would break
+ * it silently.
+ */
+describe("deterministic tools/list order", () => {
+  // `createMcpServer()` resolves the access policy from the real environment, so
+  // an ambient `BOOND_MCP_PROFILE` / `BOOND_MCP_DOMAINS` would shrink the
+  // catalogue and fail the count assertion below for an unrelated reason.
+  useDefaultServerSurface();
+
+  it("two successive registrations produce the identical tool sequence", () => {
+    const first = createCountingServer();
+    const second = createCountingServer();
+    registerAll(first, resolveAccessPolicy(fakeEnv({})));
+    registerAll(second, resolveAccessPolicy(fakeEnv({})));
+    expect(registeredToolNames(second)).toEqual(registeredToolNames(first));
+  });
+
+  it("two successive servers advertise the identical order over the wire", async () => {
+    async function listToolNames() {
+      const { client, close } = await connectMcpClient();
+      try {
+        return (await client.listTools()).tools.map((t) => t.name);
+      } finally {
+        await close();
+      }
+    }
+    const first = await listToolNames();
+    const second = await listToolNames();
+    expect(second).toEqual(first);
+    expect(first.length).toBeGreaterThan(150);
+  });
+
+  it("prompt order is stable too", () => {
+    const first = createCountingServer();
+    const second = createCountingServer();
+    registerAll(first, resolveAccessPolicy(fakeEnv({})));
+    registerAll(second, resolveAccessPolicy(fakeEnv({})));
+    expect(registeredPromptNames(second)).toEqual(registeredPromptNames(first));
+  });
+
+  it("follows TOOL_REGISTRARS: domains appear in declaration order, grouped", () => {
+    const s = createCountingServer();
+    registerAll(s, resolveAccessPolicy(fakeEnv({})));
+    const names = registeredToolNames(s);
+
+    // Rebuild the domain sequence from the registration order, then compare it
+    // to TOOL_REGISTRARS filtered to the domains that actually register tools.
+    const domainOfCall: string[] = [];
+    const perDomain = new Map<string, string[]>();
+    for (const [domain, register] of TOOL_REGISTRARS) {
+      const probe = createCountingServer();
+      register(probe);
+      const owned = registeredToolNames(probe);
+      if (owned.length === 0) continue;
+      perDomain.set(domain, owned);
+      domainOfCall.push(domain);
+    }
+
+    const expected = domainOfCall.flatMap((d) => perDomain.get(d)!);
+    expect(names).toEqual(expected);
+  });
+});
+
+/**
+ * SEP-1303: an argument-validation failure must reach the model as a *tool*
+ * error it can correct from, not as a protocol error. The SDK already converts
+ * its own `McpError(InvalidParams)` into `isError: true`; what we add is a
+ * message worth correcting from (see `tools/validation-wrapper.ts`).
+ */
+describe("search filter validation feedback (end to end)", () => {
+  useDefaultServerSurface();
+
+  async function callTool(name: string, args: Record<string, unknown>) {
+    const { client, close } = await connectMcpClient();
+    try {
+      return (await client.callTool({ name, arguments: args })) as {
+        isError?: boolean;
+        content?: Array<{ type: string; text?: string }>;
+      };
+    } finally {
+      await close();
+    }
+  }
+
+  it("a wrong perimeter filter comes back as isError naming the right one", async () => {
+    const result = await callTool("boond_resources_search", { mainManagers: [42] });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("perimeterManagers");
+    expect(text).toContain("mainManagers");
+  });
+
+  it("the endpoint's own state filter is suggested, with its dictionary resource", async () => {
+    const result = await callTool("boond_candidates_search", { states: [1] });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("candidateStates");
+    expect(text).toContain("boond://dictionary/states/candidates");
+  });
+
+  /**
+   * The reporting tools are not named `*_search` but carry the same
+   * `perimeter*` / `*States` vocabulary behind a strict schema. A suffix-based
+   * gate skipped them; the annotation-based one covers them.
+   */
+  it("covers the reporting tools, which are not named *_search", async () => {
+    const result = await callTool("boond_reporting_resources", { mainManagers: [42] });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("perimeterManagers");
+  });
+
+  it("the page ceiling explains itself instead of just refusing", async () => {
+    const result = await callTool("boond_resources_search", { page: 500 });
+    expect(result.isError).toBe(true);
+    const text = result.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    expect(text).toContain("MAX_SEARCH_PAGE");
+  });
+
+  it("keeps advertising a strict inputSchema (the client can pre-validate)", async () => {
+    const { client, close } = await connectMcpClient();
+    try {
+      const tool = (await client.listTools()).tools.find((t) => t.name === "boond_resources_search");
+      expect(tool?.inputSchema).toMatchObject({ type: "object", additionalProperties: false });
+    } finally {
+      await close();
+    }
   });
 });
 
@@ -253,6 +382,24 @@ describe("registerAll — access policy filtering", () => {
     expect(prompts).toContain("factures_a_relancer");
     // synthese_equipe needs resources → cut.
     expect(prompts).not.toContain("synthese_equipe");
+  });
+
+  /**
+   * Profiles exist for ergonomics, so a profile that keeps the tools but drops
+   * the runbooks has failed at its job. `resources` is in every profile but
+   * `admin` precisely because 8 of the 11 prompts orchestrate it — this test is
+   * what stops that from being silently undone.
+   */
+  it("a profile keeps the runbooks its domains can serve", () => {
+    const s = createCountingServer();
+    registerAll(s, resolveAccessPolicy(fakeEnv({ BOOND_MCP_PROFILE: "recruiting" })));
+    const prompts = registeredPromptNames(s);
+    expect(prompts).toContain("candidats_pour_opportunite");
+    expect(prompts).toContain("recherche_profil_competences");
+    expect(prompts).toContain("cartographie_competences");
+    // Still a restricted surface: the finance runbook is gone with its domain.
+    expect(prompts).not.toContain("factures_a_relancer");
+    expect(registeredToolNames(s)).toContain("boond_application_dictionary");
   });
 
   it("cuts the mirror workflow tool when its prompt's domain is filtered out", () => {

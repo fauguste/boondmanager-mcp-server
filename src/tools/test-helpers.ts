@@ -1,6 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { apiRequest, apiSearch } from "../services/boond-client.js";
+import { createMcpServer } from "../server.js";
 
 /**
  * Shared test utilities for tool-registration suites.
@@ -18,6 +21,62 @@ import { apiRequest, apiSearch } from "../services/boond-client.js";
  * the path they are called with, while `buildSearchQuery` / `formatListResponse`
  * run for real, exercising the domain tool's callback end-to-end.
  */
+/**
+ * Env vars that change what `createMcpServer()` exposes, or how it renders it.
+ * Any suite asserting on the *full* catalogue (tool counts, list order, icon
+ * budget) must neutralise them: `createMcpServer()` resolves the access policy
+ * from the real `process.env`, so a developer machine (or a CI runner) that
+ * exports `BOOND_MCP_PROFILE=finance` would drop the catalogue to 59 tools and
+ * fail those assertions for an unrelated-looking reason — and `BOOND_MCP_ICONS=0`
+ * would turn the icon-budget cap into a tautology (0 bytes always passes).
+ */
+const SERVER_SURFACE_ENV_VARS = [
+  "BOOND_MCP_PROFILE",
+  "BOOND_MCP_DOMAINS",
+  "BOOND_MCP_EXCLUDE_DOMAINS",
+  "BOOND_MCP_OPERATIONS",
+  "BOOND_MCP_READ_ONLY",
+  "BOOND_MCP_ICONS",
+] as const;
+
+/**
+ * Pin the suite to the default, unrestricted surface: clears the env vars above
+ * before each test and restores the ambient environment afterwards (so a test
+ * may still set one of them itself to assert the opt-out behaviour).
+ */
+export function useDefaultServerSurface(): void {
+  beforeEach(() => {
+    for (const key of SERVER_SURFACE_ENV_VARS) vi.stubEnv(key, undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+}
+
+/**
+ * A real MCP client wired to a real server over the in-memory transport — the
+ * only way to assert on what is actually advertised (`icons`, list order,
+ * `isError` conversion) rather than on what we passed to `registerTool`.
+ */
+export async function connectMcpClient(): Promise<{
+  client: Client;
+  server: McpServer;
+  close: () => Promise<void>;
+}> {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createMcpServer();
+  const client = new Client({ name: "vitest", version: "1.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return {
+    client,
+    server,
+    close: async () => {
+      await client.close();
+      await server.close();
+    },
+  };
+}
+
 export function createMockServer(): McpServer {
   return {
     registerTool: vi.fn(),

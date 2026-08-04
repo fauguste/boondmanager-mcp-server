@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { REGISTERED_DOMAINS } from "../constants.js";
 import { logger } from "../services/logger.js";
+import { PROFILE_NAMES, resolveProfile } from "./profiles.js";
 
 /**
  * Access policy: operator-side restriction of what the MCP server exposes,
@@ -20,9 +21,14 @@ import { logger } from "../services/logger.js";
  *
  * Env vars (all optional; absent = no restriction = current behaviour):
  *  - `BOOND_MCP_DOMAINS`         CSV allow-list of domains. Absent = all.
+ *  - `BOOND_MCP_PROFILE`         CSV of pre-composed profiles (union). Ignored if DOMAINS is set.
  *  - `BOOND_MCP_EXCLUDE_DOMAINS` CSV deny-list. Applied AFTER the allow-list.
  *  - `BOOND_MCP_OPERATIONS`      CSV of `read,create,update,delete`. Absent = all.
  *  - `BOOND_MCP_READ_ONLY`       Boolean shortcut, equivalent to OPERATIONS=read.
+ *
+ * Precedence on the domain axis: `DOMAINS` (explicit) > `PROFILE` (bundle) >
+ * everything allowed; `EXCLUDE_DOMAINS` then applies in all three cases (deny
+ * always wins). The operation axis is orthogonal to all of this.
  */
 
 export type Operation = "read" | "create" | "update" | "delete";
@@ -97,6 +103,34 @@ function normalizeAndValidateDomains(
   return out;
 }
 
+/**
+ * Union of the domains of every valid profile named in `BOOND_MCP_PROFILE`.
+ * Returns `null` when nothing usable was configured, so the caller can tell
+ * "no profile" from "a profile that resolved to nothing" — an unknown profile
+ * is warned-and-ignored (same resilience rule as unknown domains), never fatal
+ * and never a silently empty surface.
+ */
+function resolveProfileDomains(items: string[], log: typeof logger): Set<string> | null {
+  if (items.length === 0) return null;
+  const out = new Set<string>();
+  for (const raw of items) {
+    const domains = resolveProfile(raw);
+    if (domains === undefined) {
+      log.warn(
+        { value: raw, known: PROFILE_NAMES },
+        `BOOND_MCP_PROFILE: unknown profile "${raw}" ignored (expected one of ${PROFILE_NAMES.join(", ")})`
+      );
+      continue;
+    }
+    for (const d of domains) out.add(d);
+  }
+  if (out.size === 0) {
+    log.warn("BOOND_MCP_PROFILE contained no valid profile; falling back to the full domain surface");
+    return null;
+  }
+  return out;
+}
+
 function validateOperations(items: string[], log: typeof logger): Set<Operation> {
   const out = new Set<Operation>();
   for (const raw of items) {
@@ -129,10 +163,17 @@ export function resolveAccessPolicy(env: NodeJS.ProcessEnv = process.env): Acces
 
   // --- Domains ---
   const allowItems = parseList(readEnv(env, "BOOND_MCP_DOMAINS"));
+  const profileItems = parseList(readEnv(env, "BOOND_MCP_PROFILE"));
   const excludeItems = parseList(readEnv(env, "BOOND_MCP_EXCLUDE_DOMAINS"));
 
+  // Explicit domains win over a profile bundle: the operator who listed
+  // domains by hand is the one who knows exactly what they want exposed.
+  const profileDomains = resolveProfileDomains(profileItems, log);
+  if (allowItems.length > 0 && profileDomains !== null) {
+    log.warn("Both BOOND_MCP_DOMAINS and BOOND_MCP_PROFILE are set; BOOND_MCP_DOMAINS takes precedence");
+  }
   const allowedDomains =
-    allowItems.length > 0 ? normalizeAndValidateDomains(allowItems, known, "BOOND_MCP_DOMAINS", log) : null;
+    allowItems.length > 0 ? normalizeAndValidateDomains(allowItems, known, "BOOND_MCP_DOMAINS", log) : profileDomains;
   const excludedDomains = normalizeAndValidateDomains(excludeItems, known, "BOOND_MCP_EXCLUDE_DOMAINS", log);
 
   // --- Operations ---
@@ -163,6 +204,7 @@ export function resolveAccessPolicy(env: NodeJS.ProcessEnv = process.env): Acces
     }
     log.info(
       {
+        ...(profileItems.length > 0 ? { profiles: profileItems } : {}),
         allowedDomains: allowedDomains ? [...allowedDomains] : "all",
         excludedDomains: [...excludedDomains],
         operations: [...operations],

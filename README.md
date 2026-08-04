@@ -523,7 +523,7 @@ L'API BoondManager n'expose qu'un seul endpoint `/application/dictionary` qui re
 |----------|--------|-------------|
 | `BOOND_DICTIONARY_TTL_MS` | `3600000` (1 h) | Durée de vie du cache du dictionnaire, en millisecondes. Une valeur non numérique ou ≤ 0 retombe sur le défaut. |
 
-### Restriction d'accès (domaines / lecture seule)
+### Restriction d'accès (profils / domaines / lecture seule)
 
 Vous pouvez restreindre **ce que l'IA voit et peut faire**, entièrement par
 variables d'environnement : exposer seulement certains domaines (ex. la
@@ -531,6 +531,7 @@ comptabilité), et/ou bloquer les écritures et suppressions.
 
 | Variable | Effet |
 |----------|-------|
+| `BOOND_MCP_PROFILE` | Profil préconfiguré : `recruiting`, `sales`, `finance`, `delivery`, `admin` (CSV = union). Raccourci pour ne pas lister les domaines à la main. Ignoré si `BOOND_MCP_DOMAINS` est défini. |
 | `BOOND_MCP_DOMAINS` | Liste blanche de domaines (CSV). Absente = tous. Ex. `invoices,payments,application` |
 | `BOOND_MCP_EXCLUDE_DOMAINS` | Liste noire de domaines (CSV), appliquée après la liste blanche. Ex. `candidates,resources` |
 | `BOOND_MCP_OPERATIONS` | Opérations autorisées (CSV) parmi `read,create,update,delete`. Absente = toutes. |
@@ -542,7 +543,26 @@ comptabilité), et/ou bloquer les écritures et suppressions.
 > BoondManager (lecture seule, périmètre comptable…) ; ce filtre vient en
 > complément (économie de tokens, garde-fou anti-action accidentelle).
 
-Guide complet, règles de résolution et exemples : [docs/access-control.md](docs/access-control.md).
+Exemple — tout le périmètre gestion, en lecture seule :
+
+```bash
+export BOOND_MCP_PROFILE=finance
+export BOOND_MCP_READ_ONLY=true
+```
+
+Guide complet, règles de résolution, contenu de chaque profil (et le nombre
+d'outils qui en résulte) : [docs/access-control.md](docs/access-control.md).
+
+### Icônes (SEP-973)
+
+Les outils, prompts et ressources portent une icône par domaine (SVG inline en
+`data:` URI, aucun asset à héberger). Coût mesuré : **~40 Kio, soit ~14 % du
+payload `tools/list`**. Les déploiements qui ne les affichent pas (passerelles,
+clients texte) peuvent les supprimer :
+
+| Variable | Defaut | Description |
+|----------|--------|-------------|
+| `BOOND_MCP_ICONS` | activé | `0`/`false`/`no`/`off` : n'annonce aucune icône (outils, prompts, ressources). |
 
 ### Libellés personnalisés du dictionnaire
 

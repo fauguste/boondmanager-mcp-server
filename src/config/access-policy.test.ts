@@ -10,6 +10,8 @@ import {
   type AccessPolicy,
   type ToolAnnotations,
 } from "./access-policy.js";
+import { PROFILES, PROFILE_NAMES } from "./profiles.js";
+import { REGISTERED_DOMAINS } from "../constants.js";
 
 /** Helper: build an env object (only the keys we set; rest undefined). */
 function env(overrides: Record<string, string>): NodeJS.ProcessEnv {
@@ -63,6 +65,111 @@ describe("resolveAccessPolicy: domains", () => {
     const p = resolveAccessPolicy(env({ BOOND_MCP_EXCLUDE_DOMAINS: "candidates,resources" }));
     expect(p.allowedDomains).toBeNull();
     expect([...p.excludedDomains].sort()).toEqual(["candidates", "resources"]);
+  });
+});
+
+describe("resolveAccessPolicy: profiles", () => {
+  it("every profile resolves to a non-empty set of known domains", () => {
+    for (const name of PROFILE_NAMES) {
+      const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: name }));
+      expect(p.allowedDomains, name).not.toBeNull();
+      expect(p.allowedDomains!.size, name).toBeGreaterThan(0);
+      for (const domain of p.allowedDomains!) {
+        expect(REGISTERED_DOMAINS as readonly string[], `${name}: ${domain}`).toContain(domain);
+      }
+    }
+  });
+
+  it("every profile keeps `application` (dictionary + current-user substrate)", () => {
+    for (const name of PROFILE_NAMES) {
+      expect(isDomainAllowed(resolveAccessPolicy(env({ BOOND_MCP_PROFILE: name })), "application"), name).toBe(true);
+    }
+  });
+
+  it("a profile restricts the surface (it is not a no-op allow-all)", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "recruiting" }));
+    expect(isDomainAllowed(p, "candidates")).toBe(true);
+    expect(isDomainAllowed(p, "invoices")).toBe(false);
+  });
+
+  it("is case-insensitive and accepts several profiles as a union", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "Recruiting, FINANCE" }));
+    expect(isDomainAllowed(p, "candidates")).toBe(true);
+    expect(isDomainAllowed(p, "invoices")).toBe(true);
+    expect(isDomainAllowed(p, "webhooks")).toBe(false);
+  });
+
+  it("BOOND_MCP_DOMAINS takes precedence over BOOND_MCP_PROFILE", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "finance", BOOND_MCP_DOMAINS: "candidates,application" }));
+    expect([...p.allowedDomains!].sort()).toEqual(["application", "candidates"]);
+    expect(isDomainAllowed(p, "invoices")).toBe(false);
+  });
+
+  it("BOOND_MCP_EXCLUDE_DOMAINS still wins over a profile", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "finance", BOOND_MCP_EXCLUDE_DOMAINS: "payments" }));
+    expect(isDomainAllowed(p, "invoices")).toBe(true);
+    expect(isDomainAllowed(p, "payments")).toBe(false);
+  });
+
+  it("an unknown profile is ignored, never fatal, and never an empty surface", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "nonsense" }));
+    expect(p.allowedDomains).toBeNull();
+    expect(isDomainAllowed(p, "candidates")).toBe(true);
+  });
+
+  it("keeps the valid profiles of a partly-wrong list", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "nonsense,admin" }));
+    expect(isDomainAllowed(p, "roles")).toBe(true);
+    expect(isDomainAllowed(p, "candidates")).toBe(false);
+  });
+
+  /**
+   * `PROFILES` is an object literal, so a profile name that collides with an
+   * `Object.prototype` property used to resolve to a truthy non-array, skip the
+   * warn-and-ignore branch and throw `TypeError: … is not iterable` — a server
+   * that refuses to start instead of the documented warning. The domain axis has
+   * always been `Set`-based and therefore immune; this pins the profile axis to
+   * the same resilience rule.
+   */
+  it.each(["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"])(
+    "treats the prototype property name %s as an unknown profile, not a crash",
+    (name) => {
+      let p!: ReturnType<typeof resolveAccessPolicy>;
+      expect(() => {
+        p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: name }));
+      }).not.toThrow();
+      expect(p.allowedDomains).toBeNull();
+      expect(isDomainAllowed(p, "candidates")).toBe(true);
+    }
+  );
+
+  it("keeps the valid profile of a list containing a prototype name", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "constructor,admin" }));
+    expect(isDomainAllowed(p, "roles")).toBe(true);
+    expect(isDomainAllowed(p, "candidates")).toBe(false);
+  });
+
+  it("stays orthogonal to the operation axis", () => {
+    const p = resolveAccessPolicy(env({ BOOND_MCP_PROFILE: "delivery", BOOND_MCP_READ_ONLY: "true" }));
+    expect(isDomainAllowed(p, "projects")).toBe(true);
+    expect([...p.operations]).toEqual(["read"]);
+  });
+});
+
+describe("PROFILES table", () => {
+  it("only references domains that exist", () => {
+    for (const [name, domains] of Object.entries(PROFILES)) {
+      expect(domains.length, name).toBeGreaterThan(0);
+      for (const domain of domains) {
+        expect(REGISTERED_DOMAINS as readonly string[], `${name}: ${domain}`).toContain(domain);
+      }
+    }
+  });
+
+  it("has no duplicate entry inside a profile", () => {
+    for (const [name, domains] of Object.entries(PROFILES)) {
+      expect(new Set(domains).size, name).toBe(domains.length);
+    }
   });
 });
 

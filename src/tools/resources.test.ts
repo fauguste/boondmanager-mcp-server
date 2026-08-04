@@ -444,6 +444,53 @@ describe("registerResourceTools", () => {
       // Only the GET happened; no PUT
       expect(apiSpy).toHaveBeenCalledTimes(1);
     });
+
+    /**
+     * This delete does not go through the crud-factory, so it needs its own
+     * coverage of the shared `confirmDeletion()` contract — including the
+     * titled-enum answer shape (SEP-1330) it now speaks.
+     */
+    describe("elicitation confirmation", () => {
+      function serverWithElicitation(result: { action: string; content?: Record<string, unknown> }) {
+        const elicitInput = vi.fn(async () => result);
+        const s = {
+          registerTool: vi.fn(),
+          server: { getClientCapabilities: vi.fn(() => ({ elicitation: {} })), elicitInput },
+        } as unknown as McpServer;
+        return { server: s, elicitInput };
+      }
+
+      function deleteHandler(s: McpServer) {
+        return (
+          vi
+            .mocked(s.registerTool)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .mock.calls.find((c) => c[0] === "boond_resources_reference_delete")![2] as any
+        );
+      }
+
+      it('deletes when the user picks "delete"', async () => {
+        const apiSpy = mockDtRefs([{ id: "20", title: "Delete me" }]);
+        const { server: s, elicitInput } = serverWithElicitation({
+          action: "accept",
+          content: { confirmation: "delete" },
+        });
+        registerResourceTools(s);
+        const result = await deleteHandler(s)({ resourceId: "42", referenceId: "20" });
+        expect(elicitInput).toHaveBeenCalledOnce();
+        expect(apiSpy).toHaveBeenCalledTimes(2); // GET + PUT
+        expect(result.content[0].text).toMatch(/🗑️/);
+      });
+
+      it('aborts (no PUT) when the user picks "cancel"', async () => {
+        const apiSpy = mockDtRefs([{ id: "20", title: "Delete me" }]);
+        const { server: s } = serverWithElicitation({ action: "accept", content: { confirmation: "cancel" } });
+        registerResourceTools(s);
+        const result = await deleteHandler(s)({ resourceId: "42", referenceId: "20" });
+        expect(apiSpy).not.toHaveBeenCalled();
+        expect(result.content[0].text).toMatch(/annulée/);
+      });
+    });
   });
 });
 
