@@ -1,5 +1,7 @@
 # BoondManager MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.fauguste%2Fboondmanager-mcp-server.svg)](https://mcptoplist.com/server/io.github.fauguste%2Fboondmanager-mcp-server)
+
 [![CI](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/codeql.yml)
 [![npm version](https://img.shields.io/npm/v/boondmanager-mcp-server.svg)](https://www.npmjs.com/package/boondmanager-mcp-server)
