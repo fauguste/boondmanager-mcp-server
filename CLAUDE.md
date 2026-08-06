@@ -65,6 +65,8 @@ npm run lint:fix            # ESLint with auto-fix
 npm run typecheck           # tsc --noEmit
 npm run docs:tools          # Regenerate TOOLS.md from server registrations
 npm run docs:tools:check    # Fail if TOOLS.md is stale (used in CI)
+npm run plugin:manifest       # Regenerate the Claude Code plugin files from manifest.json
+npm run plugin:manifest:check # Fail if they are stale (used in CI)
 ```
 
 Run a single test file:
@@ -110,13 +112,19 @@ docs/
 └── distribution.md       # Where the server ships (npm, MCP Registry, GHCR, LobeHub, Smithery) + manual outreach checklist
 
 # Top-level metadata
-manifest.json             # MCPB manifest (Claude Desktop one-click install)
+manifest.json             # MCPB manifest (Claude Desktop one-click install) — source of truth for user_config
 server.json               # MCP Registry manifest
 smithery.yaml             # Smithery.ai listing config
 Dockerfile + .dockerignore # Multi-arch Docker image (HTTP transport)
 CHANGELOG.md              # Per-version release notes (consumed by release.yml)
 SECURITY.md               # Disclosure policy
 TOOLS.md                  # Auto-generated tool catalogue
+
+.claude-plugin/marketplace.json           # Claude Code plugin marketplace (hand-written, 1 entry)
+plugins/boondmanager-mcp/                 # The plugin itself — GENERATED, do not hand-edit
+  .claude-plugin/plugin.json              #   metadata + userConfig (ported from manifest.json)
+  .mcp.json                               #   stdio server: npx boondmanager-mcp-server@X.Y.Z
+scripts/generate-plugin-manifest.mjs      # Generates both (npm run plugin:manifest[:check])
 ```
 
 ### Key Patterns
@@ -772,9 +780,77 @@ Behavior notes:
 - Opt-out: set `BOOND_DISABLE_UPDATE_CHECK=1` (or `true` / `yes`) to skip the check entirely. Useful for air-gapped or CI environments. Not exposed in `manifest.json::user_config` — MCPB users are precisely the audience the notification targets.
 - Implementation deliberately uses only `package.json` (kept in the bundle — not listed in `.mcpbignore`) plus the npm registry; no GitHub API call, no rate-limit concerns.
 
+## Claude Code Plugin Channel
+
+The server ships as a Claude Code plugin so installation there is a form, not a
+`claude mcp add` with three secrets pasted by hand:
+`/plugin marketplace add fauguste/boondmanager-mcp-server` →
+`/plugin install boondmanager-mcp@boondmanager`. User-facing walkthrough in
+`README.md`, channel contract in `docs/distribution.md`.
+
+- **`manifest.json` stays the single source of truth.** Both plugin files are
+  **generated** by `scripts/generate-plugin-manifest.mjs`
+  (`npm run plugin:manifest`, CI-checked with `--check`). Two hand-written copies
+  of the same 14 options would diverge on the first option added — the failure
+  mode `TOOLS.md` has a drift check for. Every MCPB→plugin format difference
+  lives in the generator: `user_config` → `userConfig` (the field is camelCase,
+  the `${user_config.KEY}` *substitution* syntax is not), `display_name` →
+  `displayName`, `repository` object → plain URL string, and MCPB-only keys
+  (`manifest_version`, `server`, `icons`, `compatibility`, `support`,
+  `tools_generated`) dropped. The generator also refuses to emit an option field
+  it has no mapping for, rather than passing it through.
+- **Launch mode is a pinned `npx`**, not a bundled build: the plugin copied into
+  the user's cache is two small JSON files, and `boondmanager-mcp-server@X.Y.Z`
+  is explicit and auditable. The pin only resolves *after* the release's npm
+  publish, so it is bumped in the release commit and never ahead of it. It is the
+  version copy that fossilises silently — a stale pin keeps installing an old
+  release forever with nothing in the UI saying so — hence its own line in the CI
+  version check.
+- **stdio only.** The HTTP transport's OAuth model is for gateways and remote
+  deployments; the plugin form has no way to obtain a Bearer token.
+- **`sensitive: true` on the 5 credential options only.** Sensitive values go to
+  the macOS Keychain, whose ~2 KB budget is *shared with Claude Code's OAuth
+  tokens*; the access restrictions are not secrets and stay in `pluginConfigs`.
+  Pinned in `src/config/packaged-installs.test.ts`.
+- **Delete confirmation works here**: Claude Code declares the `elicitation`
+  capability (it even exposes `Elicitation` / `ElicitationResult` hook events), so
+  `confirmDeletion()` takes its normal path rather than the direct-delete
+  fallback.
+- Claude Code re-checks the reserved-marketplace-name list on **every** load, not
+  only at `add` time, so a name drifting into that set breaks every existing
+  install. `boondmanager` is deliberately not Anthropic-adjacent.
+- Local schema validation: `claude plugin validate ./plugins/boondmanager-mcp`
+  and `claude plugin validate .` (the latter validates the marketplace file).
+  Not in CI — that would pull the whole `@anthropic-ai/claude-code` package into
+  every run; the generator's own assertions plus
+  `src/config/packaged-installs.test.ts` cover the same ground.
+
+### Empty env values are "unconfigured" (both packaged channels)
+
+The MCPB manifest and the plugin `.mcp.json` both substitute
+`${user_config.KEY}` into **all fourteen** `BOOND_*` vars, so every var is
+*defined* even for options the user never touched — a half-filled form hands the
+server empty strings, not absent keys. Three shapes must therefore all read as
+"not set": `""`, whitespace only, and an unsubstituted `"${…}"`.
+
+This is the mirror of the `MCP_HTTP_ALLOWED_HOSTS` rule (a blank value must never
+silently switch a control *off*): here a blank value must never switch a
+restriction *on*, which would hide most of the catalogue with no visible cause.
+`readEnv` in `config/access-policy.ts` and `config/dictionary-overrides.ts` and
+`envOrUndefined` in `services/boond-client.ts` all implement it — the last one
+also rejects whitespace-only, without which `BOOND_BASE_URL=" "` became the
+request base URL and failed as an opaque fetch error.
+
+Both booleans (`mcp_read_only`, `confirm_delete`) arrive as *strings* and carry
+an explicit `default`. `"false"` must not read as "set, therefore on"; and every
+ambiguous value resolves in the safe direction — all operations allowed for
+read-only, confirmation *kept* for deletes. Pinned in
+`access-policy.test.ts`, `env-flags.test.ts`, `dictionary-overrides.test.ts` and
+`boond-client.test.ts`.
+
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 22 + 24 + 26 (Node 20 dropped — EOL 2026-04-30). Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **version consistency** between `package.json` / `manifest.json` / `server.json`, coverage upload.
+- **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 22 + 24 + 26 (Node 20 dropped — EOL 2026-04-30). Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **Claude Code plugin drift check** (Node 22 only), **version consistency** across `package.json` / `manifest.json` / `server.json` / `gemini-extension.json` / `plugin.json` / `marketplace.json` / the plugin's `@X.Y.Z` npm pin, coverage upload.
 - **Release** (`.github/workflows/release.yml`): Triggered on `v*` tags. Publishes to:
   - **npm** with `--provenance --access public`
   - **GitHub Releases** with `.mcpb` bundle attached; release body extracted from the matching `## [X.Y.Z]` section of `CHANGELOG.md`
@@ -810,7 +886,7 @@ Behavior notes:
 ## Releasing
 
 1. Update `CHANGELOG.md` — add a new `## [X.Y.Z] - YYYY-MM-DD` section at the top with the human-written notes (in French if matching the rest of the changelog). The release body is auto-extracted from this section by `release.yml`.
-2. Bump versions consistently: `package.json` + `manifest.json` + `server.json` + `gemini-extension.json` (CI fails if any drift). Also bump the example URL inside `server.json.packages[1].identifier`.
+2. Bump versions consistently: `package.json` + `manifest.json` + `server.json` + `gemini-extension.json`, then `npm run plugin:manifest` to propagate into `plugins/boondmanager-mcp/.claude-plugin/plugin.json`, `plugins/boondmanager-mcp/.mcp.json` (the `@X.Y.Z` npm pin) and hand-bump `.claude-plugin/marketplace.json`. CI fails on any drift, the npm pin included. Also bump the example URL inside `server.json.packages[1].identifier`.
 3. Sync `package-lock.json`: `npm install --package-lock-only`.
 4. Commit + tag + push: `git tag vX.Y.Z && git push origin main vX.Y.Z`. The `Release` workflow takes over.
-5. Post-tag, run the 6-point verification checklist in `docs/distribution.md` (npm version, MCP Registry, GitHub Release body, GHCR multi-arch pull, LobeHub mirror, Smithery refresh).
+5. Post-tag, run the 7-point verification checklist in `docs/distribution.md` (npm version, MCP Registry, GitHub Release body, GHCR multi-arch pull, LobeHub mirror, Smithery refresh, Claude Code marketplace).

@@ -55,6 +55,19 @@ describe("loadDictionaryOverrides", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  // The packaged install channels (MCPB extension, Claude Code plugin) always
+  // *define* this var — they substitute `${user_config.dictionary_overrides}`
+  // whether or not the user filled the field. An empty value is "no overrides",
+  // and must not be mistaken for a path: it would land in the file branch and
+  // warn about an unreadable file on every single startup.
+  it.each([
+    ["empty string", ""],
+    ["whitespace only", "   "],
+  ])("returns null without warning when the value is %s", (_label, raw) => {
+    expect(loadDictionaryOverrides(env(raw))).toBeNull();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("parses valid inline JSON", () => {
     const overrides = loadDictionaryOverrides(env(VALID));
     expect(overrides).not.toBeNull();

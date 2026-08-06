@@ -17,6 +17,11 @@ Thumbs.db
 /.claude/
 /CLAUDE.md
 
+# Claude Code plugin channel — a different packaging of the same server
+# (see docs/distribution.md). Nothing here is read inside a .mcpb bundle.
+/.claude-plugin/
+/plugins/
+
 # Trim weight from the bundled node_modules — none of these run at runtime.
 *.map
 *.md

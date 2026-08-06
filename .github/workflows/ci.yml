@@ -51,6 +51,13 @@ jobs:
         if: matrix.node-version == 22
         run: node scripts/generate-tools-catalog.mjs --check
 
+      - name: Check Claude Code plugin manifests are up to date
+        # plugin.json + .mcp.json are generated from manifest.json (single
+        # source of truth for the 14 user_config options). This step fails if
+        # they drift, same contract as the TOOLS.md check above.
+        if: matrix.node-version == 22
+        run: node scripts/generate-plugin-manifest.mjs --check
+
       - name: Verify version consistency
         if: matrix.node-version == 22
         run: |
@@ -58,12 +65,36 @@ jobs:
           MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
           SERVER_VERSION=$(node -p "require('./server.json').version")
           GEMINI_VERSION=$(node -p "require('./gemini-extension.json').version")
-          echo "package.json:         $PKG_VERSION"
-          echo "manifest.json:        $MANIFEST_VERSION"
-          echo "server.json:          $SERVER_VERSION"
+          PLUGIN_VERSION=$(node -p "require('./plugins/boondmanager-mcp/.claude-plugin/plugin.json').version")
+          MARKETPLACE_VERSION=$(node -p "require('./.claude-plugin/marketplace.json').plugins.find(p => p.name === 'boondmanager-mcp').version")
+          # The npm pin the plugin launches. This is the copy that fossilises
+          # silently: a stale pin keeps installing an old release forever, with
+          # nothing in the plugin UI hinting that it is not the announced version.
+          PLUGIN_NPM_PIN=$(node -p "require('./plugins/boondmanager-mcp/.mcp.json').mcpServers.boondmanager.args.at(-1).split('@').at(-1)")
+          echo "package.json:          $PKG_VERSION"
+          echo "manifest.json:         $MANIFEST_VERSION"
+          echo "server.json:           $SERVER_VERSION"
           echo "gemini-extension.json: $GEMINI_VERSION"
-          if [ "$PKG_VERSION" != "$MANIFEST_VERSION" ] || [ "$PKG_VERSION" != "$SERVER_VERSION" ] || [ "$PKG_VERSION" != "$GEMINI_VERSION" ]; then
-            echo "ERROR: Version mismatch between package.json, manifest.json, server.json and gemini-extension.json"
+          echo "plugin.json:           $PLUGIN_VERSION"
+          echo "marketplace.json:      $MARKETPLACE_VERSION"
+          echo "plugin npm pin:        $PLUGIN_NPM_PIN"
+          FAILED=0
+          for pair in \
+            "manifest.json:$MANIFEST_VERSION" \
+            "server.json:$SERVER_VERSION" \
+            "gemini-extension.json:$GEMINI_VERSION" \
+            "plugin.json:$PLUGIN_VERSION" \
+            "marketplace.json:$MARKETPLACE_VERSION" \
+            "plugin npm pin:$PLUGIN_NPM_PIN"; do
+            name="${pair%:*}"
+            value="${pair##*:}"
+            if [ "$value" != "$PKG_VERSION" ]; then
+              echo "ERROR: $name is $value, expected $PKG_VERSION (package.json)"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -ne 0 ]; then
+            echo "Bump every version copy together — see CLAUDE.md §Releasing step 2."
             exit 1
           fi
 

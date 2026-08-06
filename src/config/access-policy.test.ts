@@ -38,6 +38,70 @@ describe("resolveAccessPolicy: defaults", () => {
   });
 });
 
+/**
+ * Both packaged install channels — the MCPB extension (`manifest.json`) and the
+ * Claude Code plugin (`plugins/boondmanager-mcp/.mcp.json`) — build the server's
+ * env by substituting `${user_config.KEY}` into all fourteen `BOOND_*` vars. So
+ * every var is **defined** even for the options the user never touched: a
+ * half-filled configuration form hands us empty strings, not absent keys.
+ *
+ * The invariant, in the restricting direction: a *defined but empty* restriction
+ * variable counts as unconfigured and yields the full surface. It is the mirror
+ * of the `MCP_HTTP_ALLOWED_HOSTS` rule (a blank value must never silently switch
+ * a security control *off*) — here a blank value must never silently switch a
+ * restriction *on*, which would hide most of the catalogue with no way for the
+ * user to tell why.
+ */
+describe("resolveAccessPolicy: defined-but-empty values (packaged-install substitution)", () => {
+  const RESTRICTION_VARS = [
+    "BOOND_MCP_PROFILE",
+    "BOOND_MCP_DOMAINS",
+    "BOOND_MCP_EXCLUDE_DOMAINS",
+    "BOOND_MCP_OPERATIONS",
+    "BOOND_MCP_READ_ONLY",
+  ] as const;
+
+  function expectUnrestricted(p: AccessPolicy) {
+    expect(p.allowedDomains).toBeNull();
+    expect(p.excludedDomains.size).toBe(0);
+    expect([...p.operations].sort()).toEqual([...ALL_OPERATIONS].sort());
+  }
+
+  it("treats every restriction var set to the empty string as unconfigured", () => {
+    expectUnrestricted(resolveAccessPolicy(env(Object.fromEntries(RESTRICTION_VARS.map((k) => [k, ""])))));
+  });
+
+  it("treats whitespace-only values as unconfigured too", () => {
+    expectUnrestricted(resolveAccessPolicy(env(Object.fromEntries(RESTRICTION_VARS.map((k) => [k, "   "])))));
+  });
+
+  it.each(RESTRICTION_VARS)("%s alone, set to empty, restricts nothing", (key) => {
+    expectUnrestricted(resolveAccessPolicy(env({ [key]: "" })));
+  });
+
+  // A host that does not substitute leaves the literal reference behind. Same
+  // outcome required: full surface, no crash.
+  it("treats an unsubstituted ${user_config.*} reference as unconfigured", () => {
+    const raw = Object.fromEntries(
+      RESTRICTION_VARS.map((k) => [k, `\${user_config.${k.replace("BOOND_", "").toLowerCase()}}`])
+    );
+    expectUnrestricted(resolveAccessPolicy(env(raw)));
+  });
+
+  // `mcp_read_only` is declared `type: "boolean"` in both manifests, so what
+  // reaches us is the *string* "true" / "false". "false" must not read as
+  // "set, therefore on" — that is the whole trap of stringified booleans.
+  it('BOOND_MCP_READ_ONLY="false" allows all operations', () => {
+    expect([...resolveAccessPolicy(env({ BOOND_MCP_READ_ONLY: "false" })).operations].sort()).toEqual(
+      [...ALL_OPERATIONS].sort()
+    );
+  });
+
+  it('BOOND_MCP_READ_ONLY="true" restricts to read', () => {
+    expect([...resolveAccessPolicy(env({ BOOND_MCP_READ_ONLY: "true" })).operations]).toEqual(["read"]);
+  });
+});
+
 describe("resolveAccessPolicy: domains", () => {
   it("parses an allow-list (comma-separated)", () => {
     const p = resolveAccessPolicy(env({ BOOND_MCP_DOMAINS: "invoices,payments,application" }));
