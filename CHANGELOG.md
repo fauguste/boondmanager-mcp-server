@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [2.11.0] - 2026-08-04
+## [2.11.0] - 2026-08-06
 
 Qualité d'usage : les rejets de schéma deviennent une boucle d'auto-correction pour le modèle, la réduction de périmètre devient praticable sans connaître les 38 domaines, les icônes protocolaires arrivent et l'ordre de `tools/list` est verrouillé ([#168](https://github.com/fauguste/boondmanager-mcp-server/issues/168)). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.
 
