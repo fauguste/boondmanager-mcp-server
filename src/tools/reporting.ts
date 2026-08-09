@@ -9,6 +9,7 @@ import {
   ReportingProductionPlansSchema,
 } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 
 interface ReportingEndpoint {
   name: string;
@@ -100,9 +101,16 @@ Returns: Données de reporting.`,
           openWorldHint: true,
         },
       },
-      async (params: unknown) => {
+      async (params: unknown, extra: unknown) => {
         const query = buildSearchQuery(params as SearchParams);
+        // One underlying request, but an aggregation over a wide perimeter can
+        // take tens of seconds. Unlike a plain search (which apiSearch leaves
+        // silent on its single-call fast path), the "started" step is what
+        // separates "slow" from "hung" here — the only signal the client gets.
+        const progress = progressReporterFrom(extra);
+        progress(0, 1, `${ep.title} — calcul en cours…`);
         const response = await apiRequest(ep.path, "GET", undefined, query);
+        progress(1, 1, `${ep.title} — terminé`);
         return {
           content: [{ type: "text" as const, text: formatListResponse(response, ep.entity) }],
         };

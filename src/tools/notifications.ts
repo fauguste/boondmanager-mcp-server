@@ -7,6 +7,7 @@ import {
   formatListResponse,
   formatDetailResponse,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 
 export function registerNotificationTools(server: McpServer): void {
   server.registerTool(
@@ -31,9 +32,9 @@ Returns: Liste des notifications correspondantes.`,
         openWorldHint: true,
       },
     },
-    async (params) => {
+    async (params, extra: unknown) => {
       const query = buildSearchQuery(params);
-      const response = await apiSearch("/notifications", query);
+      const response = await apiSearch("/notifications", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "notification", params.fields) }],
       };

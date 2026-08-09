@@ -86,7 +86,7 @@ describe("registerActionTools", () => {
 
       await handler({ pageSize: 500 });
 
-      expect(apiSearch).toHaveBeenCalledWith("/actions", { maxResults: 500, page: 1 });
+      expect(apiSearch).toHaveBeenCalledWith("/actions", { maxResults: 500, page: 1 }, expect.any(Function));
       expect(apiRequest).not.toHaveBeenCalledWith("/actions", "GET", undefined, expect.anything());
     });
   });
