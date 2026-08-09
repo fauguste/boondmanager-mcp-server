@@ -31,6 +31,7 @@ if (!existsSync(DIST_DIR)) {
 // Import everything we need from the compiled output.
 const { registerAllPrompts } = await import("../dist/prompts/index.js");
 const { registerAllResources } = await import("../dist/resources/index.js");
+const { registerUiResources } = await import("../dist/ui/index.js");
 // TOOL_REGISTRARS is the single source of truth for "which registrars run, in
 // what order" — shared with the real createMcpServer(). We call each registrar
 // WITHOUT an access policy so the catalogue always reflects the full surface,
@@ -72,6 +73,8 @@ for (const [domain, register] of TOOL_REGISTRARS) {
 }
 registerAllPrompts(stub);
 registerAllResources(stub);
+// `ui://` resources — no policy, same reason as above (full surface).
+registerUiResources(stub);
 
 // ---- Helpers -----------------------------------------------------------
 
@@ -125,6 +128,13 @@ function md(s) {
 
 // ---- Build the catalog -------------------------------------------------
 
+// `ui://` resources are MCP Apps views, not reference data: they carry HTML for
+// the client to render, they are the only resources the access policy filters,
+// and reading one returns a page rather than a lookup table. Listing them in
+// the same table as the dictionaries would misrepresent all three facts.
+const uiResources = captured.resources.filter((r) => r.uri.startsWith("ui://"));
+const dataResources = captured.resources.filter((r) => !r.uri.startsWith("ui://"));
+
 const byDomain = new Map();
 for (const t of captured.tools) {
   const d = domainOf(t.name);
@@ -143,7 +153,7 @@ lines.push("");
 lines.push("> Auto-generated from the server registrations. Do not edit by hand.");
 lines.push("> Regenerate with `npm run docs:tools` (CI fails if this file is stale).");
 lines.push("");
-lines.push(`**${captured.tools.length} tools** across **${domains.length} domains** · **${captured.prompts.length} prompts** · **${captured.resources.length} resources**.`);
+lines.push(`**${captured.tools.length} tools** across **${domains.length} domains** · **${captured.prompts.length} prompts** · **${dataResources.length} resources**${uiResources.length > 0 ? ` · **${uiResources.length} MCP Apps UI resource${uiResources.length > 1 ? "s" : ""}**` : ""}.`);
 lines.push("");
 lines.push("Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).");
 lines.push("");
@@ -173,16 +183,34 @@ for (const p of [...captured.prompts].sort((a, b) => a.name.localeCompare(b.name
 }
 lines.push("");
 
-lines.push(`## Resources (${captured.resources.length})`);
+lines.push(`## Resources (${dataResources.length})`);
 lines.push("");
 lines.push("Reference data exposed as MCP resources.");
 lines.push("");
 lines.push("| URI | Title |");
 lines.push("|---|---|");
-for (const r of [...captured.resources].sort((a, b) => a.uri.localeCompare(b.uri))) {
+for (const r of [...dataResources].sort((a, b) => a.uri.localeCompare(b.uri))) {
   lines.push(`| \`${r.uri}\` | ${md(r.title)} |`);
 }
 lines.push("");
+
+if (uiResources.length > 0) {
+  lines.push(`## MCP Apps UI resources (${uiResources.length})`);
+  lines.push("");
+  lines.push(
+    "Interactive views served as `text/html;profile=mcp-app` under the `io.modelcontextprotocol/ui` extension. " +
+      "Rendered in a sandboxed iframe by clients that implement MCP Apps; ignored by the others, which still get " +
+      "the tool's text and `structuredContent`. See `docs/mcp-apps.md`."
+  );
+  lines.push("");
+  lines.push("| URI | Title | Rendered by |");
+  lines.push("|---|---|---|");
+  for (const r of [...uiResources].sort((a, b) => a.uri.localeCompare(b.uri))) {
+    const tool = captured.tools.find((t) => t._meta?.ui?.resourceUri === r.uri);
+    lines.push(`| \`${r.uri}\` | ${md(r.title)} | ${tool ? `\`${tool.name}\`` : "—"} |`);
+  }
+  lines.push("");
+}
 
 const generated = lines.join("\n");
 
@@ -200,5 +228,7 @@ if (checkMode) {
   console.log(`${OUTPUT_PATH} is up to date.`);
 } else {
   writeFileSync(OUTPUT_PATH, generated);
-  console.log(`Wrote ${OUTPUT_PATH} — ${captured.tools.length} tools, ${captured.prompts.length} prompts, ${captured.resources.length} resources.`);
+  console.log(
+    `Wrote ${OUTPUT_PATH} — ${captured.tools.length} tools, ${captured.prompts.length} prompts, ${dataResources.length} resources, ${uiResources.length} UI resource(s).`
+  );
 }

@@ -41,6 +41,7 @@ import {
 } from "./index.js";
 import { registerAllPrompts } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
+import { registerUiResources } from "../ui/index.js";
 import { SERVER_INSTRUCTIONS } from "../instructions.js";
 import { connectMcpClient, useDefaultServerSurface } from "./test-helpers.js";
 
@@ -183,6 +184,10 @@ describe("tool/prompt/resource description lengths", () => {
 
     registerAllPrompts(mockServer);
     registerAllResources(mockServer);
+    // MCP Apps views: their *description* rides in `resources/list` like any
+    // other, so it is held to the same budget. The HTML body does not — it only
+    // travels on an explicit `resources/read`.
+    registerUiResources(mockServer);
   });
 
   it("no tool description exceeds the length limit", () => {

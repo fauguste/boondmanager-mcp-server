@@ -22,6 +22,14 @@ Thumbs.db
 /.claude-plugin/
 /plugins/
 
+# @modelcontextprotocol/ext-apps ships both halves of MCP Apps. Only the
+# server half runs here (`dist/src/server/index.js`, self-contained apart from
+# the SDK and zod); the browser/React builds are for pages, which this server
+# serves as static HTML. ~700 KB of dead weight in the bundle otherwise.
+/node_modules/@modelcontextprotocol/ext-apps/dist/src/react/
+/node_modules/@modelcontextprotocol/ext-apps/dist/src/app-with-deps.js
+/node_modules/@modelcontextprotocol/ext-apps/dist/docs/
+
 # Trim weight from the bundled node_modules — none of these run at runtime.
 *.map
 *.md

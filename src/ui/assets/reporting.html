@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tableau de bord reporting</title>
+    <style>
+      /* Self-contained by necessity: the host renders this file in a sandboxed
+         iframe whose baseline CSP is `default-src 'none'` with style/script
+         limited to 'self' 'unsafe-inline'. No imported stylesheet, no web font,
+         no image — src/ui/index.test.ts enforces it. */
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --bg-alt: #f6f7f9;
+        --fg: #1b1f24;
+        --fg-dim: #5b6570;
+        --border: #d8dde3;
+        --accent: #3b6ea8;
+        --accent-soft: #cfe0f2;
+        --danger: #b4413c;
+        --radius: 6px;
+      }
+      /* Two dark triggers, and they are not redundant. `prefers-color-scheme`
+         covers a host that just drops the iframe into the OS theme; the
+         `data-theme` attribute is what the MCP Apps host context carries
+         (`hostContext.theme`), and a client can be dark while the OS is light or
+         the reverse. `:not([data-theme="light"])` lets an explicit "light" from
+         the host win over a dark OS — otherwise the app would ignore the very
+         signal the protocol provides. */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #14171a;
+          --bg-alt: #1c2126;
+          --fg: #e6e9ec;
+          --fg-dim: #98a2ad;
+          --border: #333b44;
+          --accent: #78aade;
+          --accent-soft: #24405e;
+          --danger: #e08b86;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #14171a;
+        --bg-alt: #1c2126;
+        --fg: #e6e9ec;
+        --fg-dim: #98a2ad;
+        --border: #333b44;
+        --accent: #78aade;
+        --accent-soft: #24405e;
+        --danger: #e08b86;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 12px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 2px;
+      }
+      .sub {
+        color: var(--fg-dim);
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      button {
+        font: inherit;
+        color: var(--fg);
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 4px 9px;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+      }
+      button[aria-pressed="true"] {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button:focus-visible,
+      th[tabindex]:focus-visible,
+      tr[tabindex]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .wrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-variant-numeric: tabular-nums;
+      }
+      caption {
+        text-align: left;
+        padding: 6px 8px;
+        color: var(--fg-dim);
+        font-size: 12px;
+      }
+      th,
+      td {
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        white-space: nowrap;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: var(--bg-alt);
+        cursor: pointer;
+        user-select: none;
+        font-weight: 600;
+      }
+      td.num,
+      th.num {
+        text-align: right;
+      }
+      tbody tr:hover {
+        background: var(--bg-alt);
+      }
+      tbody tr[aria-selected="true"] {
+        background: var(--accent-soft);
+      }
+      .neg {
+        color: var(--danger);
+      }
+      .chart {
+        margin-top: 10px;
+      }
+      .chart svg {
+        display: block;
+        /* The viewBox is 720 units wide; letting it stretch to a wide container
+           scales the labels with it and the graph ends up dwarfing the table. */
+        width: 100%;
+        max-width: 760px;
+        height: auto;
+      }
+      .msg {
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--fg-dim);
+      }
+      .msg.err {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+      .detail {
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 8px;
+        background: var(--bg-alt);
+      }
+      .detail dl {
+        margin: 6px 0 0;
+        display: grid;
+        grid-template-columns: minmax(120px, max-content) 1fr;
+        gap: 2px 12px;
+      }
+      .detail dt {
+        color: var(--fg-dim);
+      }
+      .detail dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Tableau de bord reporting</h1>
+    <div class="sub" id="subtitle">Initialisation…</div>
+
+    <div class="bar" id="reports" role="group" aria-label="Choix du reporting"></div>
+    <div class="bar" id="actions"></div>
+
+    <div id="content"><div class="msg">Chargement des données…</div></div>
+    <div id="detail"></div>
+    <div aria-live="polite" class="sr" id="live"></div>
+
+    <script>
+      (() => {
+        "use strict";
+
+        // ---- MCP Apps bridge -------------------------------------------
+        // Hand-written rather than bundled: the app must ship as one
+        // self-contained file (no CDN, no build-time bundler in this repo), and
+        // the wire format is plain JSON-RPC 2.0 over postMessage to the parent
+        // window — the same framing `@modelcontextprotocol/ext-apps`'
+        // PostMessageTransport implements. Method names and the protocol
+        // version below are the extension's constants; the server side does use
+        // the package (see src/ui/index.ts).
+        const PROTOCOL_VERSION = "2026-01-26";
+        const pending = new Map();
+        let nextId = 1;
+        const notificationHandlers = new Map();
+        const requestHandlers = new Map();
+
+        function post(message) {
+          window.parent.postMessage(message, "*");
+        }
+
+        function request(method, params) {
+          const id = nextId++;
+          post({ jsonrpc: "2.0", id, method, params });
+          return new Promise((resolve, reject) => {
+            pending.set(id, { resolve, reject });
+          });
+        }
+
+        function notify(method, params) {
+          post({ jsonrpc: "2.0", method, params });
+        }
+
+        function onMessage(event) {
+          if (event.source !== window.parent) return;
+          const msg = event.data;
+          if (!msg || msg.jsonrpc !== "2.0") return;
+
+          if (msg.id !== undefined && msg.method === undefined) {
+            const entry = pending.get(msg.id);
+            if (!entry) return;
+            pending.delete(msg.id);
+            if (msg.error) entry.reject(new Error(msg.error.message || "Erreur hôte"));
+            else entry.resolve(msg.result);
+            return;
+          }
+          if (msg.method === undefined) return;
+
+          if (msg.id !== undefined) {
+            const handler = requestHandlers.get(msg.method);
+            const result = handler ? handler(msg.params) : {};
+            post({ jsonrpc: "2.0", id: msg.id, result: result || {} });
+            return;
+          }
+          const handler = notificationHandlers.get(msg.method);
+          if (handler) handler(msg.params || {});
+        }
+
+        window.addEventListener("message", onMessage);
+
+        function teardown() {
+          window.removeEventListener("message", onMessage);
+          if (resizeObserver) resizeObserver.disconnect();
+          pending.clear();
+          notificationHandlers.clear();
+          requestHandlers.clear();
+        }
+        requestHandlers.set("ping", () => ({}));
+        requestHandlers.set("ui/resource-teardown", () => {
+          teardown();
+          return {};
+        });
+
+        // Size reporting: the host sizes the iframe from what we announce.
+        let resizeObserver = null;
+        let lastH = 0;
+        let lastW = 0;
+        function reportSize() {
+          const h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+          const w = Math.ceil(window.innerWidth);
+          if (h === lastH && w === lastW) return;
+          lastH = h;
+          lastW = w;
+          notify("ui/notifications/size-changed", { width: w, height: h });
+        }
+
+        // ---- State ------------------------------------------------------
+        const REPORTS = [
+          ["synthesis", "Synthèse"],
+          ["projects", "Projets"],
+          ["resources", "Ressources"],
+          ["companies", "Sociétés"],
+          ["production_plans", "Plans de prod."],
+        ];
+        const DETAIL_TOOL = {
+          project: "boond_projects_get",
+          company: "boond_companies_get",
+          resource: "boond_resources_get",
+        };
+        // JSON:API type → path segment of the BoondManager web app. The record
+        // page is `{base}/{segment}/{id}/information`; `webAppBaseUrl` comes
+        // from the server so a dedicated instance gets working links.
+        const WEB_APP_SEGMENT = {
+          project: "projects",
+          company: "companies",
+          resource: "resources",
+          candidate: "candidates",
+          contact: "contacts",
+          opportunity: "opportunities",
+        };
+
+        function webAppUrl(entity) {
+          if (!payload || !payload.webAppBaseUrl || !entity) return null;
+          const segment = WEB_APP_SEGMENT[entity.type];
+          if (!segment) return null;
+          return payload.webAppBaseUrl + "/" + segment + "/" + encodeURIComponent(entity.id) + "/information";
+        }
+
+        let payload = null;
+        let toolArgs = {};
+        let sort = { key: null, dir: 1 };
+        let chartCol = null;
+        let selectedRow = null;
+        let busy = false;
+        let hostCaps = {};
+        let displayMode = "inline";
+        let availableModes = [];
+
+        const el = {
+          title: document.getElementById("title"),
+          subtitle: document.getElementById("subtitle"),
+          reports: document.getElementById("reports"),
+          actions: document.getElementById("actions"),
+          content: document.getElementById("content"),
+          detail: document.getElementById("detail"),
+          live: document.getElementById("live"),
+        };
+
+        function announce(text) {
+          el.live.textContent = text;
+        }
+
+        // ---- Formatting -------------------------------------------------
+        const NUMERIC = new Set(["money", "percentage", "number", "day", "dayOrWorkUnit", "workUnit", "hour"]);
+        const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+
+        function isNumericKind(kind) {
+          return kind === undefined ? false : NUMERIC.has(kind);
+        }
+
+        function formatCell(value, kind) {
+          if (value === null || value === undefined || value === "") return "—";
+          if (typeof value === "boolean") return value ? "oui" : "non";
+          if (typeof value !== "number") return String(value);
+          if (kind === "percentage") return nf.format(value) + " %";
+          if (kind === "money") return nf.format(value) + " €";
+          if (kind === "day" || kind === "dayOrWorkUnit" || kind === "workUnit") return nf.format(value) + " j";
+          return nf.format(value);
+        }
+
+        function kindOf(column, row) {
+          return column.kind || (row && row.kind) || undefined;
+        }
+
+        function numericValue(row, column) {
+          const v = row.values[column.key];
+          return typeof v === "number" ? v : null;
+        }
+
+        // ---- Rendering --------------------------------------------------
+        function clear(node) {
+          while (node.firstChild) node.removeChild(node.firstChild);
+        }
+
+        function elt(tag, props, text) {
+          const node = document.createElement(tag);
+          if (props) for (const [k, v] of Object.entries(props)) node.setAttribute(k, v);
+          // textContent only, never innerHTML: every string below is BoondManager
+          // end-user data (company names, project references, CRM notes).
+          if (text !== undefined) node.textContent = text;
+          return node;
+        }
+
+        function renderReports() {
+          clear(el.reports);
+          for (const [key, label] of REPORTS) {
+            const active = payload ? payload.report === key : toolArgs.report === key;
+            const b = elt("button", { type: "button", "aria-pressed": String(active) }, label);
+            b.disabled = busy;
+            b.addEventListener("click", () => loadReport(key));
+            el.reports.appendChild(b);
+          }
+        }
+
+        // Ranked so the graph offers business metrics first. Without this the
+        // candidates are whatever happens to be numeric — on /reporting-projects
+        // that means `typeOf` and `state`, which are dictionary ids: plotting
+        // them is meaningless, and they crowd out the turnover columns.
+        const CHART_KIND_RANK = { money: 0, percentage: 1, day: 2, dayOrWorkUnit: 2, workUnit: 2, hour: 3, number: 4 };
+
+        function chartCandidates() {
+          const numeric = payload.columns.filter((c) => payload.rows.some((r) => typeof r.values[c.key] === "number"));
+          const ranked = numeric.filter((c) => c.kind !== undefined && c.kind in CHART_KIND_RANK);
+          const pool = ranked.length > 0 ? ranked : numeric;
+          return pool
+            .slice()
+            .sort((a, b) => (CHART_KIND_RANK[a.kind] ?? 9) - (CHART_KIND_RANK[b.kind] ?? 9));
+        }
+
+        function renderActions() {
+          clear(el.actions);
+          if (!payload) return;
+
+          const numeric = chartCandidates();
+          if (numeric.length > 0) {
+            el.actions.appendChild(elt("span", { class: "sub" }, "Graphe :"));
+            for (const c of numeric.slice(0, 5)) {
+              const label = c.label.length > 30 ? c.label.slice(0, 29) + "…" : c.label;
+              const b = elt("button", { type: "button", "aria-pressed": String(chartCol === c.key), title: c.key }, label);
+              b.addEventListener("click", () => {
+                chartCol = chartCol === c.key ? null : c.key;
+                render();
+              });
+              el.actions.appendChild(b);
+            }
+          }
+
+          el.actions.appendChild(elt("span", { class: "spacer" }));
+
+          const refresh = elt("button", { type: "button" }, "Rafraîchir");
+          refresh.disabled = busy;
+          refresh.addEventListener("click", () => loadReport(payload.report));
+          el.actions.appendChild(refresh);
+
+          if (availableModes.indexOf("fullscreen") !== -1) {
+            const target = displayMode === "fullscreen" ? "inline" : "fullscreen";
+            const b = elt("button", { type: "button" }, target === "fullscreen" ? "Plein écran" : "Réduire");
+            b.addEventListener("click", async () => {
+              try {
+                const res = await request("ui/request-display-mode", { mode: target });
+                displayMode = (res && res.mode) || displayMode;
+                render();
+              } catch (e) {
+                /* host refused — keep the current mode */
+              }
+            });
+            el.actions.appendChild(b);
+          }
+        }
+
+        function sortedRows() {
+          if (!sort.key) return payload.rows;
+          const rows = payload.rows.slice();
+          rows.sort((a, b) => {
+            const av = sort.key === "__label" ? a.label : a.values[sort.key];
+            const bv = sort.key === "__label" ? b.label : b.values[sort.key];
+            if (av === bv) return 0;
+            if (av === null || av === undefined || av === "") return 1;
+            if (bv === null || bv === undefined || bv === "") return -1;
+            if (typeof av === "number" && typeof bv === "number") return (av - bv) * sort.dir;
+            return String(av).localeCompare(String(bv), "fr") * sort.dir;
+          });
+          return rows;
+        }
+
+        function renderTable() {
+          const table = elt("table");
+          const caption = elt(
+            "caption",
+            {},
+            payload.count +
+              " ligne(s)" +
+              (typeof payload.total === "number" ? " sur " + payload.total + " au total" : "") +
+              ", " +
+              payload.columns.length +
+              " colonne(s)" +
+              (payload.truncated ? " — résultat tronqué" : "")
+          );
+          table.appendChild(caption);
+
+          const thead = elt("thead");
+          const hr = elt("tr");
+          const headers = [{ key: "__label", label: payload.layout === "indicators" ? "Indicateur" : "Ligne" }].concat(
+            payload.columns
+          );
+          for (const c of headers) {
+            const numericCol =
+              c.key !== "__label" && payload.rows.some((r) => typeof r.values[c.key] === "number");
+            const th = elt("th", {
+              scope: "col",
+              tabindex: "0",
+              class: numericCol ? "num" : "",
+              title: c.key === "__label" ? c.label : c.key,
+              "aria-sort": sort.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : "none",
+            });
+            th.textContent = c.label + (sort.key === c.key ? (sort.dir === 1 ? " ▲" : " ▼") : "");
+            const toggle = () => {
+              if (sort.key === c.key) sort.dir = -sort.dir;
+              else sort = { key: c.key, dir: c.key === "__label" ? 1 : -1 };
+              render();
+              announce("Trié par " + c.label);
+            };
+            th.addEventListener("click", toggle);
+            th.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter" || ev.key === " ") {
+                ev.preventDefault();
+                toggle();
+              }
+            });
+            hr.appendChild(th);
+          }
+          thead.appendChild(hr);
+          table.appendChild(thead);
+
+          const tbody = elt("tbody");
+          for (const row of sortedRows()) {
+            const tr = elt("tr", {
+              tabindex: "0",
+              "aria-selected": String(selectedRow === row.key),
+            });
+            tr.appendChild(elt("th", { scope: "row", title: row.key }, row.label));
+            for (const c of payload.columns) {
+              const v = row.values[c.key];
+              const kind = kindOf(c, row);
+              const td = elt("td", { class: typeof v === "number" ? "num" : "" }, formatCell(v, kind));
+              if (typeof v === "number" && v < 0) td.classList.add("neg");
+              tr.appendChild(td);
+            }
+            const open = () => selectRow(row);
+            tr.addEventListener("click", open);
+            tr.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter") {
+                ev.preventDefault();
+                open();
+              }
+            });
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+
+          const wrap = elt("div", { class: "wrap" });
+          wrap.appendChild(table);
+          return wrap;
+        }
+
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        function svgElt(tag, attrs) {
+          const node = document.createElementNS(SVG_NS, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          return node;
+        }
+
+        function renderChart() {
+          const column = payload.columns.find((c) => c.key === chartCol);
+          if (!column) return null;
+          const rows = sortedRows()
+            .map((r) => ({ label: r.label, value: numericValue(r, column), kind: kindOf(column, r) }))
+            .filter((d) => d.value !== null)
+            .slice(0, 20);
+          if (rows.length === 0) return null;
+
+          const barH = 18;
+          const gap = 4;
+          // Labels are right-aligned at `labelW`; anything wider than the gutter
+          // spills off the left of the viewBox and gets clipped, so the
+          // truncation below is sized to fit it (~6px per character at 11px).
+          const labelW = 200;
+          const width = 720;
+          const height = rows.length * (barH + gap) + gap;
+          const max = Math.max(...rows.map((d) => Math.abs(d.value)), 1);
+          const plotW = width - labelW - 70;
+
+          const svg = svgElt("svg", {
+            viewBox: `0 0 ${width} ${height}`,
+            role: "img",
+            "aria-label": "Graphe : " + column.label,
+          });
+          rows.forEach((d, i) => {
+            const y = gap + i * (barH + gap);
+            const label = svgElt("text", {
+              x: labelW - 6,
+              y: y + barH - 5,
+              "text-anchor": "end",
+              "font-size": 11,
+              fill: "currentColor",
+            });
+            label.textContent = d.label.length > 30 ? d.label.slice(0, 29) + "…" : d.label;
+            svg.appendChild(label);
+
+            const w = Math.max(1, (Math.abs(d.value) / max) * plotW);
+            const rect = svgElt("rect", {
+              x: labelW,
+              y,
+              width: w,
+              height: barH,
+              rx: 2,
+              fill: d.value < 0 ? "var(--danger)" : "var(--accent)",
+            });
+            const t = svgElt("title", {});
+            t.textContent = d.label + " : " + formatCell(d.value, d.kind);
+            rect.appendChild(t);
+            svg.appendChild(rect);
+
+            const value = svgElt("text", {
+              x: labelW + w + 5,
+              y: y + barH - 5,
+              "font-size": 11,
+              fill: "currentColor",
+            });
+            value.textContent = formatCell(d.value, d.kind);
+            svg.appendChild(value);
+          });
+
+          const box = elt("div", { class: "chart" });
+          box.appendChild(svg);
+          return box;
+        }
+
+        function render() {
+          renderReports();
+          renderActions();
+          clear(el.content);
+          if (!payload) {
+            el.content.appendChild(elt("div", { class: "msg" }, busy ? "Chargement…" : "Aucune donnée."));
+          } else if (payload.rows.length === 0) {
+            el.content.appendChild(elt("div", { class: "msg" }, "Aucune donnée pour ces critères."));
+          } else {
+            el.content.appendChild(renderTable());
+            const chart = renderChart();
+            if (chart) el.content.appendChild(chart);
+          }
+          if (payload) {
+            el.title.textContent = payload.title;
+            const period = payload.period
+              ? " · " + (payload.period.startDate || "?") + " → " + (payload.period.endDate || "?")
+              : "";
+            el.subtitle.textContent =
+              (payload.layout === "indicators" ? "Indicateurs globaux" : "Vue par entité") + period;
+          }
+          reportSize();
+        }
+
+        function showMessage(text, isError) {
+          clear(el.content);
+          el.content.appendChild(elt("div", { class: isError ? "msg err" : "msg" }, text));
+          reportSize();
+        }
+
+        // ---- Host interactions ------------------------------------------
+        function structuredFrom(result) {
+          if (!result) return null;
+          if (result.structuredContent) return result.structuredContent;
+          return null;
+        }
+
+        /** Install a fresh result: reset the view state and pre-select a graph. */
+        function adoptPayload(next) {
+          payload = next;
+          sort = { key: null, dir: 1 };
+          selectedRow = null;
+          clear(el.detail);
+          // Prefer a column that actually varies: many reporting indicators are
+          // all-zero on a given period, and opening on a row of empty bars looks
+          // like the app is broken.
+          const candidates = chartCandidates();
+          const informative = candidates.find((c) => payload.rows.some((r) => typeof r.values[c.key] === "number" && r.values[c.key] !== 0));
+          chartCol = (informative || candidates[0] || {}).key || null;
+        }
+
+        async function loadReport(report) {
+          if (busy) return;
+          busy = true;
+          selectedRow = null;
+          clear(el.detail);
+          renderReports();
+          announce("Chargement du reporting " + report);
+          try {
+            const args = Object.assign({}, toolArgs, { report });
+            const result = await request("tools/call", { name: "boond_reporting_dashboard", arguments: args });
+            const next = structuredFrom(result);
+            if (!next) throw new Error(textOf(result) || "Réponse sans structuredContent");
+            toolArgs = args;
+            adoptPayload(next);
+            busy = false;
+            render();
+          } catch (error) {
+            busy = false;
+            renderReports();
+            showMessage("Échec du chargement : " + error.message, true);
+          }
+        }
+
+        function textOf(result) {
+          if (!result || !Array.isArray(result.content)) return "";
+          return result.content
+            .filter((c) => c && c.type === "text" && typeof c.text === "string")
+            .map((c) => c.text)
+            .join("\n");
+        }
+
+        async function selectRow(row) {
+          selectedRow = row.key;
+          render();
+          clear(el.detail);
+          if (!row.entity) return;
+
+          const tool = DETAIL_TOOL[row.entity.type];
+          const box = elt("div", { class: "detail" });
+          const head = elt("div", { class: "bar" });
+          head.appendChild(elt("strong", {}, row.label));
+          head.appendChild(elt("span", { class: "spacer" }));
+
+          // `ui/open-link` is the only way out of the sandbox: the iframe has no
+          // navigation rights, the host opens the URL. Offered only when the
+          // host says it can (hostCapabilities.openLinks).
+          const url = webAppUrl(row.entity);
+          if (url && hostCaps.openLinks) {
+            const open = elt("button", { type: "button" }, "Ouvrir dans BoondManager");
+            open.addEventListener("click", async () => {
+              try {
+                await request("ui/open-link", { url });
+              } catch (error) {
+                announce("Ouverture refusée par l'hôte.");
+              }
+            });
+            head.appendChild(open);
+          }
+          box.appendChild(head);
+          el.detail.appendChild(box);
+
+          if (!tool) {
+            box.appendChild(elt("div", { class: "sub" }, "Pas de fiche détaillée pour ce type (" + row.entity.type + ")."));
+            reportSize();
+            return;
+          }
+
+          const status = elt("div", { class: "sub" }, "Chargement de la fiche…");
+          box.appendChild(status);
+          reportSize();
+          try {
+            const result = await request("tools/call", {
+              name: tool,
+              arguments: { id: row.entity.id },
+            });
+            // Detail tools answer with text-only JSON on purpose (see CLAUDE.md
+            // "Structured Outputs"), so parse rather than expect structuredContent.
+            // `formatDetailResponse` unwraps the JSON:API envelope and returns the
+            // entity itself; accept both shapes so a future change either way
+            // keeps working.
+            let attrs = null;
+            try {
+              const parsed = JSON.parse(textOf(result));
+              const data = parsed && (parsed.attributes ? parsed : Array.isArray(parsed.data) ? parsed.data[0] : parsed.data);
+              attrs = (data && data.attributes) || null;
+            } catch (e) {
+              attrs = null;
+            }
+            box.removeChild(status);
+            if (!attrs) {
+              box.appendChild(elt("pre", { class: "sub" }, textOf(result).slice(0, 1200)));
+            } else {
+              const dl = elt("dl");
+              for (const [k, v] of Object.entries(attrs)) {
+                if (v === null || typeof v === "object") continue;
+                dl.appendChild(elt("dt", {}, k));
+                dl.appendChild(elt("dd", {}, String(v)));
+              }
+              box.appendChild(dl);
+            }
+          } catch (error) {
+            status.textContent = "Fiche indisponible : " + error.message;
+            status.classList.add("err");
+          }
+          reportSize();
+        }
+
+        // ---- Lifecycle ---------------------------------------------------
+        notificationHandlers.set("ui/notifications/tool-input", (params) => {
+          if (params && params.arguments) {
+            toolArgs = params.arguments;
+            renderReports();
+          }
+        });
+        notificationHandlers.set("ui/notifications/tool-result", (params) => {
+          const next = structuredFrom(params);
+          if (next) {
+            adoptPayload(next);
+            busy = false;
+            render();
+          } else {
+            showMessage(textOf(params) || "Le serveur n'a pas renvoyé de données exploitables.", true);
+          }
+        });
+        notificationHandlers.set("ui/notifications/tool-cancelled", (params) => {
+          busy = false;
+          showMessage("Appel annulé" + (params && params.reason ? " (" + params.reason + ")" : "") + ".", true);
+        });
+        notificationHandlers.set("ui/notifications/host-context-changed", (params) => {
+          applyHostContext(params || {});
+          render();
+        });
+
+        function applyHostContext(ctx) {
+          if (ctx.theme === "light" || ctx.theme === "dark") {
+            // `data-theme` drives our palette (see the CSS), `colorScheme` the
+            // browser-rendered bits (scrollbars, focus rings, form controls).
+            document.documentElement.setAttribute("data-theme", ctx.theme);
+            document.documentElement.style.colorScheme = ctx.theme;
+          }
+          if (ctx.displayMode) displayMode = ctx.displayMode;
+          if (Array.isArray(ctx.availableDisplayModes)) availableModes = ctx.availableDisplayModes;
+          const vars = ctx.styles && ctx.styles.variables;
+          if (vars) {
+            // Adopt the host palette where it maps onto ours, so the app matches
+            // the surrounding client instead of only the OS colour scheme.
+            const map = {
+              "--color-background-primary": "--bg",
+              "--color-background-secondary": "--bg-alt",
+              "--color-text-primary": "--fg",
+              "--color-text-secondary": "--fg-dim",
+              "--color-border-primary": "--border",
+            };
+            for (const [from, to] of Object.entries(map)) {
+              if (typeof vars[from] === "string") document.documentElement.style.setProperty(to, vars[from]);
+            }
+          }
+        }
+
+        async function main() {
+          renderReports();
+          try {
+            const result = await request("ui/initialize", {
+              appInfo: { name: "boondmanager-reporting-dashboard", version: "1.0.0" },
+              appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] },
+              protocolVersion: PROTOCOL_VERSION,
+            });
+            hostCaps = (result && result.hostCapabilities) || {};
+            applyHostContext((result && result.hostContext) || {});
+            notify("ui/notifications/initialized", {});
+          } catch (error) {
+            showMessage("Connexion à l'hôte impossible : " + error.message, true);
+            return;
+          }
+
+          if (typeof ResizeObserver === "function") {
+            resizeObserver = new ResizeObserver(() => reportSize());
+            resizeObserver.observe(document.documentElement);
+            resizeObserver.observe(document.body);
+          }
+          reportSize();
+
+          // The host normally delivers the initiating call's result through
+          // `ui/notifications/tool-result`, so the app has data without asking.
+          // Not every host does; this fetches once if nothing landed. The delay
+          // is generous on purpose — firing early would double-call the API on a
+          // host that was simply slow, and `toolArgs` (from `tool-input`) is
+          // what makes the fallback reuse the user's filters rather than reset
+          // them.
+          setTimeout(() => {
+            if (!payload && !busy) loadReport(toolArgs.report || "synthesis");
+          }, 1200);
+        }
+
+        main();
+      })();
+    </script>
+  </body>
+</html>

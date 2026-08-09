@@ -1,7 +1,7 @@
 {
   "name": "boondmanager-mcp-server",
   "version": "2.11.0",
-  "description": "MCP Server for BoondManager API - 180 tools, 11 prompts, 22 resources (ERP/CRM)",
+  "description": "MCP Server for BoondManager API - 181 tools, 11 prompts, 22 resources + dashboard interactif (ERP/CRM)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -27,7 +27,7 @@
   },
   "homepage": "https://github.com/fauguste/boondmanager-mcp-server#readme",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-ui-assets.mjs",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "lint": "eslint src/",
@@ -59,6 +59,7 @@
   "author": "Frédéric Auguste",
   "license": "Apache-2.0",
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

@@ -44,6 +44,7 @@ import {
 } from "./tools/index.js";
 import { registerAllPrompts } from "./prompts/index.js";
 import { registerAllResources } from "./resources/index.js";
+import { registerUiResources } from "./ui/index.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import type { DomainName } from "./constants.js";
 import { resolveAccessPolicy, isDomainAllowed, withPolicy, type AccessPolicy } from "./config/access-policy.js";
@@ -204,6 +205,10 @@ export function registerAll(server: McpServer, policy: AccessPolicy, index?: Reg
 
   registerAllPrompts(target, policy);
   registerAllResources(target);
+  // MCP Apps (`ui://`) resources. Registered on `server`, not `target`:
+  // `withPolicy` only filters tools, and these follow their own domain rule
+  // (see `registerUiResources`).
+  registerUiResources(server, policy);
 }
 
 export function createMcpServer(): McpServer {
