@@ -89,6 +89,7 @@ src/
 ├── services/
 │   ├── boond-client.ts   # HTTP client: apiRequest(), apiDownload() (binary), apiUploadForm() (multipart), buildSearchQuery(), formatListResponse(), formatDetailResponse(), parseBoondErrorBody(), formatApiError(); initClient() (stdio) / initClientWithAuth() (OAuth); oauthContextAuth (reads AsyncLocalStorage)
 │   ├── oauth.ts          # OAuth2 protected-resource plumbing for the HTTP transport: oauthContext (AsyncLocalStorage), extractBearerToken(), buildProtectedResourceMetadata() (RFC 9728). No state, no client_secret.
+│   ├── progress.ts       # progressReporterFrom(extra) — notifications/progress reporter, no-op without a client progressToken
 │   ├── rate-limiter.ts   # Token-bucket rate limiter for BoondManager API
 │   └── logger.ts         # Structured logger (pino) + generateCorrelationId()
 ├── schemas/
@@ -246,6 +247,65 @@ Some BoondManager routes cannot safely return large pages. `/actions` in particu
 - **Chunked path:** when `pageSize` exceeds the ceiling (e.g. 500 on `/actions`), `apiSearch` fetches the requested window in chunks of `cap` records (each API call sends `maxResults = cap`, never more), merges the pages into one `JsonApiResponse`, and returns it. The caller still receives its full page "at once"; BoondManager never sees `maxResults` above the cap. Chunk count is bounded by `ceil((offset + requested) / cap)` and the loop stops early on a short page.
 - To cap a future route, add one entry to `ROUTE_MAX_RESULTS`; no other code changes needed. Search-tool `pageSize` stays uniformly capped at `MAX_PAGE_SIZE`.
 
+## Progress Notifications (`notifications/progress`)
+
+A few tool calls fan out into several sequential BoondManager requests behind a
+single `tools/call` — `apiSearch` on the chunked path (`pageSize: 500` on
+`/actions` = 5 API calls), a wide `boond_reporting_*` aggregation, a 5 MiB
+`boond_documents_get`. Without a signal the client sees one slow call,
+indistinguishable from a hang. Everything goes through one helper,
+`src/services/progress.ts`:
+
+```ts
+progressReporterFrom(extra)  // extra = the SDK's RequestHandlerExtra
+```
+
+Design rules, each pinned by a test:
+
+- **No `progressToken`, no notification.** The spec only allows a progress
+  notification when the client put a token in the request's `_meta`;
+  `progressReporterFrom` returns a shared **no-op** otherwise. That is what
+  makes the feature safe for clients that ignore progress: a tokenless call is
+  byte-for-byte the previous execution, asserted by comparing both results.
+- **Narrowing lives in the helper, not in ~180 handlers.** `extra` is typed
+  `unknown` at every call site; handlers that never opt in simply don't take it.
+- **A broken progress channel never costs the caller its result.** Sends are
+  fire-and-forget (`void`, never awaited) and both a rejected promise and a
+  synchronous transport throw are swallowed.
+- **`progress` strictly increases, `total` stays constant** for a token.
+  `apiSearch` emits one step per fetched chunk (`n/totalChunks`) and, when the
+  result set runs out early, one closing step at `total` so the client's bar
+  doesn't stall at 2/5.
+- **The `apiSearch` fast path stays silent.** A single API call has nothing to
+  report and a "1/1" would be pure noise. `onProgress` is the optional *last*
+  parameter, so no existing caller changed.
+- **`boond_reporting_*` is the deliberate exception** to the previous rule: one
+  request, but an aggregation over a wide perimeter can run for tens of seconds,
+  so the handler brackets it with `0/1 … en cours` / `1/1 … terminé`. Here the
+  "started" step *is* the signal that separates slow from hung.
+- **`boond_documents_get` reports bytes**, throttled to ~10 steps, and only when
+  the response carries a `Content-Length`. `apiDownload` streams the body
+  (`body.getReader()`) *only* in that case — hence `ProgressReporter.enabled`,
+  which lets a caller skip work that exists only to feed progress; otherwise it
+  buffers through `arrayBuffer()` exactly as before.
+
+**Known limitation — `MCP_HTTP_JSON_RESPONSE=true`**: that mode answers with a
+plain JSON body instead of an SSE stream, so there is no response stream to
+carry request-scoped notifications and progress is silently dropped. Tool
+results are unaffected. Documented next to the variable in *Transports*.
+
+Out of scope on purpose: prompts and the `boond_workflow_*` mirrors. They return
+a runbook instantly and it is the *model* that then chains the calls — there is
+nothing server-side to instrument; the latency they are blamed for belongs to
+the tools above.
+
+`notifications/progress` is also durable: the 2026-07-28 revision keeps
+request-scoped notifications explicitly, unlike Sampling / Roots / Logging which
+it deprecates (see [issue #170](https://github.com/fauguste/boondmanager-mcp-server/issues/170)).
+It is not a substitute for Tasks and does not preempt that decision: progress is
+a call that stays open and says where it is; a task is a call that returns a
+handle immediately.
+
 ## Tool Naming Convention
 
 All tool names follow: `boond_{domain}_{operation}`
@@ -389,7 +449,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 59 test files, **957 tests**
+- **Current stats**: 62 test files, **1032 tests**
 
 ### Test file template (for read-only search+get domains):
 
@@ -658,7 +718,7 @@ HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
 | `MCP_HTTP_PORT` | `3000` | TCP port |
 | `MCP_HTTP_PATH` | `/mcp` | Endpoint path |
 | `MCP_HTTP_STATEFUL` | `false` | `true` to enable session mode (`Mcp-Session-Id`) |
-| `MCP_HTTP_JSON_RESPONSE` | `false` | `true` to return JSON instead of SSE streams |
+| `MCP_HTTP_JSON_RESPONSE` | `false` | `true` to return JSON instead of SSE streams. **Known limitation**: with no response stream there is nowhere to deliver `notifications/progress`, so progress notifications are silently dropped (see *Progress Notifications*). Tool results are unaffected. |
 | `MCP_HTTP_PUBLIC_URL` | (derived) | Public URL advertised in the OAuth2 discovery metadata. Required behind a reverse proxy. |
 | `MCP_HTTP_SESSION_TTL_MS` | `1800000` (30 min) | Stateful only: idle window before a session is closed |
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only: how often to scan for idle sessions |

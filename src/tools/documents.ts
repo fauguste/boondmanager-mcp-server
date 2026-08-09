@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiDownload, apiUploadForm, formatDetailResponse } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 import { IdSchema, DocumentCreateSchema } from "../schemas/index.js";
 import type { IdInput, DocumentCreateInput } from "../schemas/index.js";
 import { MAX_DOCUMENT_BYTES, CHARACTER_LIMIT } from "../constants.js";
@@ -32,8 +33,10 @@ Args:
         openWorldHint: false,
       },
     },
-    async (params: IdInput) => {
-      const doc = await apiDownload(`/documents/${params.id}`);
+    async (params: IdInput, extra: unknown) => {
+      // Byte-level progress, but only when the client asked for it and the
+      // response announces a Content-Length (see readDownloadBody).
+      const doc = await apiDownload(`/documents/${params.id}`, progressReporterFrom(extra));
       const uri = `boond://documents/${params.id}`;
       const name = doc.filename ?? `document-${params.id}`;
 

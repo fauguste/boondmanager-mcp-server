@@ -15,6 +15,7 @@ import {
 import type { BoondAuthProvider, BoondConfig, JsonApiResource, JsonApiResponse, SearchParams } from "../types.js";
 import { TokenBucket } from "./rate-limiter.js";
 import { oauthContext } from "./oauth.js";
+import type { ProgressReporter } from "./progress.js";
 
 let config: BoondConfig | null = null;
 
@@ -697,13 +698,65 @@ export interface DownloadedDocument {
   filename?: string;
 }
 
+/** Human-readable byte count for progress messages (same units as the tool output). */
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} Mo` : `${Math.round(bytes / 1024)} Ko`;
+}
+
+/** Progress steps emitted while streaming a download (≈ every 10 %). */
+const DOWNLOAD_PROGRESS_STEPS = 10;
+
+/**
+ * Read a download body, reporting bytes received as it goes.
+ *
+ * The streaming path only runs when someone is actually listening **and** the
+ * response announced a `Content-Length` — without a total there is nothing
+ * meaningful to report, and buffering through `arrayBuffer()` is both simpler
+ * and faster. So the default path is byte-for-byte the previous behaviour.
+ */
+async function readDownloadBody(response: Response, onProgress?: ProgressReporter): Promise<Buffer> {
+  const totalBytes = Number(response.headers.get("content-length"));
+  const body = response.body;
+  if (!onProgress?.enabled || !body || !Number.isFinite(totalBytes) || totalBytes <= 0) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  const reader = body.getReader();
+  const step = Math.max(1, Math.floor(totalBytes / DOWNLOAD_PROGRESS_STEPS));
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let reported = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    chunks.push(value);
+    received += value.byteLength;
+    // Throttled to ~10 notifications: a 5 MiB file arrives in ~80 network
+    // chunks, and one notification each would be its own kind of flood.
+    if (received - reported >= step) {
+      reported = received;
+      onProgress(received, totalBytes, `Téléchargement — ${formatBytes(received)} / ${formatBytes(totalBytes)}`);
+    }
+  }
+
+  if (received > reported) {
+    onProgress(received, totalBytes, `Téléchargement terminé — ${formatBytes(received)}`);
+  }
+  return Buffer.concat(chunks);
+}
+
 /**
  * Download a binary payload (documents, justificatifs…) from the BoondManager
  * API. Same auth/safety/rate-limit plumbing as `apiRequest`, but the body is
  * returned raw instead of being parsed as JSON:API. Single attempt: document
  * downloads are interactive one-offs, not worth a retry loop.
+ *
+ * `onProgress` reports bytes received when the client asked for progress and
+ * the response carries a `Content-Length`; otherwise nothing is emitted.
  */
-export async function apiDownload(path: string): Promise<DownloadedDocument> {
+export async function apiDownload(path: string, onProgress?: ProgressReporter): Promise<DownloadedDocument> {
   const { baseUrl, auth } = getConfig();
   const url = resolveApiUrl(baseUrl, path);
 
@@ -738,7 +791,7 @@ export async function apiDownload(path: string): Promise<DownloadedDocument> {
     throw new Error(formatApiError(response.status, response.statusText, "GET", path, errorText));
   }
 
-  const data = Buffer.from(await response.arrayBuffer());
+  const data = await readDownloadBody(response, onProgress);
   return {
     data,
     contentType: response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream",
@@ -822,8 +875,18 @@ export function buildSearchQuery(params: SearchParams): Record<string, QueryValu
  * The chunk count is bounded by `ceil((offset + requested) / cap)`, so there is
  * no unbounded loop; the loop also stops early once a page comes back short
  * (end of the result set on the server).
+ *
+ * `onProgress` (optional, last position — no existing caller had to change) is
+ * invoked **only on the chunked path**: one step per BoondManager page. The
+ * fast path stays silent on purpose — a single API call has nothing to report
+ * and a "1/1" notification would be pure noise. The reporter is a no-op unless
+ * the client sent a `progressToken` (see `services/progress.ts`).
  */
-export async function apiSearch(path: string, query: Record<string, QueryValue>): Promise<JsonApiResponse> {
+export async function apiSearch(
+  path: string,
+  query: Record<string, QueryValue>,
+  onProgress?: ProgressReporter
+): Promise<JsonApiResponse> {
   const cap = ROUTE_MAX_RESULTS[path] ?? DEFAULT_MAX_RESULTS;
   const requested = typeof query["maxResults"] === "number" ? query["maxResults"] : DEFAULT_PAGE_SIZE;
   const page = typeof query["page"] === "number" ? query["page"] : 1;
@@ -842,6 +905,10 @@ export async function apiSearch(path: string, query: Record<string, QueryValue>)
 
   const collected: JsonApiResource[] = [];
   let meta: JsonApiResponse["meta"];
+  // Upper bound of the loop, and the `total` advertised to the client. It stays
+  // constant across the notifications of one call, as the spec requires.
+  const totalChunks = Math.ceil(needed / cap);
+  let fetchedChunks = 0;
 
   for (let i = 0; collected.length < needed; i++) {
     const chunkQuery: Record<string, QueryValue> = { ...query, page: firstBoondPage + i, maxResults: cap };
@@ -849,11 +916,19 @@ export async function apiSearch(path: string, query: Record<string, QueryValue>)
     if (meta === undefined) meta = response.meta;
     const chunk = Array.isArray(response.data) ? response.data : response.data ? [response.data] : [];
     collected.push(...chunk);
+    fetchedChunks = i + 1;
+    onProgress?.(fetchedChunks, totalChunks, `Récupération ${path} — page ${fetchedChunks}/${totalChunks}`);
     // A short page means there is no more data on the server — stop early.
     if (chunk.length < cap) break;
   }
 
   const data = collected.slice(offsetInFirstChunk, offsetInFirstChunk + requested);
+  // Early stop (result set exhausted): close the bar rather than leaving the
+  // client at 2/5 forever. Skipped when the last page already reported `total`,
+  // which would repeat a value instead of increasing it.
+  if (fetchedChunks < totalChunks) {
+    onProgress?.(totalChunks, totalChunks, `Récupération ${path} — terminé (${data.length} résultat(s))`);
+  }
   return meta !== undefined ? { data, meta } : { data };
 }
 

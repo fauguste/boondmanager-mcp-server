@@ -9,6 +9,7 @@ import {
   formatDetailResponse,
   formatEntitySummary,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 import { SearchSchema, IdSchema, IdTabSchema } from "../schemas/index.js";
 import { isFeatureDisabled } from "../config/env-flags.js";
 import type { SearchInput, IdInput, IdTabInput } from "../schemas/index.js";
@@ -239,12 +240,14 @@ Returns: Liste des ${opts.entityNamePlural} correspondants avec leur ID, nom et 
         openWorldHint: true,
       },
     },
-    async (params: unknown) => {
+    async (params: unknown, extra: unknown) => {
       const p = params as SearchInput & { fields?: string[] };
       const query = buildSearchQuery(p);
       // apiSearch respects BoondManager's per-route maxResults ceiling,
-      // chunking large requests transparently (see ROUTE_MAX_RESULTS).
-      const response = await apiSearch(opts.apiPath, query);
+      // chunking large requests transparently (see ROUTE_MAX_RESULTS). The
+      // reporter is a no-op unless the client sent a progressToken, and
+      // apiSearch only uses it on the chunked path.
+      const response = await apiSearch(opts.apiPath, query, progressReporterFrom(extra));
       const text = formatListResponse(response, opts.entityName, p.fields);
       return {
         content: [{ type: "text" as const, text }],

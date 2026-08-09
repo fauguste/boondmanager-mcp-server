@@ -64,7 +64,7 @@ describe("registerDocumentTools", () => {
       });
       registerDocumentTools(server);
       const result = await handlerOf(server, "boond_documents_get")({ id: "123" });
-      expect(apiDownload).toHaveBeenCalledWith("/documents/123");
+      expect(apiDownload).toHaveBeenCalledWith("/documents/123", expect.any(Function));
       expect(result.content[0].text).toContain("cv-dupont.pdf");
       const resource = result.content[1].resource!;
       expect(resource.uri).toBe("boond://documents/123");

@@ -7,6 +7,7 @@ import {
   formatListResponse,
   formatDetailResponse,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
@@ -55,9 +56,9 @@ Returns: Liste des achats correspondants.`,
         openWorldHint: true,
       },
     },
-    async (params) => {
+    async (params, extra: unknown) => {
       const query = buildSearchQuery(params);
-      const response = await apiSearch("/purchases", query);
+      const response = await apiSearch("/purchases", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "achat", params.fields) }],
       };

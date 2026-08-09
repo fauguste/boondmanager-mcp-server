@@ -7,6 +7,7 @@ import {
   formatListResponse,
   formatDetailResponse,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 
 export function registerAdvantageTools(server: McpServer): void {
   // Search advantages
@@ -30,9 +31,9 @@ Returns: Liste des avantages correspondants.`,
         openWorldHint: true,
       },
     },
-    async (params) => {
+    async (params, extra: unknown) => {
       const query = buildSearchQuery(params);
-      const response = await apiSearch("/advantages", query);
+      const response = await apiSearch("/advantages", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "avantage", params.fields) }],
       };

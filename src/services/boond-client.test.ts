@@ -26,6 +26,7 @@ import {
   apiUploadForm,
   parseContentDispositionFilename,
 } from "./boond-client.js";
+import { progressReporterFrom } from "./progress.js";
 import { oauthContext } from "./oauth.js";
 import {
   CHARACTER_LIMIT,
@@ -1044,6 +1045,115 @@ describe("apiSearch (per-route maxResults chunking)", () => {
   });
 });
 
+describe("apiSearch progress notifications", () => {
+  // Same paginated backend as the chunking suite above.
+  function pagedFetch(totalRows: number) {
+    return vi.fn().mockImplementation((url: string) => {
+      const u = new URL(url);
+      const max = Number(u.searchParams.get("maxResults") ?? "30");
+      const page = Number(u.searchParams.get("page") ?? "1");
+      const items = [];
+      for (let i = (page - 1) * max; i < Math.min(page * max, totalRows); i++) {
+        items.push({ id: String(i), type: "action", attributes: {} });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-length": "100" }),
+        json: () => Promise.resolve({ data: items, meta: { totals: { rows: totalRows } } }),
+      });
+    });
+  }
+
+  /** A real reporter wired to a spy, so the notification shape is asserted too. */
+  function reporterSpy() {
+    const send = vi.fn().mockResolvedValue(undefined);
+    return {
+      send,
+      reporter: progressReporterFrom({ _meta: { progressToken: "tok" }, sendNotification: send }),
+      params: () => send.mock.calls.map((c) => c[0].params as { progress: number; total?: number; message: string }),
+    };
+  }
+
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+    initClient();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_MAX_RETRIES;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
+  });
+
+  it("emits one step per chunk, strictly increasing, with a constant total", async () => {
+    vi.stubGlobal("fetch", pagedFetch(2000));
+    const spy = reporterSpy();
+
+    const res = await apiSearch("/actions", { maxResults: 500, page: 1 }, spy.reporter);
+
+    const params = spy.params();
+    expect(params).toHaveLength(5);
+    expect(params.map((p) => p.progress)).toEqual([1, 2, 3, 4, 5]);
+    expect(params.every((p) => p.total === 5)).toBe(true);
+    expect(params[1].message).toContain("page 2/5");
+    expect(params[1].message).toContain("/actions");
+    // The progress channel changes nothing about the payload.
+    expect((res.data as unknown[]).length).toBe(500);
+  });
+
+  it("stays silent on the fast path — a single API call has nothing to report", async () => {
+    vi.stubGlobal("fetch", pagedFetch(2000));
+    const spy = reporterSpy();
+
+    await apiSearch("/candidates", { maxResults: 500, page: 1 }, spy.reporter);
+    await apiSearch("/actions", { maxResults: 100, page: 1 }, spy.reporter);
+
+    expect(spy.send).not.toHaveBeenCalled();
+  });
+
+  it("closes the bar at `total` when the result set runs out early", async () => {
+    vi.stubGlobal("fetch", pagedFetch(250));
+    const spy = reporterSpy();
+
+    await apiSearch("/actions", { maxResults: 500, page: 1 }, spy.reporter);
+
+    // 3 fetched chunks (100+100+50) + the completion step: 5/5, still increasing.
+    const progress = spy.params().map((p) => p.progress);
+    expect(progress).toEqual([1, 2, 3, 5]);
+    expect(spy.params().at(-1)?.message).toContain("terminé");
+  });
+
+  it("emits nothing at all when the client sent no progressToken", async () => {
+    vi.stubGlobal("fetch", pagedFetch(2000));
+    const send = vi.fn();
+    const reporter = progressReporterFrom({ _meta: {}, sendNotification: send });
+
+    const withReporter = await apiSearch("/actions", { maxResults: 500, page: 1 }, reporter);
+    const without = await apiSearch("/actions", { maxResults: 500, page: 1 });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(withReporter).toEqual(without);
+  });
+
+  it("never fails the call when the notification channel is broken", async () => {
+    vi.stubGlobal("fetch", pagedFetch(2000));
+    const reporter = progressReporterFrom({
+      _meta: { progressToken: "tok" },
+      sendNotification: vi.fn().mockRejectedValue(new Error("client gone")),
+    });
+
+    const res = await apiSearch("/actions", { maxResults: 500, page: 1 }, reporter);
+
+    expect((res.data as unknown[]).length).toBe(500);
+  });
+});
+
 describe("apiRequest auth header routing", () => {
   // BoondManager rejects JWT auth carried in `Authorization: Bearer …` with
   // `422 Signature verification failed`. The token must travel in
@@ -1852,6 +1962,79 @@ describe("apiDownload", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(apiDownload("/documents/../invoices/5")).rejects.toThrow(/Unsafe API path/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe("byte progress", () => {
+    /** A body delivered in `chunks` slices of `chunkBytes`, plus its Content-Length. */
+    function streamedResponse(chunks: number, chunkBytes: number, withContentLength = true) {
+      const total = chunks * chunkBytes;
+      let sent = 0;
+      const headers = new Headers({ "content-type": "application/pdf" });
+      if (withContentLength) headers.set("content-length", String(total));
+      return {
+        ok: true,
+        status: 200,
+        headers,
+        body: {
+          getReader: () => ({
+            read: () =>
+              Promise.resolve(
+                sent++ < chunks
+                  ? { done: false, value: new Uint8Array(chunkBytes).fill(65) }
+                  : { done: true, value: undefined }
+              ),
+          }),
+        },
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(total)),
+      };
+    }
+
+    function reporterSpy() {
+      const send = vi.fn().mockResolvedValue(undefined);
+      return {
+        send,
+        reporter: progressReporterFrom({ _meta: { progressToken: 7 }, sendNotification: send }),
+        params: () => send.mock.calls.map((c) => c[0].params as { progress: number; total?: number }),
+      };
+    }
+
+    it("reports bytes received against Content-Length", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(streamedResponse(20, 50 * 1024)));
+      const spy = reporterSpy();
+
+      const doc = await apiDownload("/documents/12", spy.reporter);
+
+      expect(doc.data.length).toBe(20 * 50 * 1024);
+      const params = spy.params();
+      expect(params.length).toBeGreaterThan(0);
+      // Throttled to ~10 steps whatever the number of network chunks.
+      expect(params.length).toBeLessThanOrEqual(11);
+      expect(params.every((p) => p.total === 20 * 50 * 1024)).toBe(true);
+      expect(params.map((p) => p.progress)).toEqual([...params.map((p) => p.progress)].sort((a, b) => a - b));
+      expect(new Set(params.map((p) => p.progress)).size).toBe(params.length);
+      expect(params.at(-1)?.progress).toBe(20 * 50 * 1024);
+    });
+
+    it("buffers as before (no streaming) without a progressToken", async () => {
+      const response = streamedResponse(4, 1024);
+      const readerSpy = vi.spyOn(response.body, "getReader");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+      const doc = await apiDownload("/documents/12", progressReporterFrom(undefined));
+
+      expect(readerSpy).not.toHaveBeenCalled();
+      expect(doc.data.length).toBe(4 * 1024);
+    });
+
+    it("reports nothing when the response has no Content-Length", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(streamedResponse(4, 1024, false)));
+      const spy = reporterSpy();
+
+      const doc = await apiDownload("/documents/12", spy.reporter);
+
+      expect(spy.send).not.toHaveBeenCalled();
+      expect(doc.data.length).toBe(4 * 1024);
+    });
   });
 });
 

@@ -298,6 +298,32 @@ describe("registerSearchTool handler", () => {
     expect(query).not.toHaveProperty("fields");
     expect(query).not.toHaveProperty("fields[]");
   });
+
+  // Progress is handed to apiSearch, which only uses it on the chunked path.
+  // The factory's job is just to forward a reporter built from `extra`.
+  it("forwards an enabled progress reporter when the client sent a progressToken", async () => {
+    vi.mocked(apiSearch).mockReset().mockResolvedValue(RESPONSE);
+    const server = createMockServer();
+    registerSearchTool(server, OPTS);
+    const handler = vi.mocked(server.registerTool).mock.calls[0][2] as unknown as (
+      params: unknown,
+      extra: unknown
+    ) => Promise<unknown>;
+
+    await handler({ keywords: "x" }, { _meta: { progressToken: "t" }, sendNotification: vi.fn() });
+
+    const reporter = vi.mocked(apiSearch).mock.calls[0][2];
+    expect(reporter?.enabled).toBe(true);
+  });
+
+  it("forwards a disabled reporter when there is no progressToken", async () => {
+    vi.mocked(apiSearch).mockReset().mockResolvedValue(RESPONSE);
+    const server = createMockServer();
+    registerSearchTool(server, OPTS);
+    await registeredHandler(server)({ keywords: "x" });
+
+    expect(vi.mocked(apiSearch).mock.calls[0][2]?.enabled).toBe(false);
+  });
 });
 
 describe("buildListStructured", () => {

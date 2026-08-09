@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -14,6 +14,7 @@ import {
 } from "./server.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { resolveAccessPolicy } from "./config/access-policy.js";
+import { resetClientForTests, resetRateLimiterForTests } from "./services/boond-client.js";
 import { connectMcpClient, useDefaultServerSurface } from "./tools/test-helpers.js";
 
 /** Counting stub that records every registration call. */
@@ -408,5 +409,82 @@ describe("registerAll — access policy filtering", () => {
     const tools = registeredToolNames(s);
     expect(tools).toContain("boond_workflow_factures_a_relancer");
     expect(tools).not.toContain("boond_workflow_synthese_equipe");
+  });
+});
+
+/**
+ * `notifications/progress` over a real client: a `boond_actions_search` at
+ * pageSize 500 is 5 sequential BoondManager calls behind one `tools/call`, and
+ * the client only learns that if the server says so. The spec's rule — no
+ * `progressToken`, no notification — is asserted from the client side here,
+ * where the token is actually produced by passing `onprogress`.
+ */
+describe("progress notifications (end to end)", () => {
+  useDefaultServerSurface();
+
+  /** Paginated `/actions` backend: 100 rows per page, 2000 in total. */
+  function pagedFetch() {
+    return vi.fn().mockImplementation((url: string) => {
+      const u = new URL(url as string);
+      const max = Number(u.searchParams.get("maxResults") ?? "30");
+      const page = Number(u.searchParams.get("page") ?? "1");
+      const items = Array.from({ length: max }, (_, i) => ({
+        id: String((page - 1) * max + i),
+        type: "action",
+        attributes: { title: "Appel" },
+      }));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-length": "100" }),
+        json: () => Promise.resolve({ data: items, meta: { totals: { rows: 2000 } } }),
+      });
+    });
+  }
+
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+    resetClientForTests();
+    vi.stubGlobal("fetch", pagedFetch());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_MAX_RETRIES;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
+    resetClientForTests();
+  });
+
+  it("streams one step per chunk when the client passes onprogress", async () => {
+    const { client, close } = await connectMcpClient();
+    const steps: Array<{ progress: number; total?: number; message?: string }> = [];
+    try {
+      const result = (await client.callTool({ name: "boond_actions_search", arguments: { pageSize: 500 } }, undefined, {
+        onprogress: (p) => steps.push(p),
+      })) as { isError?: boolean };
+      expect(result.isError).toBeFalsy();
+    } finally {
+      await close();
+    }
+
+    expect(steps.map((s) => s.progress)).toEqual([1, 2, 3, 4, 5]);
+    expect(steps.every((s) => s.total === 5)).toBe(true);
+    expect(steps[4].message).toContain("page 5/5");
+  });
+
+  it("emits nothing when the client does not ask for progress", async () => {
+    const { client, server, close } = await connectMcpClient();
+    const sent = vi.spyOn(server.server, "notification");
+    try {
+      await client.callTool({ name: "boond_actions_search", arguments: { pageSize: 500 } });
+    } finally {
+      await close();
+    }
+    expect(sent).not.toHaveBeenCalled();
   });
 });

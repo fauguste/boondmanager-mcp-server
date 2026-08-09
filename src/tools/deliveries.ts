@@ -7,6 +7,7 @@ import {
   formatListResponse,
   formatDetailResponse,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
 
@@ -89,9 +90,9 @@ Returns: Liste des livraisons correspondantes.`,
         openWorldHint: true,
       },
     },
-    async (params) => {
+    async (params, extra: unknown) => {
       const query = buildSearchQuery(params);
-      const response = await apiSearch("/deliveries-groupments", query);
+      const response = await apiSearch("/deliveries-groupments", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "livraison", params.fields) }],
       };

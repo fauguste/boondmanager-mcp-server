@@ -7,6 +7,7 @@ import {
   formatListResponse,
   formatDetailResponse,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 
 export function registerValidationTools(server: McpServer): void {
   server.registerTool(
@@ -34,9 +35,9 @@ Returns: Liste des validations correspondantes.`,
         openWorldHint: true,
       },
     },
-    async (params) => {
+    async (params, extra: unknown) => {
       const query = buildSearchQuery(params);
-      const response = await apiSearch("/validations", query);
+      const response = await apiSearch("/validations", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "validation", params.fields) }],
       };

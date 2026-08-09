@@ -7,6 +7,7 @@ import {
   formatListResponse,
   formatDetailResponse,
 } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody, registerDeleteTool, MutationOutputSchema } from "./crud-factory.js";
 import { availableLabels, formatOverridesSummary, resolveLabel } from "../config/dictionary-overrides.js";
 
@@ -56,11 +57,11 @@ Returns: Liste des actions correspondantes.`,
         openWorldHint: true,
       },
     },
-    async (params) => {
+    async (params, extra: unknown) => {
       const query = buildSearchQuery(params);
       // apiSearch chunks the request to respect BoondManager's 100-result cap
       // on /actions (heavy objects → memory overflow above 100).
-      const response = await apiSearch("/actions", query);
+      const response = await apiSearch("/actions", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "action", params.fields) }],
       };
