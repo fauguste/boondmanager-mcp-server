@@ -17,7 +17,9 @@ export interface JsonApiResponse {
   data: JsonApiResource | JsonApiResource[];
   included?: JsonApiResource[];
   meta?: {
-    totals?: { rows: number };
+    // `/reporting-*` endpoints add `dependsOn`: `rows` counts indicator rows,
+    // `dependsOn` counts the entities those indicators describe.
+    totals?: { rows: number; dependsOn?: number };
     [key: string]: unknown;
   };
   links?: Record<string, string>;

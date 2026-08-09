@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**180 tools** across **38 domains** · **11 prompts** · **22 resources**.
+**181 tools** across **38 domains** · **11 prompts** · **22 resources** · **1 MCP Apps UI resource**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -285,11 +285,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_purchases_get` | Détails d'un achat/sous-traitance | read · idempotent |
 | `boond_purchases_search` | Rechercher des achats/sous-traitance | read · idempotent · open-world |
 
-### reporting (5)
+### reporting (6)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_reporting_companies` | Reporting sociétés | read · idempotent · open-world |
+| `boond_reporting_dashboard` | Tableau de bord reporting | read · idempotent · open-world |
 | `boond_reporting_production_plans` | Reporting plans de production | read · idempotent · open-world |
 | `boond_reporting_projects` | Reporting projets | read · idempotent · open-world |
 | `boond_reporting_resources` | Reporting ressources | read · idempotent · open-world |
@@ -425,3 +426,11 @@ Reference data exposed as MCP resources.
 | `boond://dictionary/typeOf/contacts` | Types contacts |
 | `boond://dictionary/typeOf/projects` | Types projets |
 | `boond://dictionary/typeOf/resources` | Types ressources |
+
+## MCP Apps UI resources (1)
+
+Interactive views served as `text/html;profile=mcp-app` under the `io.modelcontextprotocol/ui` extension. Rendered in a sandboxed iframe by clients that implement MCP Apps; ignored by the others, which still get the tool's text and `structuredContent`. See `docs/mcp-apps.md`.
+
+| URI | Title | Rendered by |
+|---|---|---|
+| `ui://boond/reporting` | Tableau de bord reporting | `boond_reporting_dashboard` |

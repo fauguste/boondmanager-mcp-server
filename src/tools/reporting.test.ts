@@ -15,9 +15,9 @@ describe("registerReportingTools", () => {
     server = createMockServer();
   });
 
-  it("should register 5 reporting tools", () => {
+  it("should register 5 reporting endpoints + the MCP Apps dashboard", () => {
     registerReportingTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(5);
+    expect(server.registerTool).toHaveBeenCalledTimes(6);
   });
 
   it("should register all expected tool names", () => {
@@ -28,6 +28,20 @@ describe("registerReportingTools", () => {
     expect(names).toContain("boond_reporting_resources");
     expect(names).toContain("boond_reporting_synthesis");
     expect(names).toContain("boond_reporting_production_plans");
+    expect(names).toContain("boond_reporting_dashboard");
+  });
+
+  // MCP Apps: the app re-calls the plain reporting tools for drill-down, which
+  // requires them to be visible to the "app" scope, not just the model.
+  it("marks the endpoint tools callable by the app, without a UI of their own", () => {
+    registerReportingTools(server);
+    for (const call of vi.mocked(server.registerTool).mock.calls) {
+      const meta = call[1]._meta as { ui?: { visibility?: string[]; resourceUri?: string } } | undefined;
+      expect(meta?.ui?.visibility).toEqual(["model", "app"]);
+      if (call[0] !== "boond_reporting_dashboard") {
+        expect(meta?.ui?.resourceUri).toBeUndefined();
+      }
+    }
   });
 
   it("should register all tools as readOnly", () => {

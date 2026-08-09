@@ -23,7 +23,7 @@
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
-**180 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
+**181 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
 
 > **Sorties structurées.** En plus du texte lisible, les outils `search`, `create`, `update` et `delete` renvoient un `structuredContent` conforme à un `outputSchema` MCP : `search` → `{ total?, count, items[] }` (résumés compacts, pas les ressources JSON:API complètes), `create`/`update` → `{ id?, type? }`, `delete` → `{ id, deleted, reason? }`. Les clients MCP qui exploitent les sorties structurées obtiennent une référence d'entité fiable pour chaîner les appels. Les outils `get` restent en texte seul (leur texte est déjà du JSON exploitable).
 
@@ -86,6 +86,19 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claud
 | **Reporting ressources** | 1 | search |
 | **Reporting synthese** | 1 | search |
 | **Reporting plans de production** | 1 | search |
+| **Tableau de bord** | 1 | search (+ UI interactive) |
+
+#### Tableau de bord interactif (MCP Apps)
+
+`boond_reporting_dashboard` renvoie le reporting sous forme de tableau **pivoté** — entités en lignes, indicateurs en colonnes — au lieu de la liste brute d'indicateurs de l'API (une page de 2 projets = 54 lignes JSON:API).
+
+Sur les clients qui implémentent l'extension **MCP Apps** (`io.modelcontextprotocol/ui`), il rend en plus une interface interactive : tri par colonne, graphe, changement de reporting et de période, clic sur une ligne pour la fiche détaillée — le tout sans repasser par le modèle.
+
+![Tableau de bord reporting](./docs/images/mcp-app-reporting.png)
+
+Sur les autres clients, l'outil renvoie exactement la même donnée en texte + `structuredContent` : aucune erreur, aucune fonctionnalité perdue côté données. L'iframe n'émet **aucune requête réseau** (CSP sans domaine autorisé, aucune permission navigateur demandée) et aucune donnée BoondManager n'est interpolée dans le HTML côté serveur.
+
+Détails, contrat CSP et procédure pour ajouter une UI : [docs/mcp-apps.md](./docs/mcp-apps.md).
 
 ### Administration & Configuration
 

@@ -1581,6 +1581,77 @@ export const ReportingProductionPlansSchema = z
   })
   .strict();
 
+/**
+ * Reporting endpoints reachable from the single `boond_reporting_dashboard`
+ * tool. Order is the one the dashboard UI renders its selector in.
+ */
+export const ReportingDashboardReports = [
+  "synthesis",
+  "projects",
+  "resources",
+  "companies",
+  "production_plans",
+] as const;
+
+/**
+ * Input of the MCP Apps dashboard tool: a *superset* of the five reporting
+ * schemas, keyed by `report`.
+ *
+ * Why a superset rather than a discriminated union: the tool exists so the
+ * iframe can re-call it with a different `report` and the same filters (that is
+ * the whole drill-down loop). A union would make every switch of `report` a
+ * schema change on the app side, and MCP has no way to express "these keys are
+ * valid only for that literal". Filters that don't apply to the selected
+ * endpoint are simply not forwarded — the handler intersects this schema with
+ * the per-endpoint filter list, so a stray `projectStates` on `/reporting-companies`
+ * is dropped client-side instead of being silently ignored by the API.
+ */
+export const ReportingDashboardSchema = z
+  .object({
+    report: z
+      .enum(ReportingDashboardReports)
+      .describe(
+        "Reporting à afficher : 'synthesis' (KPIs globaux), 'projects', 'resources', 'companies', " +
+          "'production_plans' (plans de production)."
+      ),
+    ...reportingCommonFields,
+    startDate: optionalDate("Date de début"),
+    endDate: optionalDate("Date de fin"),
+    period: reportingPeriodField,
+    reportingType: z
+      .enum(["realData", "targetsData"])
+      .optional()
+      .describe("Synthèse uniquement : 'realData' (défaut) ou 'targetsData' (objectifs)."),
+    reportingCategory: z
+      .string()
+      .optional()
+      .describe(
+        "Catégorie : synthèse → commercialSynthesis (défaut), humanResourcesSynthesis, recruitmentSynthesis, " +
+          "activityExpensesSynthesis, billingSynthesis, globalSynthesis. Ressources → showByResources / showByPeriods."
+      ),
+    max: z
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .optional()
+      .describe(
+        "Nombre d'entités par page (1-10, défaut 1). Mappé sur maxProjects/maxResources/maxCompanies selon `report` ; " +
+          "sans effet sur synthesis et production_plans."
+      ),
+    resources: reportingResourcesField,
+    projects: reportingProjectsField,
+    contacts: reportingContactsField,
+    companies: reportingCompaniesField,
+    resourceTypes: intArray("IDs de types de ressources (dictionnaire setting.typeOf.resource)."),
+    resourceStates: intArray("IDs d'états de ressources (dictionnaire setting.state.resource)."),
+    projectTypes: intArray("IDs de types de projets (dictionnaire setting.typeOf.project)."),
+    projectStates: intArray("IDs d'états de projets (dictionnaire setting.state.project)."),
+    companiesStates: intArray("IDs d'états de sociétés (dictionnaire setting.state.company)."),
+    positioningStates: intArray("IDs d'états de positionnement (dictionnaire setting.state.positioning)."),
+  })
+  .strict();
+
 export const DictionaryGetSchema = z
   .object({
     dictionaryType: z
@@ -1666,3 +1737,4 @@ export type ReportingProjectsInput = z.infer<typeof ReportingProjectsSchema>;
 export type ReportingResourcesInput = z.infer<typeof ReportingResourcesSchema>;
 export type ReportingSynthesisInput = z.infer<typeof ReportingSynthesisSchema>;
 export type ReportingProductionPlansInput = z.infer<typeof ReportingProductionPlansSchema>;
+export type ReportingDashboardInput = z.infer<typeof ReportingDashboardSchema>;

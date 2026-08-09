@@ -299,6 +299,29 @@ describe("search filter validation feedback (end to end)", () => {
     expect(text).toContain("MAX_SEARCH_PAGE");
   });
 
+  /**
+   * MCP Apps end-to-end over a real client: the tool's `_meta.ui.resourceUri`
+   * has to survive the SDK's `tools/list` builder (which drops unknown fields)
+   * and point at a `ui://` resource that is actually listed and readable.
+   */
+  it("advertises the reporting app and the tool that renders it", async () => {
+    const { client, close } = await connectMcpClient();
+    try {
+      const tool = (await client.listTools()).tools.find((t) => t.name === "boond_reporting_dashboard");
+      expect(tool?._meta).toMatchObject({ ui: { resourceUri: "ui://boond/reporting" } });
+
+      const resource = (await client.listResources()).resources.find((r) => r.uri === "ui://boond/reporting");
+      expect(resource?.mimeType).toBe("text/html;profile=mcp-app");
+      expect(resource?._meta).toMatchObject({ ui: { prefersBorder: true } });
+
+      const read = await client.readResource({ uri: "ui://boond/reporting" });
+      expect(read.contents).toHaveLength(1);
+      expect(String(read.contents[0].text)).toContain("<!doctype html>");
+    } finally {
+      await close();
+    }
+  });
+
   it("keeps advertising a strict inputSchema (the client can pre-validate)", async () => {
     const { client, close } = await connectMcpClient();
     try {

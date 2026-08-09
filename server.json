@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.fauguste/boondmanager-mcp-server",
   "title": "BoondManager MCP Server",
-  "description": "MCP Server for BoondManager API - 180 tools, 11 prompts, 22 resources (ERP/CRM)",
+  "description": "MCP Server for BoondManager API - 181 tools, 11 prompts, 22 resources + dashboard interactif (ERP/CRM)",
   "version": "2.11.0",
   "websiteUrl": "https://github.com/fauguste/boondmanager-mcp-server",
   "repository": {

@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+Première UI interactive : le serveur implémente **MCP Apps** (`io.modelcontextprotocol/ui`), la première extension officielle du protocole ([#169](https://github.com/fauguste/boondmanager-mcp-server/issues/169)). Catalogue : **181 outils, 11 prompts, 22 ressources + 1 ressource UI**.
+
+### Added
+
+- **Tableau de bord reporting interactif** (`ui://boond/reporting` + `boond_reporting_dashboard`). Sur les clients qui implémentent MCP Apps (Claude web et desktop, ChatGPT, VS Code Copilot, Cursor, Goose, MCPJam…), un appel du nouvel outil rend un dashboard dans une iframe sandboxée : tri par colonne (souris **et** clavier), graphe à barres SVG, changement de reporting et de période, clic sur une ligne pour la fiche détaillée, bouton « Ouvrir dans BoondManager ». Le drill-down et le changement de reporting passent par `tools/call` **sans repasser par le modèle**.
+- **La donnée de reporting est enfin pivotée.** Les cinq endpoints `/reporting-*` répondent en format long : une ligne JSON:API par couple (entité × indicateur) — une page de 2 projets fait 54 lignes. `boond_reporting_dashboard` reconstruit le tableau attendu (entités en lignes, indicateurs en colonnes) et le renvoie en `structuredContent` typé par un `outputSchema` dédié — l'app en est un consommateur typé, contrairement aux outils `get` qui restent volontairement en texte seul. Trois formes réelles de réponse sont couvertes : indicateurs **avec** `dependsOn` (projets, ressources, sociétés → pivot), **sans** (synthèse → une ligne par KPI avec colonnes valeur/cible), et entités brutes sans scorecard (plans de production). Deux pièges de l'API sont traités et testés : deux indicateurs peuvent partager une `reference` en ne différant que par `scorecard.dictionaryId` (`numberOfOpportunitiesPerStates` est émis une fois par état — les replier perdrait toutes les valeurs sauf une), et `meta.totals.rows` compte les lignes d'indicateurs alors que `meta.totals.dependsOn` compte les entités, seul « total » qui ait un sens une fois pivoté.
+- **`max`, un plafond de pagination uniforme** sur le dashboard, mappé vers `maxProjects` / `maxResources` / `maxCompanies` selon le `report` choisi ; les filtres non acceptés par l'endpoint sélectionné ne sont **pas transmis** (l'API les ignorerait en silence, et une liste non filtrée serait présentée comme filtrée). Les endpoints qui exigent `startDate` + `endDate` sont refusés avec un message explicite plutôt que renvoyés vers un 422 de l'API.
+- `_meta.ui.visibility: ["model", "app"]` sur les cinq outils `boond_reporting_*` : l'app peut les rappeler pour le drill-down. Sans effet sur les clients qui n'implémentent pas l'extension.
+
+### Changed
+
+- `npm run build` exécute désormais `scripts/copy-ui-assets.mjs` après `tsc` : `src/ui/assets/*.html` est copié dans `dist/ui/assets/`, pour que le même chemin relatif résolve depuis `src/` sous vitest et depuis `dist/` à l'exécution. L'asset est présent dans le tarball npm et dans le bundle `.mcpb` (vérifié). Les builds navigateur/React de `@modelcontextprotocol/ext-apps` — inutilisés côté serveur — sont exclus du `.mcpb` (~700 Ko).
+- `TOOLS.md` liste les ressources `ui://` dans une section distincte, avec l'outil qui les rend : ce ne sont pas des dictionnaires.
+- **Les ressources `ui://` sont filtrées par la politique d'accès**, exception explicite à l'invariant « les ressources ne sont jamais filtrées ». Cet invariant vise le substrat de résolution (dictionnaires, `current-user`), utile quels que soient les outils exposés ; une ressource `ui://` est la surface de rendu d'un domaine précis, et l'annoncer alors que `BOOND_MCP_DOMAINS` masque le reporting listerait une UI qu'aucun outil ne peut alimenter.
+
+### Security
+
+- **Aucune donnée BoondManager n'est interpolée dans le HTML côté serveur.** L'asset est statique ; la donnée arrive exclusivement par `tools/call` et est insérée via `textContent`, jamais `innerHTML` — les noms de sociétés, références de projets et notes CRM sont du contenu utilisateur.
+- **CSP sans aucun domaine autorisé** (`connectDomains`/`resourceDomains`/`frameDomains`/`baseUriDomains` vides) et **aucune permission navigateur demandée**. Comme une violation serait silencieuse et ne se verrait que chez le client, `src/ui/index.test.ts` la déplace au build : l'asset est refusé s'il contient un `<script src=`, un `<link href=`, un `@import`, une URL distante (hors espace de noms SVG), un `fetch`/`XMLHttpRequest`/`WebSocket`, ou une affectation de balisage (`innerHTML`, `document.write`, `eval`).
+
+### Documentation
+
+- Nouveau `docs/mcp-apps.md` : ce qui est exposé, pourquoi le pivot est fait côté serveur, la dégradation gracieuse, le contrat CSP, la politique d'accès, comment tester (Claude Desktop / MCPJam), et la procédure pour ajouter une UI.
+- `README.md` : section *Tableau de bord interactif (MCP Apps)* avec capture d'écran (données anonymisées).
+- `CLAUDE.md` : nouvelle section *MCP Apps*, et *MCP Spec Level* mentionne l'extension (elle ne change pas la révision négociée).
+
 ## [2.11.0] - 2026-08-06
 
 Qualité d'usage : les rejets de schéma deviennent une boucle d'auto-correction pour le modèle, la réduction de périmètre devient praticable sans connaître les 38 domaines, les icônes protocolaires arrivent et l'ordre de `tools/list` est verrouillé ([#168](https://github.com/fauguste/boondmanager-mcp-server/issues/168)). Catalogue inchangé : **180 outils, 11 prompts, 22 ressources**.

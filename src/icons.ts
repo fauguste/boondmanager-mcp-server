@@ -176,6 +176,15 @@ export function identityIcons(): Icon[] | undefined {
   return iconsDisabled() ? undefined : [PERSON];
 }
 
+/**
+ * Icons for the `ui://` MCP Apps resources. Same glyph as the `reporting`
+ * domain they render — the app and the tools that feed it read as one group in
+ * a client that lists both.
+ */
+export function dashboardIcons(): Icon[] | undefined {
+  return iconsDisabled() ? undefined : [CHART];
+}
+
 export function iconsForDomain(domain: DomainName | undefined): Icon[] | undefined {
   if (domain === undefined || iconsDisabled()) return undefined;
   return DOMAIN_ICONS[domain];
