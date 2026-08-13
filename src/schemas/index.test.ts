@@ -4,6 +4,7 @@ import {
   SearchSchema,
   IdSchema,
   IdTabSchema,
+  DocumentIdSchema,
   CandidateCreateSchema,
   CandidateUpdateSchema,
   ResourceCreateSchema,
@@ -143,6 +144,45 @@ describe("IdSchema", () => {
     for (const id of ["../invoices/5", "1?maxResults=99999", "1/financial", "abc", "%2e%2e"]) {
       expect(IdSchema.safeParse({ id }).success, id).toBe(false);
     }
+  });
+});
+
+describe("DocumentIdSchema", () => {
+  it("should accept the suffixed ids exposed by entity relations", () => {
+    for (const id of ["123_resume", "5_file", "42_administrativeFile", "7_picture"]) {
+      expect(DocumentIdSchema.safeParse({ id }).success, id).toBe(true);
+    }
+  });
+
+  it("should still accept a bare numeric id", () => {
+    expect(DocumentIdSchema.safeParse({ id: "123" }).success).toBe(true);
+  });
+
+  it("should keep the path-traversal / query-injection guard", () => {
+    for (const id of [
+      "",
+      "../invoices/5",
+      "1?maxResults=99999",
+      "1/financial",
+      "abc",
+      "%2e%2e",
+      "123_",
+      "123_res ume",
+      "123_resume/../x",
+      "_resume",
+    ]) {
+      expect(DocumentIdSchema.safeParse({ id }).success, id).toBe(false);
+    }
+  });
+
+  it("should reject extra fields (strict mode)", () => {
+    expect(DocumentIdSchema.safeParse({ id: "123_resume", tab: "information" }).success).toBe(false);
+  });
+
+  it("should explain the suffix in its error message", () => {
+    const result = DocumentIdSchema.safeParse({ id: "cv.pdf" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toContain("123_resume");
   });
 });
 

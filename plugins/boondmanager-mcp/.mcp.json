@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "boondmanager-mcp-server@2.12.0"
+        "boondmanager-mcp-server@2.12.1"
       ],
       "env": {
         "BOOND_BASE_URL": "${user_config.base_url}",

@@ -791,12 +791,30 @@ export async function apiDownload(path: string, onProgress?: ProgressReporter): 
     throw new Error(formatApiError(response.status, response.statusText, "GET", path, errorText));
   }
 
+  const contentType = response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream";
+  const filename = parseContentDispositionFilename(response.headers.get("content-disposition"));
+
+  // BoondManager only answers 404 on an unknown document when the request asks
+  // for JSON. With the `Accept: */*` this function sends, it serves the
+  // application shell instead — HTTP 200, `text/html`, ~9 KB — which the caller
+  // would happily surface as the document's text content. A truncated id then
+  // looks like a corrupted file rather than a wrong id, so refuse the shell
+  // here. An HTML *document* is still downloadable: a real file download
+  // carries a `Content-Disposition` filename, the shell doesn't.
+  if (contentType === "text/html" && !filename) {
+    throw new Error(
+      [
+        "BoondManager returned an HTML page instead of a document (HTTP 200, text/html).",
+        `Endpoint: GET ${path}`,
+        "Hint: The document id is most likely wrong or truncated. Entity relations expose suffixed ids " +
+          "(e.g. `123_resume`, `123_file`) — pass the id verbatim, suffix included. BoondManager serves its " +
+          "application shell for an unknown /documents/<id> instead of a 404.",
+      ].join("\n")
+    );
+  }
+
   const data = await readDownloadBody(response, onProgress);
-  return {
-    data,
-    contentType: response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream",
-    filename: parseContentDispositionFilename(response.headers.get("content-disposition")),
-  };
+  return { data, contentType, filename };
 }
 
 /**

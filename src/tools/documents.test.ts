@@ -72,6 +72,34 @@ describe("registerDocumentTools", () => {
       expect(Buffer.from(resource.blob!, "base64").toString()).toBe("%PDF-1.4 fake");
     });
 
+    // Entity relations expose suffixed document ids (`123_resume`); rejecting
+    // them pushed the caller into stripping the suffix, which silently returns
+    // the app shell instead of the file — see issue #186.
+    it("accepts the suffixed ids exposed by entity relations", async () => {
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: Buffer.from("%PDF-1.4 fake"),
+        contentType: "application/pdf",
+        filename: "cv-dupont.pdf",
+      });
+      registerDocumentTools(server);
+      const config = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_documents_get")![1];
+      const schema = config.inputSchema as unknown as {
+        shape: { id: { safeParse: (v: unknown) => { success: boolean } } };
+      };
+      expect(schema.shape.id.safeParse("123_resume").success).toBe(true);
+      expect(schema.shape.id.safeParse("../invoices/5").success).toBe(false);
+
+      const result = await handlerOf(server, "boond_documents_get")({ id: "123_resume" });
+      expect(apiDownload).toHaveBeenCalledWith("/documents/123_resume", expect.any(Function));
+      expect(result.content[1].resource!.uri).toBe("boond://documents/123_resume");
+    });
+
+    it("mentions the suffix in its description so the id isn't truncated", () => {
+      registerDocumentTools(server);
+      const config = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_documents_get")![1];
+      expect(config.description).toContain("123_resume");
+    });
+
     it("returns text documents as plain text", async () => {
       vi.mocked(apiDownload).mockResolvedValue({
         data: Buffer.from("Jean Dupont — Développeur TypeScript"),
