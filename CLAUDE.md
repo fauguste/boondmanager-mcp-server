@@ -162,6 +162,25 @@ the file server-side; the MCP server never reads local files), with
 `parsing: true` to trigger Boond's AI resume parsing on `candidateResume`.
 Delete goes through the factory (elicitation + structuredContent).
 
+Document ids are the **one exception** to the numeric-id rule, and the two
+halves of that exception have to stay together (issue #186):
+
+- Relations expose them **suffixed** — `{"resumes":{"data":[{"id":"123_resume"}]}}`
+  — so `boond_documents_get` validates with `DocumentIdSchema`
+  (`/^\d+(_[A-Za-z]+)?$/`), not `IdSchema`. Every other tool keeps `IdSchema`.
+  The suffix alphabet stays letters-only so the id still can't smuggle a path
+  segment / `..` / `?` / `#` into the API path; both cases are allowed because
+  Boond derives the suffix from camelCase parent types (`administrativeFile`).
+- BoondManager answers an **unknown** `/documents/<id>` with its app shell —
+  HTTP 200, `text/html`, ~9 KB — instead of a 404, because `apiDownload` sends
+  `Accept: */*` (it only 404s when JSON is explicitly requested). `isTextMime`
+  accepts `text/html`, so that page used to be returned *as the document's
+  text*: a truncated id looked like a corrupted CV, not a wrong id. `apiDownload`
+  therefore refuses `text/html` **without** a `Content-Disposition` filename —
+  a real file download carries one, the shell doesn't, so genuine HTML documents
+  still work. Rejecting the suffixed id without this guard is what made the
+  failure silent, hence: don't remove one without the other.
+
 **List summaries** (`src/services/boond-client.ts::formatEntitySummary`): one
 line per search result. Rows are normally identified by name / `value` /
 `title`. Rows that have none of those — `/invoices`, `/orders`, `/actions`,

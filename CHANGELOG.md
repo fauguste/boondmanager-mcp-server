@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.12.1] - 2026-08-13
+
+### Fixed
+
+- **`boond_documents_get` : les identifiants de documents suffixés sont acceptés, et l'échec n'est plus masqué** ([#186](https://github.com/fauguste/boondmanager-mcp-server/issues/186)). Les relations d'entités exposent des IDs de documents **suffixés** (`"resumes": [{ "id": "123_resume" }]`), que `IdSchema` (numérique strict) rejetait : l'appelant en déduisait qu'il fallait retirer le suffixe — et c'est là que le bug devenait invisible. `/documents/123` n'existe pas, mais l'API ne répond `404` que si l'on demande explicitement du JSON ; avec l'en-tête `Accept: */*` qu'envoie `apiDownload`, c'est la **coquille HTML de l'application** qui arrive, en HTTP 200. `isTextMime("text/html")` étant vrai, cette page était retournée comme contenu texte du document : vu de l'appelant, un CV illisible plutôt qu'un ID tronqué. Deux correctifs, chacun verrouillé par des tests. (1) Nouveau `DocumentIdSchema` (`/^\d+(_[A-Za-z]+)?$/`), utilisé **par `boond_documents_get` uniquement** — les autres outils gardent `IdSchema`. L'alphabet du suffixe reste alphabétique pur, donc le garde-fou contre l'injection de segments de chemin (`/`, `..`, `?`, `#`) est intact ; les deux casses sont admises parce que Boond dérive le suffixe de types parents en camelCase (`administrativeFile`). (2) Garde dans `apiDownload` : une réponse `text/html` **sans nom de fichier en `Content-Disposition`** est la coquille de l'app, pas un document — elle lève désormais une erreur explicite qui nomme la cause probable (ID tronqué) plutôt que d'être transmise. Un vrai document HTML, qui lui porte un `Content-Disposition: attachment`, reste téléchargeable. La description de l'outil dit maintenant de reprendre l'ID **tel quel, suffixe compris**.
+
 ## [2.12.0] - 2026-08-09
 
 ### Added

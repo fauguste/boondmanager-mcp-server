@@ -10,7 +10,7 @@
       "name": "boondmanager-mcp",
       "source": "./plugins/boondmanager-mcp",
       "description": "BoondManager ERP/CRM — 180 outils, 11 prompts, 22 resources",
-      "version": "2.12.0",
+      "version": "2.12.1",
       "category": "productivity",
       "tags": ["erp", "crm", "boondmanager", "esn", "recrutement", "facturation"]
     }

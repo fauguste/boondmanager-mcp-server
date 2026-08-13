@@ -1964,6 +1964,54 @@ describe("apiDownload", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // BoondManager answers an unknown /documents/<id> with the app shell (HTTP
+  // 200, text/html) instead of a 404 when the request doesn't ask for JSON.
+  // Returning it as the document's content made a truncated id look like a
+  // corrupted file — see issue #186.
+  describe("HTML app-shell guard", () => {
+    function htmlResponse(headers: Record<string, string>) {
+      const bytes = Buffer.from("<!DOCTYPE html><html><body>BoondManager</body></html>");
+      return vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(headers),
+        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)),
+      });
+    }
+
+    it("refuses an HTML page served in place of a document", async () => {
+      vi.stubGlobal("fetch", htmlResponse({ "content-type": "text/html; charset=utf-8" }));
+      await expect(apiDownload("/documents/123")).rejects.toThrow(/HTML page instead of a document/);
+    });
+
+    it("points at the suffixed id in the error", async () => {
+      vi.stubGlobal("fetch", htmlResponse({ "content-type": "text/html" }));
+      await expect(apiDownload("/documents/123")).rejects.toThrow(/123_resume/);
+      await expect(apiDownload("/documents/123")).rejects.toThrow(/GET \/documents\/123/);
+    });
+
+    it("still downloads a genuine HTML file (attachment filename present)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        htmlResponse({
+          "content-type": "text/html",
+          "content-disposition": 'attachment; filename="lettre.html"',
+        })
+      );
+      const doc = await apiDownload("/documents/123_file");
+      expect(doc.contentType).toBe("text/html");
+      expect(doc.filename).toBe("lettre.html");
+      expect(doc.data.toString()).toContain("BoondManager");
+    });
+
+    it("leaves other content types untouched", async () => {
+      vi.stubGlobal("fetch", htmlResponse({ "content-type": "application/xhtml+xml" }));
+      await expect(apiDownload("/documents/123_resume")).resolves.toMatchObject({
+        contentType: "application/xhtml+xml",
+      });
+    });
+  });
+
   describe("byte progress", () => {
     /** A body delivered in `chunks` slices of `chunkBytes`, plus its Content-Length. */
     function streamedResponse(chunks: number, chunkBytes: number, withContentLength = true) {

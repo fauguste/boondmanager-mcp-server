@@ -1,8 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { apiDownload, apiUploadForm, formatDetailResponse } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
-import { IdSchema, DocumentCreateSchema } from "../schemas/index.js";
-import type { IdInput, DocumentCreateInput } from "../schemas/index.js";
+import { DocumentIdSchema, DocumentCreateSchema } from "../schemas/index.js";
+import type { DocumentIdInput, DocumentCreateInput } from "../schemas/index.js";
 import { MAX_DOCUMENT_BYTES, CHARACTER_LIMIT } from "../constants.js";
 import { registerDeleteTool, MutationOutputSchema } from "./crud-factory.js";
 
@@ -19,13 +19,13 @@ export function registerDocumentTools(server: McpServer): void {
       title: "Télécharger un document",
       description: `Télécharge le contenu d'un document BoondManager (CV de candidat/ressource, justificatif, contrat, facture...) par son ID.
 
-Où trouver les IDs de documents : dans les onglets des entités — ex. boond_candidates_information expose les relations 'resumes' (CV) et 'files' (dossier administratif).
+Où trouver les IDs de documents : dans les onglets des entités — ex. boond_candidates_information expose les relations 'resumes' (CV) et 'files' (dossier administratif). ⚠️ Reprendre l'ID **tel quel**, suffixe compris (ex. '123_resume') : un ID tronqué à sa partie numérique ne désigne aucun document.
 
 Le contenu est retourné en ressource MCP embarquée (base64 pour les binaires type PDF/DOCX, texte brut pour les fichiers texte). Taille max: ${Math.round(MAX_DOCUMENT_BYTES / 1024 / 1024)} Mo — à n'utiliser que lorsque le contenu du fichier est réellement nécessaire (un CV en base64 occupe beaucoup de contexte).
 
 Args:
-  - id (string): Identifiant du document`,
-      inputSchema: IdSchema,
+  - id (string): Identifiant du document, tel qu'exposé par la relation (ex. 123_resume)`,
+      inputSchema: DocumentIdSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -33,7 +33,7 @@ Args:
         openWorldHint: false,
       },
     },
-    async (params: IdInput, extra: unknown) => {
+    async (params: DocumentIdInput, extra: unknown) => {
       // Byte-level progress, but only when the client asked for it and the
       // response announces a Content-Length (see readDownloadBody).
       const doc = await apiDownload(`/documents/${params.id}`, progressReporterFrom(extra));

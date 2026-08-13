@@ -531,6 +531,28 @@ export const IdSchema = z
   })
   .strict();
 
+// Document ids are the one exception to the numeric rule: entity relations
+// expose them **suffixed** with the document's parent type
+// (`{"resumes":{"data":[{"id":"123_resume"}]}}`). Validating them with
+// `EntityIdSchema` rejected the id the caller was legitimately given, and
+// stripping the suffix to satisfy the schema produces an id BoondManager
+// answers with its app shell in HTTP 200 (see the `text/html` guard in
+// `apiDownload`) — a silent failure. The suffix alphabet stays letters-only so
+// the id still can't smuggle a path segment, `..`, `?` or `#` into the API
+// path. Letters are allowed in both cases because Boond derives the suffix
+// from camelCase parent types (`administrativeFile`).
+export const DocumentIdSchema = z
+  .object({
+    id: z
+      .string()
+      .regex(
+        /^\d+(_[A-Za-z]+)?$/,
+        "L'identifiant de document doit être numérique, avec un suffixe optionnel (ex. 123_resume)"
+      )
+      .describe("Identifiant du document, tel qu'exposé par les relations d'entités (ex. 123_resume)"),
+  })
+  .strict();
+
 // ID + tab param schema
 export const IdTabSchema = z
   .object({
@@ -1652,6 +1674,7 @@ export type OpportunitySearchInput = z.infer<typeof OpportunitySearchSchema>;
 export type ProjectSearchInput = z.infer<typeof ProjectSearchSchema>;
 export type IdInput = z.infer<typeof IdSchema>;
 export type IdTabInput = z.infer<typeof IdTabSchema>;
+export type DocumentIdInput = z.infer<typeof DocumentIdSchema>;
 export type ResourceTimesheetInput = z.infer<typeof ResourceTimesheetSchema>;
 export type TimesheetSearchInput = z.infer<typeof TimesheetSearchSchema>;
 export type TimesheetGetInput = z.infer<typeof TimesheetGetSchema>;
