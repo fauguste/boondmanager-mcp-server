@@ -1,6 +1,6 @@
 {
   "name": "boondmanager-mcp-server",
-  "version": "2.12.1",
+  "version": "2.12.2",
   "description": "MCP Server for BoondManager API - 180 tools, 11 prompts, 22 resources (ERP/CRM)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -68,6 +68,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "ajv": "^8.17.1",
     "eslint": "^10.0.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.4",

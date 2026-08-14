@@ -53,6 +53,7 @@ import {
   type RegistrationIndex,
 } from "./tools/registration-decorators.js";
 import { installProtocolIcons } from "./icons.js";
+import { installSchemaDialectCompat } from "./schema-dialect.js";
 
 // Re-exported for the catalogue generator and tests that import it from here.
 export { REGISTERED_DOMAINS } from "./constants.js";
@@ -225,6 +226,13 @@ export function createMcpServer(): McpServer {
   // call. The index it closes over is filled during registerAll below.
   const index = createRegistrationIndex();
   installProtocolIcons(server, index);
+
+  // Same "before any registration" constraint, same mechanism: drops the
+  // draft-07 `$schema` the SDK stamps on every advertised inputSchema/
+  // outputSchema, which a 2020-12-only host validator refuses to compile —
+  // making every tool that declares an outputSchema (all `*_search`) unusable
+  // client-side. See schema-dialect.ts.
+  installSchemaDialectCompat(server);
 
   // Operator-configured restrictions (env-driven). Absent config = full surface.
   registerAll(server, resolveAccessPolicy(), index);
