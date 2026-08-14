@@ -82,6 +82,7 @@ src/
 ├── server.ts             # createMcpServer() factory — instantiates McpServer (name/version/description + instructions) + registers tools/prompts/resources
 ├── instructions.ts       # SERVER_INSTRUCTIONS — cross-cutting usage rules sent once at initialize
 ├── icons.ts              # DOMAIN_ICONS (SEP-973) + installProtocolIcons() — decorates tools/list & prompts/list responses
+├── schema-dialect.ts     # installSchemaDialectCompat() — strips the SDK's draft-07 `$schema` from advertised input/outputSchema
 ├── constants.ts          # DEFAULT_BASE_URL, pagination limits, API_PATHS, ENTITY_TABS
 ├── types.ts              # JsonApiResource, JsonApiResponse, BoondConfig, SearchParams
 ├── transports/
@@ -468,7 +469,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 62 test files, **1032 tests**
+- **Current stats**: 63 test files, **1051 tests**
 
 ### Test file template (for read-only search+get domains):
 
@@ -592,7 +593,7 @@ The crud-factory tools declare an MCP `outputSchema` and return
   would double the payload). No `mimeType`/`sizes` — the URI carries the type and
   SVG is scalable. Path data uses `,` separators so nothing needs `%20`.
 - **Byte cost is the design constraint**: icons ride on *every* `tools/list`
-  entry — measured **~40 KiB, ~14 % of the 295 KiB payload**. Capped in
+  entry — measured **~40 KiB, ~14 % of the 283 KiB payload**. Capped in
   `src/tools/descriptions.test.ts` (absolute + share-of-payload) and per-icon in
   `src/icons.test.ts`. Opt-out: `BOOND_MCP_ICONS=0|false|no|off`.
 - **Delivery mechanism**: SDK 1.30 types `icons` on `Tool`/`Prompt` but its
@@ -608,6 +609,46 @@ The crud-factory tools declare an MCP `outputSchema` and return
   (`src/tools/registration-decorators.ts`), never from parsing tool names — so
   `boond_provider_invoices_*` and `boond_workflow_*` get the right glyph.
 - The TOOLS.md generator ignores icons on purpose (it renders a text catalogue).
+
+## No JSON Schema Dialect on Advertised Schemas
+
+`src/schema-dialect.ts::installSchemaDialectCompat()` strips `$schema` from
+every `inputSchema` / `outputSchema` in `tools/list`. Same shim mechanism and
+same "before the first registration" constraint as `installProtocolIcons`.
+
+Why it exists: the SDK converts Zod v4 schemas with
+`z.toJSONSchema(schema, { target: 'draft-7' })` (hardcoded in
+`server/zod-json-schema-compat.js`, no option to change or omit), which stamps
+`"$schema": "http://json-schema.org/draft-07/schema#"` on all 239 advertised
+schemas. A host that validates `structuredContent` with a **2020-12-only**
+validator (`Ajv2020`) refuses to *compile* such a schema —
+`no schema with key or ref "http://json-schema.org/draft-07/schema#"` — and that
+happens at client-side tool registration, i.e. **before any call**: the tool
+doesn't fail, it disappears.
+
+The symptom is asymmetric and misleading, so recognise it: only the **59 tools
+that declare an `outputSchema`** (every `*_search`, plus create/update/delete)
+break, while the ~120 without one (`*_get`, dictionaries, reporting) keep
+working — even though *all 180* carry the same `$schema` on their `inputSchema`.
+A client in that state can only re-read entities whose id it already knows.
+
+Design points, each with a test in `src/schema-dialect.test.ts`:
+
+- **Declaring nothing, not declaring 2020-12.** `$schema` is not part of MCP's
+  `Tool.inputSchema` / `Tool.outputSchema` shape, and the catalogue uses no
+  dialect-specific keyword (no `$ref`, no `$defs`, no `definitions`) — so every
+  validator reads the schemas identically under its own default dialect.
+  Announcing 2020-12 would just move the break to draft-07-only validators, the
+  MCP SDK's own client among them (plain Ajv 8, draft-07 by default).
+- **Only *string* `$schema` members are removed.** A property *named* `$schema`
+  inside `properties` is a schema **object**; a blind recursive delete would
+  silently drop it from the advertised input shape.
+- `stripSchemaDialect` returns its input **by identity** when there is nothing to
+  strip, so the day the SDK stops emitting the declaration this costs nothing.
+- Bonus: ~10 KiB off `tools/list` (282.9 KiB instead of 293.4).
+
+Deletable the moment the SDK omits `$schema` or lets us pick the target — the
+test asserts over a real client, so the regression can't return quietly.
 
 ## Deterministic `tools/list` Order
 

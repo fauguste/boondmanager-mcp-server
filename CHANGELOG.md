@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.12.2] - 2026-08-14
+
+### Fixed
+
+- **Tous les outils `*_search` étaient inutilisables sur les clients dont le validateur ne connaît que JSON Schema 2020-12.** Le SDK convertit nos schémas Zod avec `z.toJSONSchema(schema, { target: 'draft-7' })`, ce qui estampille chaque `inputSchema` / `outputSchema` annoncé d'un `"$schema": "http://json-schema.org/draft-07/schema#"`. Un hôte qui valide le `structuredContent` avec un validateur **2020-12 uniquement** (`Ajv2020`) refuse alors de *compiler* le schéma — `no schema with key or ref "http://json-schema.org/draft-07/schema#"` — et l'échec se produit à l'enregistrement de l'outil côté client, donc **avant tout appel** : l'outil n'échoue pas, il devient indisponible. Le symptôme était asymétrique et déroutant : seuls les **59 outils qui déclarent un `outputSchema`** (tous les `*_search`, plus create/update/delete) étaient touchés, alors que les ~120 sans (`*_get`, dictionnaires, reporting) fonctionnaient — bien que les 180 portent le même `$schema` sur leur `inputSchema`. Résultat côté utilisateur : impossible de chercher une entité, seulement de la relire quand on connaît déjà son ID. Correctif : la déclaration de dialecte est retirée des schémas annoncés (`src/schema-dialect.ts`, décorateur de réponses `tools/list` branché via l'API publique `Server.setRequestHandler`, même mécanisme que les icônes). `$schema` ne fait **pas** partie de la forme `Tool.inputSchema` / `Tool.outputSchema` de la spec MCP, et le catalogue n'utilise **aucun mot-clé propre à un dialecte** (ni `$ref`, ni `$defs`, ni `definitions`) : ne rien déclarer est la seule option qui satisfasse à la fois les validateurs 2020-12 et draft-07 — annoncer 2020-12 aurait déplacé la panne vers le client du SDK MCP lui-même, dont l'Ajv 8 est en draft-07 par défaut. Le retrait est récursif mais ne touche que les `$schema` de type *chaîne*, sans quoi un filtre qui s'appellerait `$schema` disparaîtrait de la forme annoncée. Effet de bord bienvenu : **~10 Kio de moins sur `tools/list`** (282,9 Kio au lieu de 293,4). Trois tests le verrouillent sur un vrai client : aucun dialecte annoncé nulle part, les 239 schémas compilent sous `Ajv2020`, et un `structuredContent` réel valide toujours.
+
 ## [2.12.1] - 2026-08-13
 
 ### Fixed
