@@ -47,7 +47,7 @@ const MULTI_WORD_DOMAINS = REGISTERED_DOMAINS
 
 // ---- Capture all registrations against a stub McpServer ----------------
 
-const captured = { tools: [], prompts: [], resources: [] };
+const captured = { tools: [], prompts: [], resources: [], templates: [] };
 
 const stub = {
   registerTool: (name, config /*, _cb */) => {
@@ -56,8 +56,18 @@ const stub = {
   registerPrompt: (name, config /*, _cb */) => {
     captured.prompts.push({ name, ...config });
   },
-  registerResource: (name, uri, config /*, _cb */) => {
-    captured.resources.push({ name, uri, ...config });
+  // `registerResource` is overloaded: a fixed URI string, or a ResourceTemplate
+  // instance (entity templates — `boond://candidate/{id}`). They land in two
+  // buckets because they are two different surfaces for the client: a template
+  // is advertised by `resources/templates/list` and is NOT enumerable, so it
+  // never appears in `resources/list`. Bucketing them also keeps the sort below
+  // from calling `localeCompare` on an object.
+  registerResource: (name, uriOrTemplate, config /*, _cb */) => {
+    if (typeof uriOrTemplate === "string") {
+      captured.resources.push({ name, uri: uriOrTemplate, ...config });
+    } else {
+      captured.templates.push({ name, uriTemplate: String(uriOrTemplate.uriTemplate), ...config });
+    }
   },
 };
 
@@ -143,7 +153,7 @@ lines.push("");
 lines.push("> Auto-generated from the server registrations. Do not edit by hand.");
 lines.push("> Regenerate with `npm run docs:tools` (CI fails if this file is stale).");
 lines.push("");
-lines.push(`**${captured.tools.length} tools** across **${domains.length} domains** · **${captured.prompts.length} prompts** · **${captured.resources.length} resources**.`);
+lines.push(`**${captured.tools.length} tools** across **${domains.length} domains** · **${captured.prompts.length} prompts** · **${captured.resources.length} resources** · **${captured.templates.length} resource templates**.`);
 lines.push("");
 lines.push("Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).");
 lines.push("");
@@ -184,6 +194,17 @@ for (const r of [...captured.resources].sort((a, b) => a.uri.localeCompare(b.uri
 }
 lines.push("");
 
+lines.push(`## Resource templates (${captured.templates.length})`);
+lines.push("");
+lines.push("Parameterised resources (`resources/templates/list`). Not enumerable — read a URI directly, or let the client autocomplete the id via `completions/complete`.");
+lines.push("");
+lines.push("| URI template | Title |");
+lines.push("|---|---|");
+for (const t of [...captured.templates].sort((a, b) => a.uriTemplate.localeCompare(b.uriTemplate))) {
+  lines.push(`| \`${t.uriTemplate}\` | ${md(t.title)} |`);
+}
+lines.push("");
+
 const generated = lines.join("\n");
 
 // ---- Write or check ---------------------------------------------------
@@ -200,5 +221,7 @@ if (checkMode) {
   console.log(`${OUTPUT_PATH} is up to date.`);
 } else {
   writeFileSync(OUTPUT_PATH, generated);
-  console.log(`Wrote ${OUTPUT_PATH} — ${captured.tools.length} tools, ${captured.prompts.length} prompts, ${captured.resources.length} resources.`);
+  console.log(
+    `Wrote ${OUTPUT_PATH} — ${captured.tools.length} tools, ${captured.prompts.length} prompts, ${captured.resources.length} resources, ${captured.templates.length} templates.`
+  );
 }
