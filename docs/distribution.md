@@ -9,7 +9,7 @@ the reference for what gets pushed where on each release.
 
 | Channel | URL / Identifier | Sync mechanism | Frequency |
 |---|---|---|---|
-| **npm** | [`boondmanager-mcp-server`](https://www.npmjs.com/package/boondmanager-mcp-server) | `npm publish --provenance` step in `release.yml` | every `v*` tag |
+| **npm** | [`boondmanager-mcp-server`](https://www.npmjs.com/package/boondmanager-mcp-server) | `npm publish --provenance` step in `release.yml`, authenticated by **OIDC trusted publishing** (no `NPM_TOKEN`; see the secrets section of `CLAUDE.md` for the two traps that make it fail with a misleading 404) | every `v*` tag |
 | **MCP Registry** | [`io.github.fauguste/boondmanager-mcp-server`](https://registry.modelcontextprotocol.io/) | `mcp-publisher publish` in `release.yml` (GitHub OIDC) | every `v*` tag |
 | **GitHub Releases (.mcpb bundle)** | [releases page](https://github.com/fauguste/boondmanager-mcp-server/releases) | `softprops/action-gh-release@v3` in `release.yml`; body sourced from `CHANGELOG.md` | every `v*` tag |
 | **GitHub Container Registry** | `ghcr.io/fauguste/boondmanager-mcp-server` | `docker/build-push-action@v6` in `release.yml`; multi-arch (amd64+arm64), tags `:latest`, `:X`, `:X.Y`, `:X.Y.Z` | every `v*` tag |

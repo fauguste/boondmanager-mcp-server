@@ -20,15 +20,26 @@ jobs:
         with:
           fetch-depth: 0
           # This job never pushes back with git (releases use GITHUB_TOKEN via
-          # the API, MCP Registry uses OIDC, npm uses NODE_AUTH_TOKEN), so don't
-          # leave a usable git credential on disk for downloaded tools to find.
+          # the API, and both the MCP Registry and npm authenticate with OIDC),
+          # so don't leave a usable git credential on disk for downloaded tools.
           persist-credentials: false
 
       - name: Setup Node.js
+        # ⚠️ `registry-url` is deliberately ABSENT and must stay absent.
+        # Setting it makes setup-node write `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
+        # into .npmrc unconditionally. With trusted publishing there is no
+        # NODE_AUTH_TOKEN, so that line expands to an EMPTY token — and the npm
+        # CLI reads "auth is already configured", skips the OIDC exchange, and
+        # publishes with empty credentials. The registry answers
+        # `404 Not Found - PUT`, which reads exactly like a bad token and sends
+        # you looking at the wrong thing (that is how v2.13.0's first release
+        # attempt failed). Without registry-url, npm defaults to
+        # registry.npmjs.org anyway and no auth line is written, so the OIDC
+        # exchange happens. `auth-token-line: false` would be the explicit fix
+        # but does not exist at this pinned SHA.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: 22
-          registry-url: "https://registry.npmjs.org"
           cache: "npm"
 
       - name: Install dependencies
@@ -75,15 +86,36 @@ jobs:
           echo "npm_tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
           echo "Detected: version=$TAG_VERSION prerelease=$IS_PRERELEASE npm_tag=$NPM_TAG"
 
+      # Trusted publishing needs npm >= 11.5.1; Node 22 still bundles 10.9.x.
+      # Upgraded here rather than right after setup-node on purpose: lint,
+      # typecheck, tests and build then run under the exact npm that ci.yml
+      # uses, so a release can't pass checks in an environment CI never
+      # exercises. The blast radius stays limited to publishing.
+      - name: Upgrade npm for trusted publishing (OIDC)
+        run: |
+          npm install -g npm@^12.0.2
+          npm --version
+
       # npm publish runs BEFORE the prune below: `prepublishOnly` re-runs
       # `tsc` (a devDependency), so the full dev tree must still be present.
       - name: Publish to npm
+        # No NODE_AUTH_TOKEN: authentication is OIDC trusted publishing,
+        # configured on npmjs.com against (fauguste, boondmanager-mcp-server,
+        # release.yml). `permissions.id-token: write` above is what lets the
+        # runner mint the OIDC token. Nothing to rotate, nothing to expire —
+        # the previous long-lived NPM_TOKEN expired silently at its 90-day cap
+        # and broke the release.
+        #
         # `--tag <npm_tag>` ensures prereleases land under e.g. `@alpha`
         # rather than overwriting the default `latest` dist-tag and reaching
         # users running `npm install boondmanager-mcp-server` without a tag.
+        #
+        # `--provenance` is redundant under trusted publishing (attestations
+        # are generated automatically for a public repo + public package) and
+        # is kept deliberately: it turns provenance into a hard requirement, so
+        # if the automatic path ever stops applying the release fails loudly
+        # instead of quietly shipping an unattested tarball.
         run: npm publish --provenance --access public --tag "${{ steps.version.outputs.npm_tag }}"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Strip devDependencies before packing — `mcpb pack` bundles the whole
       # node_modules tree, so without this the .mcpb ships vitest/typescript/
