@@ -28,6 +28,15 @@ export const MAX_SEARCH_PAGE = 100;
 // flooding the conversation.
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 
+// Hard ceiling on the body of an entity resource template
+// (`boond://candidate/{id}`). Unlike a tool, a resource has no `pageSize` and
+// the model cannot ask for less, so the cap is enforced server-side by dropping
+// whole sections — never by truncating the text, which on pretty-printed JSON
+// would hand the client an unparseable body. Deliberately larger than
+// CHARACTER_LIMIT: that one budgets a *page of list rows* for the context
+// window, while an aggregated entity record is bigger by nature.
+export const MAX_RESOURCE_BYTES = 256 * 1024;
+
 // HTTP client defaults
 // Timeout applied to every BoondManager API request. Overridable via
 // BOOND_HTTP_TIMEOUT_MS to handle slow tenants or long reporting queries.

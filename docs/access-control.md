@@ -134,10 +134,18 @@ jamais par erreur `provider-invoices`.
   donc pas de la présence de `workflows` dans la liste blanche. Pour supprimer
   uniquement la forme « outil » tout en gardant les prompts :
   `BOOND_MCP_EXCLUDE_DOMAINS=workflows`.
-- **Resources** (dictionnaires `boond://dictionary/*`, current-user) : **non
-  filtrées**. Elles sont en lecture seule par nature et servent de substrat de
-  résolution (libellés d'états/types). Elles restent disponibles quelle que
-  soit la policy.
+- **Resources statiques** (dictionnaires `boond://dictionary/*`, current-user) :
+  **non filtrées**. Elles sont en lecture seule par nature et servent de
+  substrat de résolution (libellés d'états/types). Elles restent disponibles
+  quelle que soit la policy.
+- **Templates d'entités** (`boond://candidate/{id}`, `boond://project/{id}`…) :
+  **filtrés par le domaine de leur entité**. La règle « les ressources ne sont
+  jamais filtrées » vaut pour des tables de codes, pas pour des données métier :
+  avec `BOOND_MCP_PROFILE=finance`, le domaine `candidates` disparaît de
+  `tools/list`, et laisser `boond://candidate/{id}` lisible rouvrirait
+  exactement ce que l'opérateur a fermé. Exemple :
+  `BOOND_MCP_EXCLUDE_DOMAINS=candidates` retire `boond://candidate/{id}` de
+  `resources/templates/list` mais conserve `boond://dictionary/states/candidates`.
 
 ## Domaine `application` : un socle
 

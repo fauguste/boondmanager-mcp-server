@@ -204,7 +204,9 @@ export function registerAll(server: McpServer, policy: AccessPolicy, index?: Reg
   }
 
   registerAllPrompts(target, policy);
-  registerAllResources(target);
+  // Reference dictionaries are never filtered (lookup substrate); the entity
+  // templates registered alongside them follow their entity's domain.
+  registerAllResources(target, policy);
 }
 
 export function createMcpServer(): McpServer {

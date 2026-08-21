@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**180 tools** across **38 domains** · **11 prompts** · **22 resources**.
+**180 tools** across **38 domains** · **11 prompts** · **22 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -425,3 +425,16 @@ Reference data exposed as MCP resources.
 | `boond://dictionary/typeOf/contacts` | Types contacts |
 | `boond://dictionary/typeOf/projects` | Types projets |
 | `boond://dictionary/typeOf/resources` | Types ressources |
+
+## Resource templates (6)
+
+Parameterised resources (`resources/templates/list`). Not enumerable — read a URI directly, or let the client autocomplete the id via `completions/complete`.
+
+| URI template | Title |
+|---|---|
+| `boond://candidate/{id}` | Fiche candidat |
+| `boond://company/{id}` | Fiche société |
+| `boond://contact/{id}` | Fiche contact |
+| `boond://opportunity/{id}` | Fiche opportunité |
+| `boond://project/{id}` | Fiche projet |
+| `boond://resource/{id}` | Fiche ressource (collaborateur) |
