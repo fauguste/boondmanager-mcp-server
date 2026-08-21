@@ -61,14 +61,14 @@ ces regroupements, prêts à l'emploi — définis dans
 |--------|----------|--------|---------|
 | `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 88 | 9 |
 | `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, application, workflows | 96 | 8 |
-| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 59 | 1 |
+| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 61 | 2 |
 | `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 53 | 5 |
 | `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |
-| *(aucun)* | tous | 180 | 11 |
+| *(aucun)* | tous | 182 | 12 |
 
 Comptages **générés** depuis les registrations réelles (les mêmes que celles
 qu'un client voit dans `tools/list`), profil seul, toutes opérations. Avec
-`BOOND_MCP_READ_ONLY=true` en plus : `recruiting` 61, `sales` 68, `finance` 40,
+`BOOND_MCP_READ_ONLY=true` en plus : `recruiting` 61, `sales` 68, `finance` 42,
 `delivery` 38, `admin` 18.
 
 Notes :
@@ -80,14 +80,18 @@ Notes :
   `finance` ni `admin`. Il n'y a pas de règle « `resources` partout » : la règle
   est **par profil, en comptant les prompts qu'il conserve**. Un prompt est coupé
   dès qu'**un** des domaines de son runbook manque (règle détaillée plus bas), et
-  8 des 11 prompts orchestrent `resources` : sans lui, `recruiting` tombait à 2
+  8 des 12 prompts orchestrent `resources` : sans lui, `recruiting` tombait à 2
   prompts et `sales` à 1, soit ~10 outils gagnés contre la quasi-totalité des
   runbooks — mauvais échange pour une couche dont le but est l'ergonomie. C'est
   aussi ce que ces métiers utilisent réellement (un recruteur compare candidats
   et collaborateurs internes, un commercial staffe son affaire). `finance` et
-  `admin` n'ont aucun runbook qui y touche (le seul prompt de `finance`,
-  `factures_a_relancer`, ne couvre que `invoices` + `application`) : l'ajouter
-  n'apporterait que des outils.
+  `admin` n'ont aucun runbook qui y touche (les prompts de `finance` —
+  `factures_a_relancer` et `traiter_note_de_frais` — couvrent `invoices`,
+  `expenses` et `application`) : l'ajouter n'apporterait que des outils.
+  `traiter_note_de_frais` peut résoudre un collaborateur par son nom, mais cette
+  résolution est une étape *optionnelle* de son runbook et n'est donc pas
+  déclarée dans ses `domains` — sans quoi le prompt disparaîtrait du profil
+  `finance`, précisément celui pour lequel il existe.
 - Un profil reste un **point de départ** : pour un périmètre au domaine près,
   `BOOND_MCP_DOMAINS` est l'outil précis, et `BOOND_MCP_EXCLUDE_DOMAINS`
   retranche d'un profil (ex. `BOOND_MCP_PROFILE=sales` +

@@ -492,7 +492,13 @@ describe("startHttpTransport (integration)", () => {
       path: "/mcp",
       stateless: false,
       enableJsonResponse: true,
-      sessionTtlMs: 50,
+      // Wide enough that the `initialize` round-trip (which instantiates a full
+      // McpServer and its ~180 tool registrations) cannot itself age the session
+      // past the TTL before the first sweep runs. A tight budget here made the
+      // "fresh session is not reaped" assertion fail whenever the suite ran
+      // under load — it measured the machine, not the sweep logic. Do not shrink
+      // it back: at 50 ms this failed ~2 runs out of 6 of the full suite.
+      sessionTtlMs: 1_000,
       // Big sweep interval so the periodic timer never fires during this
       // test — we drive the sweep explicitly via the handle.
       sessionSweepIntervalMs: 60_000,
@@ -526,7 +532,7 @@ describe("startHttpTransport (integration)", () => {
     expect(handle.sessionCount()).toBe(1);
 
     // Wait past the TTL, then a sweep should reap the idle session.
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
     expect(await handle.sweepIdleSessions()).toBe(1);
     expect(handle.sessionCount()).toBe(0);
   });

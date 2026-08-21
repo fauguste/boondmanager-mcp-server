@@ -42,6 +42,7 @@ import {
   AbsenceSearchSchema,
   ExpenseCreateSchema,
   ExpenseUpdateSchema,
+  ExpenseDefaultSchema,
   ExpenseSearchSchema,
   ProductCreateSchema,
   ProductUpdateSchema,
@@ -625,25 +626,135 @@ describe("AbsenceSearchSchema", () => {
   });
 });
 
+// A line the live API accepts, minus everything the schema defaults.
+const VALID_LINE = {
+  startDate: "2027-01-15",
+  expenseTypeReference: 1,
+  amountIncludingTax: 12.34,
+  tax: 10,
+  projectId: "1607",
+  deliveryId: "7889",
+};
+
 describe("ExpenseCreateSchema", () => {
-  it("should accept valid expense", () => {
+  it("should accept a report with one line", () => {
     const result = ExpenseCreateSchema.safeParse({
       resourceId: "123",
-      expenseDate: "2025-06-15",
-      amount: 45.5,
+      agencyId: "3",
+      term: "2027-01",
+      actualExpenses: [VALID_LINE],
     });
     expect(result.success).toBe(true);
   });
 
-  it("should require resourceId, expenseDate, amount", () => {
+  it("should require resourceId and term", () => {
     expect(ExpenseCreateSchema.safeParse({}).success).toBe(false);
     expect(ExpenseCreateSchema.safeParse({ resourceId: "1" }).success).toBe(false);
+    expect(ExpenseCreateSchema.safeParse({ term: "2027-01" }).success).toBe(false);
+  });
+
+  it("should accept a report with no line at all (empty container)", () => {
+    expect(ExpenseCreateSchema.safeParse({ resourceId: "1", term: "2027-01" }).success).toBe(true);
+  });
+
+  it("should reject a term that is not YYYY-MM", () => {
+    for (const term of ["2027", "2027-1", "2027-01-15", "janvier 2027"]) {
+      expect(ExpenseCreateSchema.safeParse({ resourceId: "1", term }).success).toBe(false);
+    }
+  });
+
+  // exchangeRateAgency is required by the API (1002 otherwise) — defaulting it
+  // here is what keeps a minimal call from 422-ing.
+  it("should default exchangeRateAgency to 1", () => {
+    const parsed = ExpenseCreateSchema.parse({ resourceId: "1", term: "2027-01" });
+    expect(parsed.exchangeRateAgency).toBe(1);
+  });
+
+  // The API demands these four on every line and reports them one 422 wave at a
+  // time; defaults are what spare the caller five round-trips of discovery.
+  it("should default the line flags the API requires but never varies", () => {
+    const parsed = ExpenseCreateSchema.parse({
+      resourceId: "1",
+      term: "2027-01",
+      actualExpenses: [VALID_LINE],
+    });
+    expect(parsed.actualExpenses?.[0]).toMatchObject({
+      isKilometricExpense: false,
+      reinvoiced: false,
+      currency: 0,
+      exchangeRate: 1,
+      activityType: "production",
+    });
+  });
+
+  it("should require projectId and deliveryId on every line", () => {
+    for (const key of ["projectId", "deliveryId", "startDate"] as const) {
+      const line: Record<string, unknown> = { ...VALID_LINE };
+      delete line[key];
+      expect(ExpenseCreateSchema.safeParse({ resourceId: "1", term: "2027-01", actualExpenses: [line] }).success).toBe(
+        false
+      );
+    }
+  });
+
+  it("should accept a kilometric line without an expense type", () => {
+    const result = ExpenseCreateSchema.safeParse({
+      resourceId: "1",
+      term: "2027-01",
+      ratePerKilometerTypeReference: 3,
+      actualExpenses: [
+        {
+          startDate: "2027-01-15",
+          isKilometricExpense: true,
+          numberOfKilometers: 42,
+          projectId: "1607",
+          deliveryId: "7889",
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // `state` is accepted then ignored by the API on POST *and* PUT — exposing it
+  // promised a transition the endpoint does not perform.
+  it("should reject the legacy fields that never worked", () => {
+    for (const legacy of [
+      { expenseDate: "2027-01-15" },
+      { amount: 45.5 },
+      { typeOf: "1" },
+      { currency: "EUR" },
+      { note: "..." },
+      { state: "waitingForValidation" },
+    ]) {
+      expect(ExpenseCreateSchema.safeParse({ resourceId: "1", term: "2027-01", ...legacy }).success).toBe(false);
+    }
   });
 });
 
 describe("ExpenseUpdateSchema", () => {
   it("should require id", () => {
     expect(ExpenseUpdateSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("should allow a partial update that touches no line", () => {
+    expect(ExpenseUpdateSchema.safeParse({ id: "4567", informationComments: "ok" }).success).toBe(true);
+  });
+
+  it("should warn in its description that actualExpenses replaces every line", () => {
+    const shape = (ExpenseUpdateSchema as unknown as { shape: Record<string, { description?: string }> }).shape;
+    expect(shape.actualExpenses?.description).toContain("REMPLACE");
+  });
+
+  it("should reject state (moved by the validation workflow, not by a write)", () => {
+    expect(ExpenseUpdateSchema.safeParse({ id: "1", state: "validated" }).success).toBe(false);
+  });
+});
+
+describe("ExpenseDefaultSchema", () => {
+  it("should require resourceId and a YYYY-MM term", () => {
+    expect(ExpenseDefaultSchema.safeParse({ resourceId: "1", term: "2027-01" }).success).toBe(true);
+    expect(ExpenseDefaultSchema.safeParse({ resourceId: "1" }).success).toBe(false);
+    expect(ExpenseDefaultSchema.safeParse({ resourceId: "1", term: "2027" }).success).toBe(false);
   });
 });
 

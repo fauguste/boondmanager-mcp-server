@@ -49,13 +49,14 @@ export interface PromptDefinition {
  * comme filtre. Cela évite à l'utilisateur de chercher l'ID en amont — la
  * majorité des appels passent en une seule formulation naturelle.
  */
-type EntityKind = "resource" | "society" | "opportunity" | "agency";
+type EntityKind = "resource" | "society" | "opportunity" | "agency" | "project";
 
 const SEARCH_TOOL_BY_KIND: Record<EntityKind, string> = {
   resource: "boond_resources_search",
   society: "boond_companies_search",
   opportunity: "boond_opportunities_search",
   agency: "boond_agencies_search",
+  project: "boond_projects_search",
 };
 
 const LABEL_BY_KIND: Record<EntityKind, string> = {
@@ -63,6 +64,7 @@ const LABEL_BY_KIND: Record<EntityKind, string> = {
   society: "société",
   opportunity: "opportunité",
   agency: "agence",
+  project: "projet",
 };
 
 interface Resolved {
@@ -97,6 +99,8 @@ const ID_OR_NAME_HINT_OPPORTUNITY =
   "Accepte soit l'ID numérique, soit l'intitulé de l'opportunité (résolution auto via `boond_opportunities_search`).";
 const ID_OR_NAME_HINT_AGENCY =
   "Accepte soit l'ID numérique, soit le nom de l'agence (résolution auto via `boond_agencies_search`).";
+const ID_OR_NAME_HINT_PROJECT =
+  "Accepte soit l'ID numérique, soit le libellé du projet (résolution auto via `boond_projects_search`).";
 
 export const PROMPTS: PromptDefinition[] = [
   {
@@ -683,6 +687,108 @@ export const PROMPTS: PromptDefinition[] = [
         "   - **Projets** : projets actifs, dont ceux qui s'arrêtent ou démarrent dans la semaine",
         "   - **Actions à mener** : 3-5 puces concrètes (relances, validations, repositionnements)",
       ].join("\n");
+    },
+  },
+  {
+    name: "traiter_note_de_frais",
+    title: "Traiter un justificatif en note de frais",
+    description:
+      "À partir d'une photo ou d'un PDF de justificatif joint à la conversation, extrait les données de la dépense " +
+      "et crée la ligne de frais correspondante dans BoondManager, après récapitulatif et validation explicite. " +
+      "Aucun montant n'est inventé : un champ illisible est demandé à l'utilisateur.",
+    argsSchema: {
+      resource_id: z
+        .string()
+        .optional()
+        .describe(
+          "Collaborateur concerné. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, `boond_application_current_user` est appelé pour le récupérer."
+        ),
+      project_id: z
+        .string()
+        .optional()
+        .describe("Projet à imputer / refacturer. " + ID_OR_NAME_HINT_PROJECT),
+      term: z
+        .string()
+        .optional()
+        .describe("Mois de la note de frais (YYYY-MM). Défaut : mois de la date du justificatif."),
+      contexte: z
+        .string()
+        .optional()
+        .describe("Précision libre sur la dépense (ex: « déjeuner client Dupont », « A/R Nancy en voiture »)."),
+    },
+    domains: ["expenses", "application"],
+    build: ({ resource_id, project_id, term, contexte }) => {
+      const lines: string[] = [
+        "Traite le justificatif joint à cette conversation et enregistre-le en note de frais dans BoondManager.",
+        "",
+      ];
+
+      let resourceLit = "<RESOURCE_ID>";
+      let resourceStep: string;
+      if (resource_id) {
+        const r = resolveEntity(resource_id, "resource", "<RESOURCE_ID>");
+        if (r.preamble) lines.push(r.preamble);
+        resourceLit = r.idForFilter;
+        resourceStep = `Le collaborateur concerné a pour ID \`${resourceLit}\`.`;
+      } else {
+        resourceStep = "Appeler `boond_application_current_user` pour obtenir mon ID → ce sera `<RESOURCE_ID>`.";
+      }
+
+      let projectLine = "";
+      if (project_id) {
+        const p = resolveEntity(project_id, "project", "<PROJET_ID>");
+        if (p.preamble) lines.push(p.preamble);
+        projectLine = `   - Imputer sur le projet \`${p.idForFilter}\` (demandé explicitement). Vérifier qu'il figure bien dans les imputations possibles retournées à l'étape 3.`;
+      }
+
+      const termLine = term
+        ? `Le mois de la note de frais est imposé : \`term = "${term}"\`.`
+        : "Déduire `term` (format `YYYY-MM`) du mois de la date lue sur le justificatif.";
+
+      lines.push(
+        contexte ? `Contexte fourni par l'utilisateur : « ${contexte} ».` : "",
+        contexte ? "" : "",
+        "Étapes :",
+        "",
+        "**1. Lire le justificatif.** Extraire : date de la dépense, marchand, montant TTC, taux ou montant de TVA, devise, nature de la dépense (repas / transport / hébergement / carburant / péage / fournitures…), et le nombre de kilomètres s'il s'agit d'un trajet en véhicule personnel.",
+        "   - ⚠️ **Ne jamais inventer une valeur.** Si un champ est illisible, absent ou ambigu (montant coupé, date partielle, devise non indiquée), le demander à l'utilisateur et attendre sa réponse avant de continuer.",
+        "   - Si plusieurs tickets figurent sur l'image, les traiter comme autant de lignes distinctes.",
+        "",
+        `**2. Identifier le collaborateur et le mois.** ${resourceStep} ${termLine}`,
+        "",
+        `**3. Récupérer les référentiels de saisie** : \`boond_expenses_default\` avec \`resourceId: "${resourceLit}"\` et le \`term\` de l'étape 2. Il retourne :`,
+        "   - `agencyId`, `currencyAgency`, `exchangeRateAgency` → à recopier tels quels ;",
+        "   - la liste des **types de frais** de l'agence (`reference` + libellé + taux de TVA) → mapper la nature extraite à l'étape 1 vers la `reference` la plus proche. Ces codes sont propres à l'agence : ils ne sont **pas** dans `boond_application_dictionary`, ne pas essayer de les y chercher ;",
+        "   - les **barèmes kilométriques** (`ratePerKilometerTypeReference`) si la dépense est un trajet ;",
+        "   - les couples `projectId` / `deliveryId` imputables → les deux sont **obligatoires** sur chaque ligne, et l'API refuse un couple qu'elle ne juge pas imputable sur ce mois.",
+        projectLine,
+        "   - Si aucune imputation n'est disponible pour ce collaborateur sur ce mois, s'arrêter et le signaler : la ligne ne peut pas être créée.",
+        "",
+        `**4. Vérifier s'il existe déjà une note de frais pour ce mois** : \`boond_expenses_search\` avec \`resourceId: "${resourceLit}"\` et la période correspondant au \`term\`.`,
+        "   - ⚠️ L'API **n'empêche pas les doublons** : deux notes de frais peuvent coexister sur le même mois pour le même collaborateur. Il faut donc vérifier, pas supposer.",
+        "   - Note existante → on la complétera à l'étape 6 via `boond_expenses_update`. Aucune note → on en créera une via `boond_expenses_create`.",
+        "",
+        "**5. Récapituler et ATTENDRE la validation de l'utilisateur.** Cette étape n'est pas optionnelle : l'écriture n'est pas idempotente et une lecture visuelle peut se tromper d'un facteur 10 sur un montant.",
+        "   - Présenter un tableau : date | marchand / description | type de frais retenu (libellé + `reference`) | montant TTC | taux de TVA | devise | projet + prestation d'imputation | refacturable oui/non.",
+        "   - Indiquer explicitement s'il s'agit d'une création ou d'un ajout à une note existante.",
+        "   - Signaler toute valeur déduite plutôt que lue (type de frais mappé par approximation, TVA prise du référentiel faute d'être lisible sur le ticket).",
+        "   - **Ne pas appeler l'outil d'écriture avant un « oui » explicite.**",
+        "",
+        "**6. Écrire.**",
+        "   - Création : `boond_expenses_create` avec `resourceId`, `agencyId`, `term`, `exchangeRateAgency`, `currencyAgency` et une entrée `actualExpenses` par dépense.",
+        "   - Ajout à une note existante : relire la note avec `boond_expenses_get`, puis `boond_expenses_update` en renvoyant **l'intégralité** des lignes (les anciennes + la nouvelle). `actualExpenses` remplace le tableau complet — n'envoyer que la nouvelle ligne effacerait les précédentes.",
+        "   - Sur une ligne : `amountIncludingTax` est le montant **TTC** et `tax` un **taux** de TVA en pourcentage (ex: `20`), pas un montant. Le HT et le montant de TVA sont recalculés par BoondManager — ne pas les saisir, et si le ticket ne donne qu'un montant de TVA, convertir en taux (ou reprendre le taux du type de frais).",
+        "   - Frais kilométrique : `isKilometricExpense: true`, `numberOfKilometers`, pas de `expenseTypeReference` — le montant est calculé par le barème.",
+        "",
+        "**7. Restituer le résultat et la limite sur le justificatif.** Confirmer l'ID de la note de frais et de la ligne créée, puis dire clairement que **le justificatif n'a pas été attaché** : une image collée dans la conversation n'a pas d'URL atteignable par BoondManager, et `boond_documents_create` ne téléverse que depuis une URL (le serveur MCP ne lit jamais de fichier local). Deux options à proposer :",
+        "   - (a) si l'utilisateur peut fournir une **URL https** du justificatif : appeler `boond_documents_create` avec `parentType: \"expensesReport\"` et `parentId` = l'ID de la note de frais ;",
+        "   - (b) sinon : attacher le fichier manuellement dans l'interface BoondManager.",
+        "",
+        "**8. État de la note.** Ne pas promettre une mise en validation : la création part toujours en `savedAndNoValidation` et le passage en validation relève du workflow BoondManager, pas d'un champ d'écriture. Inviter l'utilisateur à soumettre la note depuis l'interface quand elle est complète."
+      );
+      return lines.filter(Boolean).join("\n");
     },
   },
 ];

@@ -40,6 +40,7 @@ describe("registerAllPrompts", () => {
         "cartographie_competences",
         "cvs_a_mettre_a_jour",
         "recherche_profil_competences",
+        "traiter_note_de_frais",
       ])
     );
   });
@@ -340,6 +341,128 @@ describe("registerAllPrompts", () => {
       expect(text).not.toContain("Préalable");
       expect(text).not.toContain("<RESOURCE_ID>");
       expect(text).toContain("18081");
+    });
+  });
+
+  describe("traiter_note_de_frais", () => {
+    const build = (args: Record<string, string> = {}): string => {
+      const prompt = PROMPTS.find((p) => p.name === "traiter_note_de_frais")!;
+      return prompt.build(args);
+    };
+
+    it("references the tools its runbook actually drives", () => {
+      const text = build();
+      for (const tool of [
+        "boond_application_current_user",
+        "boond_expenses_default",
+        "boond_expenses_search",
+        "boond_expenses_create",
+        "boond_expenses_update",
+        "boond_expenses_get",
+        "boond_documents_create",
+      ]) {
+        expect(text).toContain(tool);
+      }
+    });
+
+    // The expense-type codes live on the agency, not in the dictionary. Sending
+    // the model to `boond_application_dictionary` for them is a dead end, so the
+    // runbook must say so rather than stay silent.
+    it("tells the model NOT to look for expense types in the dictionary", () => {
+      const text = build();
+      expect(text).toContain("boond_application_dictionary");
+      expect(text).toMatch(/pas\*{0,2} dans `boond_application_dictionary`/);
+    });
+
+    // Non-idempotent write + a visual reading that can be off by a factor of ten:
+    // the recap has to gate the call, not follow it.
+    it("requires an explicit user validation before writing", () => {
+      const text = build();
+      expect(text).toContain("ATTENDRE la validation");
+      expect(text).toContain("Ne pas appeler l'outil d'écriture avant un « oui » explicite");
+      const recapAt = text.indexOf("ATTENDRE la validation");
+      const writeAt = text.indexOf("boond_expenses_create");
+      expect(recapAt).toBeGreaterThan(-1);
+      expect(recapAt).toBeLessThan(text.lastIndexOf("boond_expenses_create"));
+      expect(writeAt).toBeGreaterThan(-1);
+    });
+
+    it("forbids inventing an unreadable value", () => {
+      const text = build();
+      expect(text).toContain("Ne jamais inventer");
+      expect(text).toContain("le demander à l'utilisateur");
+    });
+
+    it("states the term format", () => {
+      expect(build()).toContain("`YYYY-MM`");
+      expect(build({ term: "2027-01" })).toContain('`term = "2027-01"`');
+    });
+
+    // The API does not deduplicate: two reports can coexist on the same
+    // (resource, term), so a blind create silently doubles the month.
+    it("checks for an existing report before creating one", () => {
+      const text = build();
+      expect(text).toContain("boond_expenses_search");
+      expect(text).toContain("n'empêche pas les doublons");
+    });
+
+    // `actualExpenses` replaces the whole array on PUT.
+    it("warns that updating replaces every line", () => {
+      expect(build()).toContain("l'intégralité** des lignes");
+    });
+
+    it("says the amount is TTC and the tax a rate", () => {
+      const text = build();
+      expect(text).toContain("montant **TTC**");
+      expect(text).toContain("un **taux** de TVA");
+    });
+
+    // fileUrl-only upload is a deliberate security posture, not an oversight:
+    // the runbook has to surface the limit and both escape hatches.
+    it("states that the receipt is not attached, and how to attach it", () => {
+      const text = build();
+      expect(text).toContain("n'a pas été attaché");
+      expect(text).toContain('parentType: "expensesReport"');
+      expect(text).toContain("manuellement dans l'interface BoondManager");
+    });
+
+    it("does not promise a state transition the API ignores", () => {
+      expect(build()).toContain("savedAndNoValidation");
+    });
+
+    it("resolves a resource passed by name, and inlines a numeric id as-is", () => {
+      const byName = build({ resource_id: "Jean Dupont" });
+      expect(byName).toContain("Préalable");
+      expect(byName).toContain("boond_resources_search");
+      expect(byName).toContain("<RESOURCE_ID>");
+
+      const byId = build({ resource_id: "18081" });
+      expect(byId).not.toContain("Préalable");
+      expect(byId).toContain("18081");
+    });
+
+    it("resolves a project passed by label", () => {
+      const text = build({ project_id: "Refonte SI" });
+      expect(text).toContain("boond_projects_search");
+      expect(text).toContain("<PROJET_ID>");
+    });
+
+    it("falls back to the current user when no resource is given", () => {
+      expect(build()).toContain("boond_application_current_user");
+    });
+
+    it("inlines the free-form context when provided", () => {
+      expect(build({ contexte: "déjeuner client Dupont" })).toContain("déjeuner client Dupont");
+    });
+
+    // finance is the profile this prompt exists for; `resources` is deliberately
+    // absent from `domains` because it is not in that profile and one missing
+    // domain cuts the whole prompt.
+    it("survives the finance profile", () => {
+      const policy = resolveAccessPolicy({ BOOND_MCP_PROFILE: "finance" } as NodeJS.ProcessEnv);
+      registerAllPrompts(server, policy);
+      const names = vi.mocked(server.registerPrompt).mock.calls.map((c) => c[0]);
+      expect(names).toContain("traiter_note_de_frais");
     });
   });
 
