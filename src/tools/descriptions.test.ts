@@ -137,8 +137,17 @@ describe("tool/prompt/resource description lengths", () => {
       registerPrompt: (name: string, config: { description?: string }) => {
         prompts.push({ name, description: config.description });
       },
-      registerResource: (config: { uri: string; description?: string }) => {
-        resources.push({ uri: config.uri, description: config.description });
+      // Signature is `registerResource(name, uriOrTemplate, config, cb)`. Reading
+      // `uri`/`description` off the FIRST argument (the name string) yielded
+      // `undefined` for every resource, so the description cap below asserted
+      // nothing at all for as long as it existed.
+      registerResource: (
+        _name: string,
+        uriOrTemplate: string | { uriTemplate: unknown },
+        config: { description?: string }
+      ) => {
+        const uri = typeof uriOrTemplate === "string" ? uriOrTemplate : String(uriOrTemplate.uriTemplate);
+        resources.push({ uri, description: config.description });
       },
     } as unknown as McpServer;
 
@@ -223,6 +232,14 @@ describe("tool/prompt/resource description lengths", () => {
   it("registers a few prompts (sanity check)", () => {
     expect(prompts.length).toBeGreaterThanOrEqual(6);
     expect(prompts.length).toBeLessThan(20);
+  });
+
+  it("every resource carries a description the cap can measure", () => {
+    // Guards the assertion above against silently measuring `undefined` again:
+    // the filter it runs is a no-op on a resource with no description.
+    expect(resources.length).toBeGreaterThan(0);
+    const missing = resources.filter((r) => !r.description);
+    expect(missing.map((r) => r.uri)).toEqual([]);
   });
 
   it("registers a few resources (sanity check)", () => {
