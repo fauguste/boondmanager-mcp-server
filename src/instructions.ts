@@ -49,6 +49,7 @@ Vocabulaire des préfixes de \`keywords\` : \`CSOC<id>\` (société), \`CCON<id>
 
 - \`pageSize\` : défaut 30, maximum 500. \`page\` est plafonné à 100 : au-delà, affiner les filtres plutôt que paginer.
 - \`fields: ["title", "updateDate", …]\` remplace le résumé d'une ligne par les seuls attributs demandés — à utiliser dès qu'une page de résultats est large. Disponible sur les outils de recherche, sauf \`boond_timesheets_search\` et \`boond_reporting_*\`.
+- Fiche complète d'une entité connue : lire la ressource \`boond://{candidate|resource|contact|company|opportunity|project}/<id>\` (fiche + informations + compétences en une lecture) plutôt que d'enchaîner \`_get\` puis les outils d'onglet.
 
 ## États et types
 
