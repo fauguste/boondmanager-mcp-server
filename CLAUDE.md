@@ -512,7 +512,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 64 test files, **1081 tests**
+- **Current stats**: 64 test files, **1083 tests**
 
 ### Test file template (for read-only search+get domains):
 

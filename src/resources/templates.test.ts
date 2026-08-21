@@ -77,6 +77,38 @@ describe("entity resource templates", () => {
       }
     });
 
+    it("serves an aggregated read through the SDK's template matching", async () => {
+      // The one path the unit tests cannot reach: `new URL(uri)` normalisation
+      // in the SDK's ReadResource handler, then `uriTemplate.match()` against
+      // the *normalised* string, then dispatch to our callback.
+      vi.spyOn(boondClient, "apiRequest").mockImplementation((path: string) =>
+        Promise.resolve(entityResponse("42", "candidate", { path }))
+      );
+      const { client, close } = await connectMcpClient();
+      try {
+        const result = await client.readResource({ uri: "boond://candidate/42" });
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0]?.mimeType).toBe("application/json");
+        const body = JSON.parse(String(result.contents[0]?.text)) as { entity: { id: string } };
+        expect(body.entity.id).toBe("42");
+      } finally {
+        await close();
+      }
+    });
+
+    it("rejects a hostile id through the SDK rather than reaching the API", async () => {
+      const spy = vi.spyOn(boondClient, "apiRequest");
+      const { client, close } = await connectMcpClient();
+      try {
+        // Matches the template (`([^/,]+)` swallows the query string) and is
+        // refused by the handler, not by the router.
+        await expect(client.readResource({ uri: "boond://candidate/1?x=2" })).rejects.toThrow(/numérique/);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        await close();
+      }
+    });
+
     it("keeps the templates out of resources/list (they are not enumerable)", async () => {
       const { client, close } = await connectMcpClient();
       try {
