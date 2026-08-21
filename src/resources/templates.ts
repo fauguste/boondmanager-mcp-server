@@ -1,4 +1,9 @@
-import type { DomainName } from "../constants.js";
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import { MAX_RESOURCE_BYTES, type DomainName } from "../constants.js";
+import { apiRequest, projectEntity } from "../services/boond-client.js";
+import { progressReporterFrom } from "../services/progress.js";
+import { EntityIdSchema } from "../schemas/index.js";
+import type { JsonApiResource, JsonApiResponse } from "../types.js";
 
 /**
  * Entity resource templates — `boond://candidate/{id}` and friends.
@@ -144,3 +149,143 @@ export const REGISTERED_RESOURCE_TEMPLATES = ENTITY_TEMPLATES.map((t) => ({
   title: t.title,
   domain: t.domain,
 }));
+
+// ---- Aggregated read ---------------------------------------------------
+
+/**
+ * Read one entity and its declared tabs, and render them as a single JSON body.
+ *
+ * Three properties this function exists to guarantee:
+ *
+ * 1. **The id never reaches the API unvalidated.** The SDK compiles `{id}` to
+ *    the RFC 6570 default pattern `([^/,]+)` — NOT to a numeric one. So
+ *    `boond://candidate/1?x=2`, `boond://candidate/1#f` and
+ *    `boond://candidate/..%2Fresources%2F9` all match the template and land
+ *    here as `variables.id`, from where they would be interpolated straight
+ *    into an API path. `EntityIdSchema` (`/^\d+$/`) is the wall; same class of
+ *    problem as the document-id path guard (#186).
+ * 2. **A failing tab does not lose the record.** `apiRequest` throws on any
+ *    non-2xx, and a partial record (a contact with no `information` payload)
+ *    is normal in Boond. Tabs are settled independently and a failure becomes
+ *    an `_errors` entry, not a failed read. The base record is the exception:
+ *    without it there is nothing to return, so its error propagates.
+ * 3. **The body is always parseable JSON.** The size ceiling drops whole
+ *    sections and names them in `_omitted`; it never cuts the serialised text.
+ *    A resource has no `pageSize` and cannot be asked for less, so the ceiling
+ *    has to be enforced here — but handing back a truncated JSON document
+ *    would break every client that does the one thing the mime type promises.
+ */
+export interface EntityAggregate {
+  uri: string;
+  entity: Pick<JsonApiResource, "id" | "type" | "attributes" | "relationships">;
+  /** One key per successfully read tab, in declaration order. */
+  sections: Record<string, unknown>;
+  /** Tabs whose read failed, mapped to the error message. Absent when none did. */
+  _errors?: Record<string, string>;
+  /** Sections dropped to fit MAX_RESOURCE_BYTES. Absent when nothing was dropped. */
+  _omitted?: { sections: string[]; reason: string };
+}
+
+/** Project a tab response: an object stays an object, a collection stays a list. */
+function projectTab(response: JsonApiResponse): unknown {
+  if (Array.isArray(response.data)) return response.data.map(projectEntity);
+  return response.data ? projectEntity(response.data) : null;
+}
+
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/**
+ * Serialise, and if the body is over the ceiling drop sections until it fits.
+ *
+ * Order of sacrifice, least to most informative: declared tabs from the last
+ * to the first (so `information` outlives `technical-data`), then the base
+ * record's `relationships`, then its `attributes`. In practice only the first
+ * rung is ever reached; the others exist so the ceiling is a guarantee rather
+ * than an intention.
+ */
+function serializeWithinBudget(aggregate: EntityAggregate, tabOrder: readonly string[]): string {
+  const dropped: string[] = [];
+  const reason = `Corps au-delà de MAX_RESOURCE_BYTES (${MAX_RESOURCE_BYTES} octets) : sections abandonnées pour garder un JSON valide.`;
+
+  const render = (): string => {
+    const body: EntityAggregate = { ...aggregate };
+    if (dropped.length > 0) body._omitted = { sections: [...dropped], reason };
+    return JSON.stringify(body, null, 2);
+  };
+
+  const overBudget = (json: string): boolean => Buffer.byteLength(json, "utf8") > MAX_RESOURCE_BYTES;
+
+  let json = render();
+  if (!overBudget(json)) return json;
+
+  for (const tab of [...tabOrder].reverse()) {
+    if (!(tab in aggregate.sections)) continue;
+    delete aggregate.sections[tab];
+    dropped.push(tab);
+    json = render();
+    if (!overBudget(json)) return json;
+  }
+
+  for (const field of ["relationships", "attributes"] as const) {
+    if (aggregate.entity[field] === undefined) continue;
+    delete aggregate.entity[field];
+    dropped.push(`entity.${field}`);
+    json = render();
+    if (!overBudget(json)) return json;
+  }
+
+  return json;
+}
+
+export async function readEntityAggregate(
+  template: EntityTemplate,
+  rawId: unknown,
+  uri: string,
+  extra?: unknown
+): Promise<string> {
+  // `Variables` is `string | string[]`: a repeated URI segment would arrive as
+  // an array, which `EntityIdSchema` rejects rather than silently join.
+  const parsed = EntityIdSchema.safeParse(rawId);
+  if (!parsed.success) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Identifiant de ${template.entityName} invalide dans « ${uri} » : attendu un id numérique (ex. ${template.uriTemplate.replace("{id}", "1234")}).`
+    );
+  }
+  const id = parsed.data;
+
+  const report = progressReporterFrom(extra);
+  const total = 1 + template.tabs.length;
+  let done = 0;
+  const step = (label: string): void => {
+    done += 1;
+    report(done, total, `${template.entityName} ${id} : ${label} (${done}/${total})`);
+  };
+
+  const base = apiRequest(`${template.apiPath}/${id}`).finally(() => step("fiche"));
+  const tabs = template.tabs.map((tab) => apiRequest(`${template.apiPath}/${id}/${tab}`).finally(() => step(tab)));
+
+  // The base record is awaited through allSettled together with the tabs so a
+  // tab failure cannot leave an unhandled rejection behind, then rethrown: with
+  // no record there is nothing to aggregate.
+  const [baseResult, ...tabResults] = await Promise.allSettled([base, ...tabs]);
+  if (baseResult.status === "rejected") throw baseResult.reason;
+
+  const entity = Array.isArray(baseResult.value.data) ? baseResult.value.data[0] : baseResult.value.data;
+  if (!entity) {
+    throw new McpError(ErrorCode.InvalidParams, `${template.entityName} ${id} introuvable.`);
+  }
+
+  const aggregate: EntityAggregate = { uri, entity: projectEntity(entity), sections: {} };
+  const errors: Record<string, string> = {};
+  template.tabs.forEach((tab, i) => {
+    const result = tabResults[i];
+    if (result.status === "fulfilled") aggregate.sections[tab] = projectTab(result.value);
+    else errors[tab] = errorMessage(result.reason);
+  });
+  if (Object.keys(errors).length > 0) aggregate._errors = errors;
+
+  return serializeWithinBudget(aggregate, template.tabs);
+}
