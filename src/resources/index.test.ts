@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAllResources, REGISTERED_RESOURCES } from "./index.js";
+import { REGISTERED_RESOURCE_TEMPLATES } from "./templates.js";
 import * as boondClient from "../services/boond-client.js";
 import * as dictionaryService from "../services/dictionary.js";
 
@@ -16,9 +17,11 @@ describe("registerAllResources", () => {
     dictionaryService.resetDictionaryCacheForTests();
   });
 
-  it("registers exactly the resources declared in REGISTERED_RESOURCES", () => {
+  it("registers exactly the resources and templates it declares", () => {
     registerAllResources(server);
-    expect(server.registerResource).toHaveBeenCalledTimes(REGISTERED_RESOURCES.length);
+    expect(server.registerResource).toHaveBeenCalledTimes(
+      REGISTERED_RESOURCES.length + REGISTERED_RESOURCE_TEMPLATES.length
+    );
   });
 
   it("each resource has a unique URI", () => {
@@ -72,9 +75,12 @@ describe("registerAllResources", () => {
   it("declares JSON mime type and a non-empty title/description on every resource", () => {
     registerAllResources(server);
     for (const call of vi.mocked(server.registerResource).mock.calls) {
-      const [name, uri, config] = call;
+      const [name, uriOrTemplate, config] = call;
       expect(typeof name).toBe("string");
-      expect(typeof uri).toBe("string");
+      // A fixed URI is a string; an entity template is a ResourceTemplate whose
+      // `uriTemplate` stringifies to the advertised pattern.
+      const uri = typeof uriOrTemplate === "string" ? uriOrTemplate : String(uriOrTemplate.uriTemplate);
+      expect(uri).toMatch(/^boond:\/\//);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const meta = config as any;
       expect(meta.mimeType).toBe("application/json");

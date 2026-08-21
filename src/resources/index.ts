@@ -1,8 +1,14 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { apiRequest } from "../services/boond-client.js";
+import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { apiRequest, apiSearch, buildSearchQuery } from "../services/boond-client.js";
 import { getDictionary, resolveDictionaryPath } from "../services/dictionary.js";
 import { getDictionaryOverrides } from "../config/dictionary-overrides.js";
-import { identityIcons, referenceIcons } from "../icons.js";
+import { identityIcons, iconsForDomain, referenceIcons } from "../icons.js";
+import { isDomainAllowed, type AccessPolicy } from "../config/access-policy.js";
+import { ENTITY_TEMPLATES, readEntityAggregate, type EntityTemplate } from "./templates.js";
+import { logger } from "../services/logger.js";
+
+/** Ids offered per `completions/complete` call. The spec caps `values` at 100. */
+const COMPLETION_PAGE_SIZE = 10;
 
 /**
  * MCP resources for BoondManager reference data.
@@ -181,7 +187,92 @@ export const REGISTERED_RESOURCES = [
   { name: "application/current-user", uri: CURRENT_USER_URI, title: "Utilisateur courant" },
 ];
 
-export function registerAllResources(server: McpServer): void {
+/**
+ * Autocomplete the `{id}` of an entity template through the domain's own search
+ * endpoint, so a client that implements `completions/complete` can offer ids
+ * while the user types.
+ *
+ * Only ids come back, never labels: `CompleteResult.completion.values` is a
+ * `string[]` and each value is substituted verbatim into the URI variable — a
+ * human-readable label there would produce an invalid URI. (The issue's design
+ * note asked for "id + libellé"; the protocol has no second channel for it.)
+ *
+ * Failures resolve to an empty list. A completion is a keystroke-rate
+ * convenience: a rate-limited or erroring search must degrade to "no
+ * suggestion", never to a visible error in the client's picker.
+ */
+function completeIdFor(template: EntityTemplate): (value: string) => Promise<string[]> {
+  return async (value: string): Promise<string[]> => {
+    const keywords = value.trim();
+    if (keywords.length === 0) return [];
+    try {
+      const response = await apiSearch(
+        template.apiPath,
+        buildSearchQuery({ keywords, pageSize: COMPLETION_PAGE_SIZE })
+      );
+      const rows = Array.isArray(response.data) ? response.data : response.data ? [response.data] : [];
+      return rows.map((row) => row.id).filter((id): id is string => typeof id === "string");
+    } catch (error) {
+      logger.debug(
+        { component: "resources", template: template.uriTemplate, err: error },
+        "Resource id completion failed; returning no suggestion"
+      );
+      return [];
+    }
+  };
+}
+
+/**
+ * Register the entity resource templates allowed by `policy`.
+ *
+ * Unlike the reference dictionaries, these ARE domain-filtered: with
+ * `BOOND_MCP_PROFILE=finance` the `candidates` domain is gone from
+ * `tools/list`, and leaving `boond://candidate/{id}` readable would reopen
+ * exactly what the operator closed. The dictionaries stay unfiltered — they
+ * hold code tables, not business data.
+ *
+ * `list: undefined` is mandatory, not an omission: the SDK requires the key to
+ * be present so nobody forgets to think about enumeration, and `undefined` is
+ * the answer here. Enumerating would mean paginating the whole Boond database
+ * into every `resources/list` response.
+ */
+function registerEntityTemplates(server: McpServer, policy?: AccessPolicy): void {
+  for (const template of ENTITY_TEMPLATES) {
+    if (policy && !isDomainAllowed(policy, template.domain)) continue;
+
+    server.registerResource(
+      template.name,
+      new ResourceTemplate(template.uriTemplate, {
+        list: undefined,
+        complete: { id: completeIdFor(template) },
+      }),
+      {
+        title: template.title,
+        description: template.description,
+        mimeType: "application/json",
+        // Native here: `templates/list` spreads the whole metadata object, so
+        // icons need none of the `tools/list` shim (see icons.ts).
+        icons: iconsForDomain(template.domain),
+      },
+      async (uri, variables, extra) => ({
+        contents: [
+          {
+            uri: uri.toString(),
+            mimeType: "application/json",
+            text: await readEntityAggregate(template, variables["id"], uri.toString(), extra),
+          },
+        ],
+      })
+    );
+  }
+}
+
+/**
+ * `policy` is optional on purpose — same rule as `registerAllPrompts`: the
+ * catalogue generator and the existing test suites call this with a bare stub
+ * server and must keep seeing the full surface, otherwise TOOLS.md drifts.
+ */
+export function registerAllResources(server: McpServer, policy?: AccessPolicy): void {
   for (const dict of DICTIONARIES) {
     const uri = buildResourceUri(dict.slug);
     server.registerResource(
@@ -273,4 +364,6 @@ export function registerAllResources(server: McpServer): void {
       };
     }
   );
+
+  registerEntityTemplates(server, policy);
 }
