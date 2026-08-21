@@ -23,7 +23,7 @@
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
-**180 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
+**182 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
 
 > **Sorties structurées.** En plus du texte lisible, les outils `search`, `create`, `update` et `delete` renvoient un `structuredContent` conforme à un `outputSchema` MCP : `search` → `{ total?, count, items[] }` (résumés compacts, pas les ressources JSON:API complètes), `create`/`update` → `{ id?, type? }`, `delete` → `{ id, deleted, reason? }`. Les clients MCP qui exploitent les sorties structurées obtiennent une référence d'entité fiable pour chaîner les appels. Les outils `get` restent en texte seul (leur texte est déjà du JSON exploitable).
 
@@ -147,6 +147,7 @@ En plus des outils, le serveur expose des **prompts MCP** (templates pre-cables)
 | `candidats_pour_opportunite` | A partir d'une opportunite, propose les candidats actifs qui matchent (outils, expertise, mobilite, dispo). |
 | `fiche_consultant` | Vue 360 d'une ressource : info + technique + positionnements + absences + CRA recents. |
 | `recap_hebdo` | Recap hebdomadaire : pipeline qui a bouge, equipe absente, projets actifs, actions a mener. |
+| `traiter_note_de_frais` | A partir d'une photo/PDF de justificatif joint, extrait la depense et cree la ligne de frais dans Boond apres recapitulatif et validation explicite. |
 
 ### Ressources, competences & CV
 

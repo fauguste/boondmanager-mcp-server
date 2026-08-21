@@ -1201,29 +1201,156 @@ export const AbsenceSearchSchema = z
 
 // ---- Expense schemas (Notes de frais) ----
 
+/**
+ * The write model for `/expenses-reports` was verified field by field against
+ * the live API (the RAML documents `post: description: Create an expenses` and
+ * nothing else, and `/application/dictionary` publishes the attribute list but
+ * not the required set).
+ *
+ * The entity is a **monthly container per resource** (`term` + `resource`) whose
+ * lines live in the `actualExpenses` array — there is no such thing as a
+ * standalone expense line endpoint. Consequences that the previous schema got
+ * wrong, each one a 422:
+ *
+ * - `amount` / `expenseDate` / `typeOf` / `currency` are **line** attributes,
+ *   not report attributes. A report-level payload carrying them created nothing.
+ * - `exchangeRateAgency` is **required** on create (`1002` otherwise).
+ * - `note` is spelled `informationComments`.
+ * - `state` is accepted and then **ignored**, on POST *and* PUT: the state is
+ *   moved by the validation workflow, never by a write. Exposing it as an input
+ *   promised something the API does not do, so it is gone from both schemas.
+ * - `data.type` is ignored by the API, so the historical `"expense"` type string
+ *   was never the bug.
+ *
+ * A line's required set is larger than it looks: besides `startDate`,
+ * `activityType`, `project`, `delivery` and the amount, the API also demands
+ * `batch`, `isKilometricExpense`, `reinvoiced`, `currency` and `exchangeRate` —
+ * it reports them in waves, one 422 per group, so a caller discovering them by
+ * trial and error needs five round-trips. They are therefore `.default()`ed here
+ * on their overwhelmingly common values rather than left to the model.
+ *
+ * `batch` is the sharp edge: it must be **present** and its `id` must be
+ * `null` when the line is not attached to a batch. `{ id: "0" }` and `{ id: 0 }`
+ * are both rejected (`1002`), which is why `batchId` maps to `{ id: null }`
+ * rather than being dropped like every other undefined value.
+ *
+ * HT/VAT: `amountIncludingTax` (TTC) and `tax` (a **rate** in %, not an amount)
+ * are what persist. `amountExcludingTax` and `taxAmount` are accepted on write
+ * and silently recomputed — they are not echoed back — so there is nothing to
+ * add for them and nothing is lost by omitting them.
+ */
+const EXPENSE_ACTIVITY_TYPES = ["production", "internal", "absence"] as const;
+
+export const ExpenseLineSchema = z
+  .object({
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe("Date du frais (YYYY-MM-DD). Doit tomber dans le mois `term` de la note de frais."),
+    expenseTypeReference: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Code du type de frais (`reference`), à lire via `boond_expenses_default` — " +
+          "les types de frais sont définis par agence et ne figurent PAS dans `boond_application_dictionary`. " +
+          "À omettre pour un frais kilométrique."
+      ),
+    amountIncludingTax: z
+      .number()
+      .optional()
+      .describe("Montant TTC. Ignoré pour un frais kilométrique (recalculé = km × barème)."),
+    tax: z
+      .number()
+      .optional()
+      .describe("Taux de TVA en % (ex: 20 pour 20 %) — un taux, pas un montant. Défaut API: 0."),
+    isKilometricExpense: z
+      .boolean()
+      .default(false)
+      .describe(
+        "`true` pour un frais kilométrique : renseigner `numberOfKilometers` et omettre `expenseTypeReference`."
+      ),
+    numberOfKilometers: z.number().optional().describe("Nombre de kilomètres (frais kilométrique uniquement)."),
+    activityType: z.enum(EXPENSE_ACTIVITY_TYPES).default("production").describe("Type d'activité rattachée au frais."),
+    projectId: z
+      .string()
+      .min(1)
+      .describe(
+        "ID du projet à imputer. Obligatoire — les couples (projet, prestation) autorisés sont donnés par `boond_expenses_default`."
+      ),
+    deliveryId: z
+      .string()
+      .min(1)
+      .describe("ID de la prestation (delivery) à imputer. Obligatoire — voir `boond_expenses_default`."),
+    batchId: z.string().optional().describe("ID du lot. Absent = aucun lot."),
+    reinvoiced: z.boolean().default(false).describe("Frais refacturable au client."),
+    currency: z.number().int().default(0).describe("ID de devise (`setting.currency`, 0 = EUR)."),
+    exchangeRate: z.number().default(1).describe("Taux de change vers la devise agence."),
+    title: z.string().optional().describe("Description libre de la ligne (marchand, motif, invités...)."),
+    file: z
+      .string()
+      .optional()
+      .describe(
+        "ID du justificatif déjà téléversé, suffixé (ex: `52979_proof`). " +
+          "Un fichier doit d'abord être créé via `boond_documents_create` (`parentType: 'expensesReport'`)."
+      ),
+  })
+  .strict();
+
 export const ExpenseCreateSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource"),
-    projectId: z.string().optional().describe("ID du projet associé"),
-    typeOf: z.string().optional().describe("Type de frais (transport, repas, hébergement...)"),
-    term: z.string().optional().describe("Période de la note de frais (YYYY-MM)"),
-    expenseDate: z.string().min(1).describe("Date du frais (YYYY-MM-DD)"),
-    amount: z.number().describe("Montant du frais"),
-    currency: z.string().optional().describe("Devise (EUR, USD...)"),
-    exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
-    state: z.number().int().optional().describe("État de la note de frais"),
-    note: z.string().optional().describe("Description / justification"),
+    resourceId: z.string().min(1).describe("ID de la ressource (le collaborateur qui a engagé les frais)."),
+    agencyId: z
+      .string()
+      .optional()
+      .describe("ID de l'agence — voir `boond_expenses_default`. Déduit de la ressource si omis."),
+    term: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .describe("Mois de la note de frais (YYYY-MM). Une note de frais = un mois × une ressource."),
+    exchangeRateAgency: z.number().default(1).describe("Taux de change agence. Obligatoire côté API."),
+    currencyAgency: z.number().int().optional().describe("ID de devise de l'agence (`setting.currency`)."),
+    informationComments: z.string().optional().describe("Commentaires de la note de frais."),
+    advance: z.number().optional().describe("Avance à reprendre."),
+    ratePerKilometerTypeReference: z
+      .number()
+      .int()
+      .optional()
+      .describe("Code du barème kilométrique (`reference`) — voir `boond_expenses_default`."),
+    actualExpenses: z
+      .array(ExpenseLineSchema)
+      .optional()
+      .describe("Lignes de frais réels. Omettre pour créer une note de frais vide."),
   })
   .strict();
 
 export const ExpenseUpdateSchema = z
   .object({
     id: z.string().min(1).describe("ID de la note de frais à modifier"),
-    term: z.string().optional().describe("Période de la note de frais (YYYY-MM)"),
-    amount: z.number().optional().describe("Montant"),
     exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
-    state: z.number().int().optional().describe("État"),
-    note: z.string().optional().describe("Description"),
+    currencyAgency: z.number().int().optional().describe("ID de devise de l'agence"),
+    informationComments: z.string().optional().describe("Commentaires"),
+    advance: z.number().optional().describe("Avance à reprendre"),
+    closed: z.boolean().optional().describe("Clôturer la note de frais"),
+    ratePerKilometerTypeReference: z.number().int().optional().describe("Code du barème kilométrique"),
+    actualExpenses: z
+      .array(ExpenseLineSchema)
+      .optional()
+      .describe(
+        "⚠️ REMPLACE l'intégralité des lignes existantes. Pour ajouter une ligne, relire la note via " +
+          "`boond_expenses_get` et renvoyer l'ensemble des lignes. Omettre pour ne toucher qu'aux autres champs."
+      ),
+  })
+  .strict();
+
+export const ExpenseDefaultSchema = z
+  .object({
+    resourceId: z.string().min(1).describe("ID de la ressource"),
+    term: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .describe("Mois ciblé (YYYY-MM)"),
+    agencyId: z.string().optional().describe("ID de l'agence (optionnel — déduit de la ressource)"),
   })
   .strict();
 
@@ -1689,3 +1816,7 @@ export type ReportingProjectsInput = z.infer<typeof ReportingProjectsSchema>;
 export type ReportingResourcesInput = z.infer<typeof ReportingResourcesSchema>;
 export type ReportingSynthesisInput = z.infer<typeof ReportingSynthesisSchema>;
 export type ReportingProductionPlansInput = z.infer<typeof ReportingProductionPlansSchema>;
+export type ExpenseLineInput = z.infer<typeof ExpenseLineSchema>;
+export type ExpenseCreateInput = z.infer<typeof ExpenseCreateSchema>;
+export type ExpenseUpdateInput = z.infer<typeof ExpenseUpdateSchema>;
+export type ExpenseDefaultInput = z.infer<typeof ExpenseDefaultSchema>;

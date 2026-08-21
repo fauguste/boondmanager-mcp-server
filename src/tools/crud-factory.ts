@@ -308,17 +308,25 @@ Returns: Données JSON complètes de l'entité.`
   );
 }
 
+interface CreateToolOverrides {
+  title?: string;
+  description?: string;
+}
+
 export function registerCreateTool(
   server: McpServer,
   opts: CrudToolOptions,
   schema: z.ZodType,
-  buildBody: (params: Record<string, unknown>) => unknown
+  buildBody: (params: Record<string, unknown>) => unknown,
+  overrides: CreateToolOverrides = {}
 ): void {
   server.registerTool(
     `${opts.prefix}_create`,
     {
-      title: `Créer un(e) ${opts.entityName}`,
-      description: `Crée un(e) nouvel(le) ${opts.entityName} dans BoondManager.
+      title: overrides.title ?? `Créer un(e) ${opts.entityName}`,
+      description:
+        overrides.description ??
+        `Crée un(e) nouvel(le) ${opts.entityName} dans BoondManager.
 
 Returns: Données du/de la ${opts.entityName} créé(e) avec son ID.`,
       inputSchema: schema,
