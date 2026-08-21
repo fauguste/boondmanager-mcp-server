@@ -1041,11 +1041,32 @@ read-only, confirmation *kept* for deletes. Pinned in
 
 | Secret | Used by | Purpose |
 |--------|---------|---------|
-| `NPM_TOKEN` | `release.yml` | npm publish (automation token, scoped to this package) |
 | `DOCKERHUB_USERNAME` | `release.yml`, `docker-publish.yml` | Docker Hub user/org that owns the published repo |
 | `DOCKERHUB_TOKEN` | `release.yml`, `docker-publish.yml` | Docker Hub access token (Account Settings → Security) |
 
 `GITHUB_TOKEN` is auto-provided by GitHub Actions and covers GHCR, GitHub Releases, and CodeQL — no extra setup. The MCP Registry uses GitHub OIDC (no secret).
+
+**npm needs no secret either**: publishing goes through **OIDC trusted
+publishing**, configured on npmjs.com (package → Settings → Trusted publishers)
+against `fauguste` / `boondmanager-mcp-server` / `release.yml`, with
+`permissions.id-token: write` in the workflow. `NPM_TOKEN` was removed after a
+long-lived automation token expired silently at its 90-day cap and broke the
+v2.13.0 release.
+
+Two traps this configuration must keep clear of, both of which produce the
+*same* misleading `404 Not Found - PUT` that reads like a bad token:
+
+- **`registry-url` must stay off `actions/setup-node`.** It writes
+  `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into `.npmrc`
+  unconditionally; with no token that expands to an empty value, npm concludes
+  auth is already configured, skips the OIDC exchange, and publishes with empty
+  credentials. (`auth-token-line: false` is the explicit fix but does not exist
+  at the pinned SHA.)
+- **npm must be ≥ 11.5.1** (Node ≥ 22.14.0). Node 22 bundles npm 10.9.x, which
+  has no OIDC support at all, so `release.yml` upgrades npm in a dedicated step
+  placed *after* the test/build steps — those keep running under the same npm as
+  `ci.yml`, so a release can never pass checks in an environment CI never
+  exercised.
 
 ## Code Style
 
