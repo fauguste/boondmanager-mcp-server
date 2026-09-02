@@ -74,6 +74,31 @@ only act if the auto-mirror hasn't picked us up.
 [mcp.so](https://mcp.so/) requests submissions through their GitHub repo
 (`chatmcp/mcp-directory`). Same pattern: one PR, then it auto-syncs.
 
+### 6. awesome-ai-plugins (community list)
+
+Requested by the list's maintainers in
+[issue #194](https://github.com/fauguste/boondmanager-mcp-server/issues/194).
+[`hashgraph-online/awesome-ai-plugins`](https://github.com/hashgraph-online/awesome-ai-plugins)
+is a cross-assistant catalogue (~340 entries) that already lists a number of
+ERP/CRM MCP servers, so the fit is real — but the invitation is mass outreach
+(the same issue title is open on 400+ repos) and the incentive it advertises is
+a dofollow backlink from `hol.org/registry/plugins`. Same shape as
+awesome-mcp-servers above: one PR, one line, no integration work.
+
+Open a PR adding the entry to the **Community Plugins → Tools & Integrations**
+section, in alphabetical order (between `Bitbucket CLI` and `Cadence Code`):
+
+```markdown
+- [BoondManager MCP Server](https://github.com/fauguste/boondmanager-mcp-server) - MCP server for the BoondManager staffing ERP/CRM exposing 182 tools, 12 prompts and 22 resources over candidates, resources, opportunities, projects, invoices and expense reports, with stdio and OAuth-protected HTTP transports.
+```
+
+**Do not add their scanner CI.** `CONTRIBUTING.md` recommends a workflow that
+installs the `plugin-scanner` PyPI package to earn a "full trust score" (a
+listing without it is accepted with a 10 % score reduction). That trades a real
+supply-chain surface — a third-party scanner executing in our CI — for a
+cosmetic badge on someone else's directory. The listing is explicitly valid
+without it, and this repo already runs CodeQL.
+
 ## Per-release verification (post-tag)
 
 After every `v*` tag is pushed and the Release workflow turns green, take 2
