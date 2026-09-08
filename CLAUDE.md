@@ -561,7 +561,7 @@ How it is wired, and why it is wired that way:
 
 ## Testing
 
-- **Framework**: Vitest 4 (with `globals: true`)
+- **Framework**: Vitest 5 (with `globals: true`)
 - **Pattern**: Each module file has a corresponding `.test.ts` file
 - **Approach**: Mock `McpServer` with `{ registerTool: vi.fn() }`,
   `registerPrompt`, `registerResource` as needed, then verify:
@@ -572,7 +572,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 64 test files, **1083 tests**
+- **Current stats**: 64 test files, **1120 tests**
 
 ### Test file template (for read-only search+get domains):
 

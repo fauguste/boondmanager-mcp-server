@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.14.1] - 2026-09-08
+
+Version de maintenance : **aucun changement fonctionnel**. Le catalogue est inchangé (182 outils, 12 prompts, 22 ressources, 6 templates) et aucun schéma annoncé ne bouge — un client déjà connecté ne verra aucune différence. Le contenu est une remise à niveau des dépendances, dont une correction de vulnérabilité et un passage de Vitest en majeure.
+
+### Security
+
+- **`@humanfs/node` 0.16.7 → 0.16.8** ([alerte Dependabot #44](https://github.com/fauguste/boondmanager-mcp-server/security/dependabot), *moderate*) : la copie récursive suivait les fichiers symlinkés et recopiait donc des données situées **hors de l'arbre source**. Dépendance de développement, transitive via `eslint`, jamais empaquetée dans le serveur publié et jamais atteinte à l'exécution : l'exposition réelle se limitait au poste qui lance `npm run lint`. Le correctif est un bump de lockfile seul — `eslint` déclare `^0.16.6`, donc `0.16.8` était déjà dans la plage autorisée, sans mise à jour d'ESLint ni changement de `package.json`. `npm audit` repasse à **0 vulnérabilité**.
+
+### Changed
+
+- **Vitest 4.1.10 → 5.0.0** et `@vitest/coverage-v8` de même (majeure). Aucune adaptation nécessaire : `vitest.config.ts` n'utilise que des options stables (`globals`, `environment`, `include`, `coverage.provider`/`reporter`/`thresholds`), aucune source n'a changé, et les 64 fichiers de tests passent inchangés en tenant les mêmes seuils de couverture. La majeure réoutille la couverture en interne (`istanbul-reports` cède la place à `@vitest/istanbul-lib-*`). Note pour les contributeurs : `@vitest/coverage-v8` déclare un peer **exact** sur `vitest`, donc les deux paquets doivent être bumpés dans le **même** commit — Dependabot en ouvre une PR par paquet et chacune échoue alors sur `npm ci` en `ERESOLVE`, ce qui se lit à tort comme « Vitest 5 casse la suite ».
+- **Dépendances applicatives** (toutes dans les plages déjà déclarées, donc lockfile uniquement) : `zod` 4.4.3 → 4.5.4, et en transitif `qs` 6.15.2 → 6.16.0, `fast-uri` 3.1.5 → 3.1.7, plus quelques micro-bumps (`hasown`, `side-channel`, `es-object-atoms`). `@modelcontextprotocol/sdk` reste en **1.30.0** : le niveau de spec MCP négocié est donc toujours `2025-11-25`, inchangé.
+- **Outillage de développement** : `eslint` 10.8.1 → 10.9.1, `typescript-eslint` 8.67.0 → 8.69.0, `@types/node` 26.2.0 → 26.4.1, `lint-staged` 17.3.0 → 17.4.1.
+- **CI / image Docker** : `github/codeql-action` v4.37.7 → v4.37.9, `docker/setup-buildx-action` et `docker/setup-qemu-action` repinnés sur v4, `softprops/action-gh-release` repinné sur v3, et le digest de l'image de base `node:26-alpine` rafraîchi (`aadf416` → `2d984a1`). Toutes les actions restent épinglées par SHA.
+
+### Documentation
+
+- `docs/distribution.md` suit désormais le référencement dans awesome-ai-plugins ([#194](https://github.com/fauguste/boondmanager-mcp-server/issues/194)).
+- `CLAUDE.md` : la section *Testing* annonçait « Vitest 4 » et « 1083 tests » — corrigé en Vitest 5 et **1120 tests** (64 fichiers), le compte réel après les ajouts de la 2.14.0.
+
 ## [2.14.0] - 2026-08-21
 
 Photo de justificatif → ligne de frais dans BoondManager ([#179](https://github.com/fauguste/boondmanager-mcp-server/issues/179)). Le ticket demandait « juste un prompt » : la vérification préalable du schéma qu'il imposait a montré que l'outil d'écriture visé ne fonctionnait pas du tout, d'où un lot plus large que prévu. Catalogue : **182 outils** (180 → 182), **12 prompts** (11 → 12), 22 ressources, 6 templates.
