@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AbsenceSearchSchema, AbsenceCreateSchema, AbsenceUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
+import { composeDescription, defaultDeleteDescription, defaultGetDescription } from "./description-builders.js";
 
 function inclusiveDays(startDate: string, endDate: string): number {
   const start = new Date(`${startDate}T00:00:00Z`);
@@ -48,7 +49,10 @@ Returns: Liste des demandes d'absence correspondantes.`,
     "boond_absences_get",
     {
       title: "Details d'une absence",
-      description: "Recupere les informations detaillees d'une demande d'absence par son ID.",
+      description: defaultGetDescription({
+        ...{ entityName: "demande d'absence", entityNamePlural: "demandes d'absence", prefix: "boond_absences" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,
@@ -69,7 +73,17 @@ Returns: Liste des demandes d'absence correspondantes.`,
     "boond_absences_create",
     {
       title: "Creer une demande d'absence",
-      description: "Cree une demande d'absence Boond avec absencesPeriods.",
+      description: composeDescription({
+        purpose: "Crée une demande d'absence (congés, RTT, maladie…) pour une ressource.",
+        when: "pour poser une absence au nom d'une ressource identifiée par son ID.",
+        instead: "`boond_absences_update` pour modifier une demande déjà déposée.",
+        behaviour: [
+          "Le détail est porté par `absencesPeriods` ; si le tableau est omis, une période unique est déduite de `startDate`/`endDate`.",
+          "`state` est soumis au workflow de validation BoondManager : la demande part dans son état initial, elle n'est pas validée par cet appel.",
+          "Écriture non idempotente — l'API ne déduplique pas deux demandes sur les mêmes dates.",
+        ],
+        returns: "confirmation et fiche de la demande créée.",
+      }),
       inputSchema: AbsenceCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -115,7 +129,16 @@ Returns: Liste des demandes d'absence correspondantes.`,
     "boond_absences_update",
     {
       title: "Modifier une absence",
-      description: "Met a jour une demande d'absence existante. Seuls les champs fournis sont modifies.",
+      description: composeDescription({
+        purpose: "Met à jour une demande d'absence existante, identifiée par son ID.",
+        when: "pour corriger les dates, le motif ou le commentaire d'une demande déjà déposée.",
+        instead: "`boond_absences_create` si la demande n'existe pas encore.",
+        behaviour: [
+          "Mise à jour partielle : seuls les champs fournis sont écrits.",
+          "`absencesPeriods` fait exception — le tableau fourni **remplace** l'intégralité des périodes existantes.",
+        ],
+        returns: "confirmation et fiche mise à jour.",
+      }),
       inputSchema: AbsenceUpdateSchema,
       annotations: {
         readOnlyHint: false,
@@ -144,7 +167,11 @@ Returns: Liste des demandes d'absence correspondantes.`,
     { entityName: "absence", entityNamePlural: "absences", apiPath: "/absences-reports", prefix: "boond_absences" },
     {
       title: "Supprimer une absence",
-      description: "Supprime une absence de BoondManager. Action irreversible.",
+      description: defaultDeleteDescription({
+        entityName: "demande d'absence",
+        entityNamePlural: "demandes d'absence",
+        prefix: "boond_absences",
+      }),
     }
   );
 }

@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **Contrat de description des outils** — les 182 descriptions annoncées énoncent désormais quatre choses, dans cet ordre : le **but** (verbe + ressource + portée, une phrase), la **guidance d'usage** (`Quand :` / `Plutôt que :`, nommant un outil frère réel), le **comportement** non déductible du schéma, et `Returns :`. Aucun schéma, aucun nom d'outil et aucune annotation ne change : un client déjà connecté voit le même catalogue, mieux décrit. Motivation : le catalogue compte ~45 outils qui prennent un simple `id` et renvoient « quelques champs d'une entité », et l'état mesuré avant ce changement était **181 outils sur 182 sans aucune indication de l'outil à préférer**, une médiane de description de 170 caractères et 30 outils sous 75 — `boond_actions_get` valait *« Récupère les détails d'une action par son ID. »*, soit la paraphrase de son propre nom.
+- **Nouveau `src/tools/description-builders.ts`** : `composeDescription()` plus les cinq gabarits CRUD et `tabDescription()`. ~145 outils en héritent, ce qui aligne d'un coup la formulation des outils frères — c'est précisément ce qui permet à un modèle de les distinguer.
+- **Nouveau `src/tools/tab-tools.ts`** : les 42 outils d'onglet passent par un unique `registerTabTools()` au lieu de six boucles identiques (et six copies de l'interface `TabDefinition`) dans `candidates.ts`, `resources.ts`, `contacts.ts`, `companies.ts`, `opportunities.ts` et `projects.ts`. Une `TabDefinition` ne porte plus que `{ name, tab, title, subject, content?, returns }`.
+- **Les blocs `Args:` qui paraphrasaient le schéma ont été retirés** des gabarits. Le client a déjà reçu le JSON Schema avec ses propriétés `.describe()`-ées ; le redire coûte des octets et n'apprend rien.
+- **`tools/list` passe de 292 à 359 KiB** (+23 %). Compromis assumé : les descriptions sont ce qu'un modèle lit pour choisir un outil, et 48 KiB réparties sur 182 outils ne suffisaient pas à choisir juste. Les leviers de réduction existants restent disponibles (`BOOND_MCP_PROFILE`, `BOOND_MCP_DOMAINS`, `BOOND_MCP_ICONS=0` qui retire 40 KiB).
+
+### Fixed
+
+- **Chiffres de pagination faux dans 11 domaines.** Le gabarit de recherche par défaut de `crud-factory.ts` annonçait `pageSize (défaut: 20, max: 100)` alors que le schéma impose `DEFAULT_PAGE_SIZE`/`MAX_PAGE_SIZE`, soit **30 et 500**. Une description qui contredit son propre schéma est pire qu'une description absente : un modèle qui la croit plafonne ses pages à 100 et croit son `pageSize: 500` refusé. Touchait `accounts`, `agencies`, `business-units`, `calendars`, `flags`, `poles`, `products`, `roles`, `threads`, `todolists`, `webhooks`. Les textes interpolent maintenant `constants.ts`, un test signale tout littéral divergent, et un second test prouve que ce garde-fou attrape bien la chaîne historique — sans quoi il pourrait passer à vide.
+- **`fields` et la pagination sont désormais divulgués partout où le schéma les accepte** (32 et 38 outils). Les deux portent une sémantique qu'un JSON Schema ne peut pas exprimer : `fields` est appliqué **côté serveur MCP** et n'est jamais transmis à l'API BoondManager, et le plafond de page **refuse** la requête au lieu de la ramener au maximum. C'était l'unique défaut réel de `boond_poles_search` et `boond_accounts_search`, les deux outils les plus mal décrits du catalogue.
+
+### Added
+
+- **`src/tools/parameter-disclosure.ts` et `src/tools/usage-guidance.ts`**, appliqués par le Proxy `registerTool` de `registration-decorators.ts` — même mécanisme et même raison que les corrections de filtres : une règle qu'il faut se rappeler dans 38 fichiers est une règle qui se périme. Ajouter un outil de recherche divulgue maintenant `fields` que son auteur y ait pensé ou non.
+- **Plancher de longueur de description** (250 caractères) en plus du plafond, porté de 2000 à 2400. Le plancher est la moitié utile : c'est lui qui empêche un nouveau domaine de livrer un énième stub de 50 caractères. Le plafond a été relevé parce que `boond_resources_search` — le vocabulaire de filtres le plus large du catalogue — atteint 2149 avec les deux lignes qui disent quand *ne pas* l'appeler.
+- **32 tests** (1120 → 1152), dont la vérification bidirectionnelle de `USAGE_GUIDANCE` : aucune entrée ne peut désigner un outil inexistant, et aucun outil ne peut se retrouver sans guidance. Les assertions portent sur ce qu'un **vrai client** reçoit, pas sur les arguments passés à `registerTool` — la divulgation centrale est invisible d'un serveur mocké.
+
 ## [2.14.1] - 2026-09-08
 
 Version de maintenance : **aucun changement fonctionnel**. Le catalogue est inchangé (182 outils, 12 prompts, 22 ressources, 6 templates) et aucun schéma annoncé ne bouge — un client déjà connecté ne verra aucune différence. Le contenu est une remise à niveau des dépendances, dont une correction de vulnérabilité et un passage de Vitest en majeure.

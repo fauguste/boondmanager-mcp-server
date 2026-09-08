@@ -8,6 +8,7 @@ import {
   formatDetailResponse,
 } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
+import { defaultGetDescription } from "./description-builders.js";
 
 export function registerAdvantageTools(server: McpServer): void {
   // Search advantages
@@ -45,7 +46,10 @@ Returns: Liste des avantages correspondants.`,
     "boond_advantages_get",
     {
       title: "Détails d'un avantage",
-      description: `Récupère les informations détaillées d'un avantage par son ID.`,
+      description: defaultGetDescription({
+        ...{ entityName: "avantage", entityNamePlural: "avantages", prefix: "boond_advantages" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,

@@ -10,6 +10,7 @@ import {
 import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody, registerDeleteTool, MutationOutputSchema } from "./crud-factory.js";
 import { availableLabels, formatOverridesSummary, resolveLabel } from "../config/dictionary-overrides.js";
+import { defaultDeleteDescription, defaultGetDescription } from "./description-builders.js";
 
 /** Display labels for the five entities an action can be attached to. */
 const ACTION_ENTITY_LABELS: ReadonlyArray<readonly [string, string]> = [
@@ -73,7 +74,10 @@ Returns: Liste des actions correspondantes.`,
     "boond_actions_get",
     {
       title: "Détails d'une action",
-      description: `Récupère les détails d'une action par son ID.`,
+      description: defaultGetDescription({
+        ...{ entityName: "action", entityNamePlural: "actions", prefix: "boond_actions" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,
@@ -257,7 +261,11 @@ Returns: L'action mise à jour.`,
     { entityName: "action", entityNamePlural: "actions", apiPath: "/actions", prefix: "boond_actions" },
     {
       title: "Supprimer une action",
-      description: `Supprime une action de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+      description: defaultDeleteDescription({
+        entityName: "action",
+        entityNamePlural: "actions",
+        prefix: "boond_actions",
+      }),
     }
   );
 }

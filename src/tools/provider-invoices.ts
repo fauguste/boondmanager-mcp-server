@@ -4,6 +4,7 @@ import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse 
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
+import { composeDescription, defaultGetDescription } from "./description-builders.js";
 
 const ProviderInvoiceSearchSchema = z
   .object({
@@ -40,7 +41,17 @@ export function registerProviderInvoiceTools(server: McpServer): void {
     "boond_provider_invoices_create",
     {
       title: "Creer une facture fournisseur",
-      description: "Cree une facture fournisseur Boond avec resource, providerCompany et providerContact.",
+      description: composeDescription({
+        purpose: "Crée une facture fournisseur (facture reçue d'un prestataire).",
+        when: "pour enregistrer la facture émise par un sous-traitant.",
+        instead:
+          "`boond_invoices_create` pour une facture de vente adressée à un client — les deux sens ne partagent pas d'endpoint.",
+        behaviour: [
+          "`resource`, `providerCompany` et `providerContact` sont attendus sous forme d'ID numériques.",
+          "Écriture non idempotente.",
+        ],
+        returns: "confirmation et fiche de la facture fournisseur créée.",
+      }),
       inputSchema: ProviderInvoiceCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -75,7 +86,13 @@ export function registerProviderInvoiceTools(server: McpServer): void {
     "boond_provider_invoices_search",
     {
       title: "Rechercher des factures fournisseur",
-      description: "Recherche des factures fournisseur dans BoondManager.",
+      description: composeDescription({
+        purpose: "Liste et recherche les factures fournisseur (factures reçues des prestataires).",
+        when: "pour suivre les factures d'achat, par fournisseur, état ou période.",
+        instead:
+          "`boond_invoices_search` pour les factures de vente adressées aux clients — sens opposé, endpoint distinct.",
+        returns: "page de résumés de factures fournisseur (référence, date, montants). Lecture seule.",
+      }),
       inputSchema: ProviderInvoiceSearchSchema,
       annotations: {
         readOnlyHint: true,
@@ -102,7 +119,14 @@ export function registerProviderInvoiceTools(server: McpServer): void {
     "boond_provider_invoices_get",
     {
       title: "Details d'une facture fournisseur",
-      description: "Recupere les informations detaillees d'une facture fournisseur par son ID.",
+      description: defaultGetDescription({
+        ...{
+          entityName: "facture fournisseur",
+          entityNamePlural: "factures fournisseur",
+          prefix: "boond_provider_invoices",
+        },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,

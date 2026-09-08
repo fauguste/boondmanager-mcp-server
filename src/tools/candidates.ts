@@ -1,6 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CandidateCreateSchema, CandidateUpdateSchema, CandidateSearchSchema, IdSchema } from "../schemas/index.js";
-import type { IdInput } from "../schemas/index.js";
+import { CandidateCreateSchema, CandidateUpdateSchema, CandidateSearchSchema } from "../schemas/index.js";
 import {
   registerSearchTool,
   registerGetTool,
@@ -9,7 +8,8 @@ import {
   registerDeleteTool,
   buildJsonApiBody,
 } from "./crud-factory.js";
-import { apiRequest, formatTabResponse } from "../services/boond-client.js";
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
 
 const OPTS = {
   entityName: "candidat",
@@ -18,75 +18,47 @@ const OPTS = {
   prefix: "boond_candidates",
 };
 
-const TAB_TOOL_ANNOTATIONS = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-} as const;
-
-interface TabDefinition {
-  name: string;
-  tab: string;
-  title: string;
-  description: string;
-}
-
 const CANDIDATE_TABS: TabDefinition[] = [
   {
     name: "information",
     tab: "information",
     title: "Informations générales d'un candidat",
-    description: `Récupère les informations générales d'un candidat (coordonnées, adresse, état civil, photo, tags, source...).
-
-Args:
-  - id (string): ID du candidat
-
-Returns: Données personnelles et administratives du candidat.`,
+    subject: "les informations générales",
+    content: "coordonnées, adresse, état civil, photo, tags, source",
+    returns: "Bloc identité et coordonnées du candidat.",
   },
   {
     name: "technical_data",
     tab: "technical-data",
     title: "Compétences techniques d'un candidat",
-    description: `Récupère le profil technique d'un candidat (compétences, expériences, formations, certifications, langues, CV...).
-
-Args:
-  - id (string): ID du candidat
-
-Returns: Données techniques et compétences du candidat.`,
+    subject: "le profil technique",
+    content: "compétences, expériences, formations, certifications, langues, CV",
+    returns:
+      "Profil technique du candidat. Les ID de documents (CV) qui s'y trouvent alimentent `boond_documents_get`.",
   },
   {
     name: "administrative",
     tab: "administrative",
     title: "Données administratives d'un candidat",
-    description: `Récupère les informations administratives d'un candidat.
-
-Args:
-  - id (string): ID du candidat
-
-Returns: Données administratives du candidat.`,
+    subject: "les données administratives",
+    content: "pièces justificatives, documents contractuels, informations RH",
+    returns: "Bloc administratif du candidat, avec les ID de documents exploitables par `boond_documents_get`.",
   },
   {
     name: "actions",
     tab: "actions",
     title: "Actions liées à un candidat",
-    description: `Récupère les actions (appels, emails, RDV, notes) associées à un candidat.
-
-Args:
-  - id (string): ID du candidat
-
-Returns: Liste des actions liées au candidat.`,
+    subject: "les actions",
+    content: "appels, emails, RDV, notes",
+    returns: "Liste des actions rattachées au candidat.",
   },
   {
     name: "positionings",
     tab: "positionings",
     title: "Positionnements d'un candidat",
-    description: `Récupère les positionnements (placements sur des opportunités/projets) d'un candidat.
-
-Args:
-  - id (string): ID du candidat
-
-Returns: Liste des positionnements du candidat.`,
+    subject: "les positionnements",
+    content: "placements du candidat sur des opportunités ou des projets",
+    returns: "Liste des positionnements du candidat.",
   },
 ];
 
@@ -133,23 +105,5 @@ export function registerCandidateTools(server: McpServer): void {
 
   registerDeleteTool(server, OPTS);
 
-  // Register one tool per candidate tab
-  for (const tab of CANDIDATE_TABS) {
-    server.registerTool(
-      `boond_candidates_${tab.name}`,
-      {
-        title: tab.title,
-        description: tab.description,
-        inputSchema: IdSchema,
-        annotations: TAB_TOOL_ANNOTATIONS,
-      },
-      async (params: IdInput) => {
-        const response = await apiRequest(`/candidates/${params.id}/${tab.tab}`);
-        const text = formatTabResponse(response);
-        return {
-          content: [{ type: "text" as const, text }],
-        };
-      }
-    );
-  }
+  registerTabTools(server, { ...OPTS, prefix: OPTS.prefix }, CANDIDATE_TABS);
 }

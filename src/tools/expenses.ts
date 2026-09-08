@@ -16,6 +16,7 @@ import {
   registerUpdateTool,
   registerDeleteTool,
 } from "./crud-factory.js";
+import { defaultDeleteDescription } from "./description-builders.js";
 
 // Expense reports are searched on /expenses but read/written on /expenses-reports.
 const SEARCH_OPTS = {
@@ -224,6 +225,10 @@ Returns: Données de la note de frais créée avec son ID.`,
   registerUpdateTool(server, REPORT_OPTS, ExpenseUpdateSchema, buildExpenseBody, { method: "PUT" });
   registerDeleteTool(server, REPORT_OPTS, {
     title: "Supprimer une note de frais",
-    description: `Supprime une note de frais de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+    description: defaultDeleteDescription({
+      entityName: "note de frais",
+      entityNamePlural: "notes de frais",
+      prefix: "boond_expenses",
+    }),
   });
 }

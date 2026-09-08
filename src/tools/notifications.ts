@@ -8,6 +8,7 @@ import {
   formatDetailResponse,
 } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
+import { defaultGetDescription } from "./description-builders.js";
 
 export function registerNotificationTools(server: McpServer): void {
   server.registerTool(
@@ -45,7 +46,10 @@ Returns: Liste des notifications correspondantes.`,
     "boond_notifications_get",
     {
       title: "Détails d'une notification",
-      description: `Récupère les informations détaillées d'une notification par son ID.`,
+      description: defaultGetDescription({
+        ...{ entityName: "notification", entityNamePlural: "notifications", prefix: "boond_notifications" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,

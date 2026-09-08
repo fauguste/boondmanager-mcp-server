@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   registerCandidateTools,
@@ -43,6 +43,8 @@ import { registerAllPrompts } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
 import { SERVER_INSTRUCTIONS } from "../instructions.js";
 import { connectMcpClient, useDefaultServerSurface } from "./test-helpers.js";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "../constants.js";
+import { USAGE_GUIDANCE } from "./usage-guidance.js";
 
 /**
  * Sensible upper bound for a single tool description. MCP has a ~50KB total
@@ -50,8 +52,27 @@ import { connectMcpClient, useDefaultServerSurface } from "./test-helpers.js";
  * in a tools[] list — overly verbose descriptions dilute focus and waste
  * context. If a tool legitimately needs more than this, the detail belongs
  * in a prompt template or resource, not the tool schema.
+ *
+ * Raised from 2000 when every tool gained a mandatory usage-guidance section
+ * ("Quand / Plutôt que", see `description-builders.ts`) and an explicit
+ * `Returns`. The old ceiling was calibrated on descriptions that stated
+ * purpose and filters only, and `boond_resources_search` — the widest filter
+ * vocabulary in the catalogue — landed at 2149 with the two lines that tell a
+ * model when NOT to call it. The cap's job is to stop essays, not to force a
+ * choice between documenting filters and documenting siblings; the *floor*
+ * below is what now guards the other end.
  */
-const MAX_TOOL_DESCRIPTION_LENGTH = 2000;
+const MAX_TOOL_DESCRIPTION_LENGTH = 2400;
+
+/**
+ * Lower bound, and the more load-bearing of the two. A ~50-character
+ * description ("Récupère les détails d'une action par son ID.") restates the
+ * tool name, and a catalogue of 182 tools where 30 of them read like that
+ * leaves a model picking by string similarity. Every tool must state its
+ * purpose, when not to use it, and what comes back — which no honest
+ * description fits under this.
+ */
+const MIN_TOOL_DESCRIPTION_LENGTH = 250;
 
 /**
  * Prompts can be longer than tools (they're explicit user-facing templates),
@@ -107,6 +128,104 @@ describe("tools/list icon budget", () => {
     } finally {
       await close();
     }
+  });
+});
+
+/**
+ * Advertised-description contract.
+ *
+ * Asserted over a real client rather than over `registerTool` arguments,
+ * because three of the four properties below are installed centrally at
+ * registration time (`registration-decorators.ts`) and are therefore invisible
+ * to a mock server: a domain file can pass a description with no `fields`
+ * paragraph and still be correct, since the decorator adds it. What a client
+ * receives is the only thing that matters to the model, so that is what this
+ * measures.
+ */
+describe("advertised tool descriptions", () => {
+  useDefaultServerSurface();
+
+  let advertised: Array<{ name: string; description: string; inputKeys: string[] }>;
+
+  beforeAll(async () => {
+    const { client, close } = await connectMcpClient();
+    try {
+      advertised = (await client.listTools()).tools.map((t) => ({
+        name: t.name,
+        description: t.description ?? "",
+        inputKeys: Object.keys(
+          (t.inputSchema as { properties?: Record<string, unknown> } | undefined)?.properties ?? {}
+        ),
+      }));
+    } finally {
+      await close();
+    }
+    expect(advertised.length).toBeGreaterThan(150);
+  });
+
+  it("keeps every description inside the length band", () => {
+    const tooLong = advertised.filter((t) => t.description.length > MAX_TOOL_DESCRIPTION_LENGTH);
+    const tooShort = advertised.filter((t) => t.description.length < MIN_TOOL_DESCRIPTION_LENGTH);
+    expect(tooLong.map((t) => `${t.name}: ${t.description.length} > ${MAX_TOOL_DESCRIPTION_LENGTH}`)).toEqual([]);
+    expect(tooShort.map((t) => `${t.name}: ${t.description.length} < ${MIN_TOOL_DESCRIPTION_LENGTH}`)).toEqual([]);
+  });
+
+  it("tells the model when NOT to call the tool", () => {
+    // The dimension the catalogue scored worst on: 181 of 182 tools used to
+    // state what they do and nothing about which sibling to prefer, in a
+    // listing where ~45 tools return "some fields of one entity".
+    const missing = advertised.filter((t) => !/^(Quand|Plutôt que) :/m.test(t.description));
+    expect(missing.map((t) => t.name)).toEqual([]);
+  });
+
+  it("states what every tool returns", () => {
+    const missing = advertised.filter((t) => !/^Returns\s*:/m.test(t.description));
+    expect(missing.map((t) => t.name)).toEqual([]);
+  });
+
+  it("discloses `fields` and pagination wherever the schema accepts them", () => {
+    // Both carry semantics a JSON Schema cannot express: `fields` is applied
+    // client-side and never forwarded to BoondManager, and the page ceiling
+    // *rejects* rather than clamps. A tool that accepts them without saying so
+    // is the exact defect that made `boond_poles_search` the catalogue's
+    // lowest-scoring tool.
+    const silentFields = advertised.filter((t) => t.inputKeys.includes("fields") && !/fields/.test(t.description));
+    const silentPaging = advertised.filter((t) => t.inputKeys.includes("pageSize") && !/pageSize/.test(t.description));
+    expect(silentFields.map((t) => t.name)).toEqual([]);
+    expect(silentPaging.map((t) => t.name)).toEqual([]);
+    // Guards against the assertions passing because nothing declares them.
+    expect(advertised.filter((t) => t.inputKeys.includes("fields")).length).toBeGreaterThan(20);
+  });
+
+  it("has no orphan entry in the usage-guidance table", () => {
+    // The table is keyed by tool name, so a rename would silently drop a
+    // tool's guidance. This is the half of the drift check the table cannot
+    // do on its own; the "tells the model when NOT to call" test above is the
+    // other half.
+    const registered = new Set(advertised.map((t) => t.name));
+    const orphans = Object.keys(USAGE_GUIDANCE).filter((name) => !registered.has(name));
+    expect(orphans).toEqual([]);
+    expect(Object.keys(USAGE_GUIDANCE).length).toBeGreaterThan(20);
+  });
+
+  it("never contradicts the pagination ceilings it enforces", () => {
+    // A hand-typed "défaut: 20, max: 100" shipped to 11 domains against a
+    // schema enforcing 30/500. Descriptions must quote the constants, so any
+    // literal that disagrees with them is a regression.
+    const contradicting = advertised.filter((t) => {
+      const claimed = [...t.description.matchAll(/pageSize[^.\n]*?(\d{2,4})/g)].map((m) => Number(m[1]));
+      return claimed.some((n) => n !== MAX_PAGE_SIZE && n !== DEFAULT_PAGE_SIZE);
+    });
+    expect(contradicting.map((t) => t.name)).toEqual([]);
+  });
+
+  it("the pagination guard above actually catches the historical defect", () => {
+    // Without this, the assertion could pass because its regex matches nothing
+    // at all. This is the exact string the default search template shipped to
+    // 11 domains, `boond_poles_search` and `boond_accounts_search` included.
+    const legacy = "  - pageSize (number): Résultats par page (défaut: 20, max: 100)";
+    const claimed = [...legacy.matchAll(/pageSize[^.\n]*?(\d{2,4})/g)].map((m) => Number(m[1]));
+    expect(claimed.some((n) => n !== MAX_PAGE_SIZE && n !== DEFAULT_PAGE_SIZE)).toBe(true);
   });
 });
 

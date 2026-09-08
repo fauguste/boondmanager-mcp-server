@@ -11,6 +11,7 @@ import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
+import { composeDescription, defaultDeleteDescription, defaultGetDescription } from "./description-builders.js";
 
 const PurchaseSearchSchema = z
   .object({
@@ -69,7 +70,10 @@ Returns: Liste des achats correspondants.`,
     "boond_purchases_get",
     {
       title: "Détails d'un achat/sous-traitance",
-      description: `Récupère les informations détaillées d'un achat par son ID.`,
+      description: defaultGetDescription({
+        ...{ entityName: "achat", entityNamePlural: "achats", prefix: "boond_purchases" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,
@@ -90,7 +94,17 @@ Returns: Liste des achats correspondants.`,
     "boond_purchases_create",
     {
       title: "Créer un achat/sous-traitance",
-      description: `Crée un nouvel achat ou sous-traitance dans BoondManager.`,
+      description: composeDescription({
+        purpose: "Crée un achat ou une ligne de sous-traitance.",
+        when: "pour engager une dépense fournisseur, généralement rattachée à un projet.",
+        instead:
+          "`boond_provider_invoices_create` pour la facture reçue du fournisseur — l'achat est l'engagement, la facture fournisseur en est le règlement attendu.",
+        behaviour: [
+          "Écriture non idempotente.",
+          "Les ID de société, contact et projet sont des ID numériques BoondManager, à résoudre au préalable via les recherches correspondantes.",
+        ],
+        returns: "confirmation et fiche de l'achat créé.",
+      }),
       inputSchema: PurchaseCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -128,7 +142,11 @@ Returns: Liste des achats correspondants.`,
     { entityName: "achat", entityNamePlural: "achats", apiPath: "/purchases", prefix: "boond_purchases" },
     {
       title: "Supprimer un achat/sous-traitance",
-      description: `Supprime un achat de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+      description: defaultDeleteDescription({
+        entityName: "achat",
+        entityNamePlural: "achats",
+        prefix: "boond_purchases",
+      }),
     }
   );
 }

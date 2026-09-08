@@ -1,6 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CompanyCreateSchema, CompanyUpdateSchema, CompanySearchSchema, IdSchema } from "../schemas/index.js";
-import type { IdInput } from "../schemas/index.js";
+import { CompanyCreateSchema, CompanyUpdateSchema, CompanySearchSchema } from "../schemas/index.js";
 import {
   registerSearchTool,
   registerGetTool,
@@ -9,7 +8,8 @@ import {
   registerDeleteTool,
   buildJsonApiBody,
 } from "./crud-factory.js";
-import { apiRequest, formatTabResponse } from "../services/boond-client.js";
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
 
 const OPTS = {
   entityName: "société",
@@ -18,119 +18,74 @@ const OPTS = {
   prefix: "boond_companies",
 };
 
-const TAB_TOOL_ANNOTATIONS = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-} as const;
-
-interface TabDefinition {
-  name: string;
-  tab: string;
-  title: string;
-  description: string;
-}
-
 const COMPANY_TABS: TabDefinition[] = [
   {
     name: "information",
     tab: "information",
     title: "Informations générales d'une société",
-    description: `Récupère les informations générales d'une société (coordonnées, SIRET, site web, secteur, taille, tags...).
-
-Args:
-  - id (string): ID de la société
-
-Returns: Données générales de la société.`,
+    subject: "les informations générales",
+    content: "coordonnées, SIRET, site web, secteur, taille, tags",
+    returns: "Fiche signalétique de la société.",
   },
   {
     name: "contacts",
     tab: "contacts",
     title: "Contacts d'une société",
-    description: `Récupère les contacts associés à une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des contacts de la société.`,
+    subject: "les contacts",
+    content: "interlocuteurs rattachés à la société",
+    returns: "Liste des contacts de la société.",
   },
   {
     name: "actions",
     tab: "actions",
     title: "Actions liées à une société",
-    description: `Récupère les actions (appels, emails, RDV, notes) associées à une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des actions liées à la société.`,
+    subject: "les actions",
+    content: "appels, emails, RDV, notes",
+    returns: "Liste des actions rattachées à la société.",
   },
   {
     name: "opportunities",
     tab: "opportunities",
     title: "Opportunités d'une société",
-    description: `Récupère les opportunités commerciales d'une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des opportunités de la société.`,
+    subject: "les opportunités commerciales",
+    returns: "Liste des opportunités de la société.",
   },
   {
     name: "projects",
     tab: "projects",
     title: "Projets d'une société",
-    description: `Récupère les projets associés à une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des projets de la société.`,
+    subject: "les projets",
+    returns: "Liste des projets de la société.",
   },
   {
     name: "orders",
     tab: "orders",
     title: "Bons de commande d'une société",
-    description: `Récupère les bons de commande d'une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des bons de commande de la société.`,
+    subject: "les bons de commande",
+    returns: "Liste des bons de commande de la société.",
   },
   {
     name: "invoices",
     tab: "invoices",
     title: "Factures d'une société",
-    description: `Récupère les factures d'une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des factures de la société.`,
+    subject: "les factures client",
+    returns:
+      "Liste des factures de vente adressées à la société. Ne pas confondre avec `boond_companies_provider_invoices` (achat).",
   },
   {
     name: "purchases",
     tab: "purchases",
     title: "Achats d'une société",
-    description: `Récupère les achats/sous-traitance d'une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des achats de la société.`,
+    subject: "les achats et la sous-traitance",
+    returns: "Liste des achats engagés auprès de la société.",
   },
   {
     name: "provider_invoices",
-    tab: "provider-invoices",
+    tab: "provider_invoices",
     title: "Factures fournisseur d'une société",
-    description: `Récupère les factures fournisseur d'une société.
-
-Args:
-  - id (string): ID de la société
-
-Returns: Liste des factures fournisseur de la société.`,
+    subject: "les factures fournisseur",
+    content: "factures reçues de la société en tant que prestataire",
+    returns: "Liste des factures d'achat. Ne pas confondre avec `boond_companies_invoices` (vente).",
   },
 ];
 
@@ -177,23 +132,5 @@ export function registerCompanyTools(server: McpServer): void {
 
   registerDeleteTool(server, OPTS);
 
-  // Register one tool per company tab
-  for (const tab of COMPANY_TABS) {
-    server.registerTool(
-      `boond_companies_${tab.name}`,
-      {
-        title: tab.title,
-        description: tab.description,
-        inputSchema: IdSchema,
-        annotations: TAB_TOOL_ANNOTATIONS,
-      },
-      async (params: IdInput) => {
-        const response = await apiRequest(`/companies/${params.id}/${tab.tab}`);
-        const text = formatTabResponse(response);
-        return {
-          content: [{ type: "text" as const, text }],
-        };
-      }
-    );
-  }
+  registerTabTools(server, { ...OPTS, prefix: OPTS.prefix }, COMPANY_TABS);
 }

@@ -7,10 +7,8 @@ import {
   ReferenceCreateSchema,
   ReferenceUpdateSchema,
   ReferenceIdSchema,
-  IdSchema,
 } from "../schemas/index.js";
 import type {
-  IdInput,
   ResourceTechnicalDataUpdateInput,
   ReferenceCreateInput,
   ReferenceUpdateInput,
@@ -25,7 +23,9 @@ import {
   buildJsonApiBody,
   confirmDeletion,
 } from "./crud-factory.js";
-import { apiRequest, formatDetailResponse, formatTabResponse } from "../services/boond-client.js";
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
+import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
 
 const OPTS = {
   entityName: "ressource",
@@ -34,130 +34,84 @@ const OPTS = {
   prefix: "boond_resources",
 };
 
-const TAB_TOOL_ANNOTATIONS = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-} as const;
-
-interface TabDefinition {
-  name: string;
-  tab: string;
-  title: string;
-  description: string;
-}
-
 const RESOURCE_TABS: TabDefinition[] = [
   {
     name: "information",
     tab: "information",
     title: "Informations générales d'une ressource",
-    description: `Récupère les informations générales d'une ressource (coordonnées, adresse, état civil, photo, tags, manager...).
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Données personnelles et administratives de la ressource.`,
+    subject: "les informations générales",
+    content: "coordonnées, adresse, état civil, photo, tags, manager",
+    returns: "Bloc identité et rattachement hiérarchique de la ressource.",
   },
   {
     name: "technical_data",
     tab: "technical-data",
     title: "Compétences techniques d'une ressource",
-    description: `Récupère le profil technique d'une ressource (compétences, expériences, formations, certifications, langues, CV...).
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Données techniques et compétences de la ressource.`,
+    subject: "le profil technique",
+    content: "compétences, expériences, formations, certifications, langues, CV",
+    returns: "Profil technique de la ressource. Modifiable via `boond_resources_technical_data_update`.",
   },
   {
     name: "administrative",
     tab: "administrative",
     title: "Données administratives d'une ressource",
-    description: `Récupère les informations administratives d'une ressource (salaire, TJM, coût journalier, informations RH...).
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Données administratives et RH de la ressource.`,
+    subject: "les données administratives et RH",
+    content: "salaire, TJM, coût journalier, contrat",
+    returns: "Bloc administratif de la ressource — données salariales, à manier avec prudence.",
   },
   {
     name: "advantages",
     tab: "advantages",
     title: "Avantages d'une ressource",
-    description: `Récupère les avantages associés à une ressource (tickets restaurant, mutuelle, véhicule, primes...).
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des avantages de la ressource.`,
+    subject: "les avantages",
+    content: "tickets restaurant, mutuelle, véhicule, primes",
+    returns: "Liste des avantages de la ressource.",
   },
   {
     name: "actions",
     tab: "actions",
     title: "Actions liées à une ressource",
-    description: `Récupère les actions (appels, emails, RDV, notes) associées à une ressource.
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des actions liées à la ressource.`,
+    subject: "les actions",
+    content: "appels, emails, RDV, notes",
+    returns: "Liste des actions rattachées à la ressource.",
   },
   {
     name: "positionings",
     tab: "positionings",
     title: "Positionnements d'une ressource",
-    description: `Récupère les positionnements (placements sur des projets) d'une ressource.
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des positionnements de la ressource.`,
+    subject: "les positionnements",
+    content: "placements de la ressource sur des opportunités ou des projets",
+    returns: "Liste des positionnements de la ressource.",
   },
   {
     name: "projects",
     tab: "projects",
     title: "Projets d'une ressource",
-    description: `Récupère les projets auxquels une ressource participe ou a participé.
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des projets de la ressource.`,
+    subject: "les projets",
+    content: "missions en cours et passées auxquelles la ressource participe",
+    returns: "Liste des projets de la ressource.",
   },
   {
     name: "times_reports",
     tab: "times-reports",
     title: "Feuilles de temps d'une ressource",
-    description: `Récupère les feuilles de temps d'une ressource.
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des feuilles de temps de la ressource.`,
+    subject: "les feuilles de temps (CRA)",
+    returns: "Liste des CRA de la ressource. Pour le détail jour par jour d'un mois, utiliser `boond_timesheets_get`.",
   },
   {
     name: "expenses_reports",
     tab: "expenses-reports",
     title: "Notes de frais d'une ressource",
-    description: `Récupère les notes de frais d'une ressource.
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des notes de frais de la ressource.`,
+    subject: "les notes de frais",
+    returns: "Liste des notes de frais mensuelles de la ressource. Le détail des lignes est dans `boond_expenses_get`.",
   },
   {
     name: "absences_reports",
     tab: "absences-reports",
     title: "Demandes d'absences d'une ressource",
-    description: `Récupère les demandes d'absences d'une ressource (congés, RTT, maladie...).
-
-Args:
-  - id (string): ID de la ressource
-
-Returns: Liste des demandes d'absences de la ressource.`,
+    subject: "les demandes d'absences",
+    content: "congés, RTT, maladie",
+    returns: "Liste des demandes d'absences de la ressource.",
   },
 ];
 
@@ -271,7 +225,9 @@ Mode 'replace' — remplace intégralement chaque champ fourni par la valeur pas
 
 Seuls les champs explicitement fournis dans l'appel sont envoyés à l'API — un champ omis ne sera jamais réinitialisé à vide.
 
-Les expériences professionnelles (références) ne sont PAS gérées ici : utiliser boond_resources_reference_{create|update|delete}.`;
+Les expériences professionnelles (références) ne sont PAS gérées ici : utiliser boond_resources_reference_{create|update|delete}.
+
+Returns : confirmation et dossier technique mis à jour. Réponse inchangée si aucun champ n'était à écrire dans le mode demandé.`;
 
 const REFERENCE_CREATE_DESCRIPTION = `Crée une expérience professionnelle (référence) rattachée au DT d'une ressource.
 
@@ -280,13 +236,19 @@ const REFERENCE_CREATE_DESCRIPTION = `Crée une expérience professionnelle (ré
 Champs requis : resourceId, title, company, description.
 Dates : startMonth/endMonth en int 1..12 (ou string '1'..'12' sans leading zero) ; startYear/endYear en int 4 chiffres. ⚠️ "05" avec leading zero est rejeté par l'API.
 
-Pour compléter une référence existante, utiliser boond_resources_reference_update pour ne pas dupliquer.`;
+Pour compléter une référence existante, utiliser boond_resources_reference_update pour ne pas dupliquer.
+
+Returns : confirmation, nombre total de références et ID de celle créée (l'API ne le renvoie pas systématiquement).`;
 
 const REFERENCE_UPDATE_DESCRIPTION = `Met à jour une référence existante. Read-modify-write sur /resources/{id}/technical-data — seuls les champs explicitement fournis remplacent ceux de la référence ciblée, les autres champs et toutes les autres références restent intacts.
 
-Cas d'usage type : compléter startMonth/startYear/endMonth/endYear sur une référence sans toucher au titre, à la société ou à la description.`;
+Cas d'usage type : compléter startMonth/startYear/endMonth/endYear sur une référence sans toucher au titre, à la société ou à la description.
 
-const REFERENCE_DELETE_DESCRIPTION = `Supprime une référence (expérience professionnelle) du DT d'une ressource. Read-modify-write : lit la liste actuelle, en retire la référence ciblée, republie le reste. ⚠️ Action irréversible — vérifier l'ID au préalable.`;
+Returns : confirmation et dossier technique republié. Un \`referenceId\` introuvable renvoie \`isError: true\` avec la liste des ID présents.`;
+
+const REFERENCE_DELETE_DESCRIPTION = `Supprime une référence (expérience professionnelle) du DT d'une ressource. Read-modify-write : lit la liste actuelle, en retire la référence ciblée, republie le reste. ⚠️ Action irréversible — vérifier l'ID au préalable.
+
+Returns : confirmation et nombre de références restantes. Un \`referenceId\` introuvable renvoie \`isError: true\` avec la liste des ID présents.`;
 
 type EmbeddedReference = Record<string, unknown> & { id?: string | number };
 
@@ -350,25 +312,7 @@ export function registerResourceTools(server: McpServer): void {
 
   registerDeleteTool(server, OPTS);
 
-  // Register one tool per resource tab
-  for (const tab of RESOURCE_TABS) {
-    server.registerTool(
-      `boond_resources_${tab.name}`,
-      {
-        title: tab.title,
-        description: tab.description,
-        inputSchema: IdSchema,
-        annotations: TAB_TOOL_ANNOTATIONS,
-      },
-      async (params: IdInput) => {
-        const response = await apiRequest(`/resources/${params.id}/${tab.tab}`);
-        const text = formatTabResponse(response);
-        return {
-          content: [{ type: "text" as const, text }],
-        };
-      }
-    );
-  }
+  registerTabTools(server, { ...OPTS, prefix: OPTS.prefix }, RESOURCE_TABS);
 
   server.registerTool(
     "boond_resources_technical_data_update",

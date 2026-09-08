@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PROMPTS } from "../prompts/index.js";
 import { isDomainAllowed, type AccessPolicy } from "../config/access-policy.js";
+import { composeDescription } from "./description-builders.js";
 
 /**
  * Workflow tools — same runbooks as the MCP prompts in `src/prompts/index.ts`,
@@ -30,11 +31,20 @@ export function registerWorkflowTools(server: McpServer, policy?: AccessPolicy):
       `boond_workflow_${p.name}`,
       {
         title: p.title,
-        description:
-          p.description +
-          ` Équivalent en outil du prompt MCP \`${p.name}\` ` +
-          "(utile pour les clients qui ne gèrent pas correctement les prompts MCP, ex: claude.ai). " +
-          "Retourne un runbook texte que le modèle doit ensuite exécuter en appelant les outils Boond référencés.",
+        description: composeDescription({
+          purpose: p.description,
+          when: "pour dérouler ce scénario multi-étapes sans avoir à retrouver soi-même le bon enchaînement d'outils et les bons noms de filtres.",
+          instead:
+            `le prompt MCP \`${p.name}\` si le client l'expose — contenu identique, ` +
+            "sans consommer un appel d'outil. Cette variante existe pour les clients qui " +
+            "traitent mal `prompts/get` (claude.ai notamment).",
+          behaviour: [
+            "N'appelle aucune API BoondManager et ne lit aucune donnée : la réponse est générée côté serveur MCP.",
+          ],
+          returns:
+            "un runbook en texte — la liste ordonnée des appels Boond à effectuer, avec les filtres exacts. " +
+            "C'est ensuite au modèle de les exécuter ; rien n'est fait par cet appel.",
+        }),
         inputSchema: p.argsSchema,
         annotations: {
           readOnlyHint: true,

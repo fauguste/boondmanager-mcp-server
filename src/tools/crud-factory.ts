@@ -11,6 +11,13 @@ import {
 } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
 import { SearchSchema, IdSchema, IdTabSchema } from "../schemas/index.js";
+import {
+  defaultSearchDescription,
+  defaultGetDescription,
+  defaultCreateDescription,
+  defaultUpdateDescription,
+  defaultDeleteDescription,
+} from "./description-builders.js";
 import { isFeatureDisabled } from "../config/env-flags.js";
 import type { SearchInput, IdInput, IdTabInput } from "../schemas/index.js";
 import type { JsonApiResponse, JsonApiResource } from "../types.js";
@@ -215,16 +222,11 @@ export function registerSearchTool(
 ): void {
   const schema = overrides.schema ?? SearchSchema;
   const title = overrides.title ?? `Rechercher des ${opts.entityNamePlural}`;
-  const description =
-    overrides.description ??
-    `Recherche des ${opts.entityNamePlural} dans BoondManager par mots-clés avec pagination.
-
-Args:
-  - keywords (string, optional): Termes de recherche (nom, email, compétences...)
-  - page (number): Numéro de page (défaut: 1)
-  - pageSize (number): Résultats par page (défaut: 20, max: 100)
-
-Returns: Liste des ${opts.entityNamePlural} correspondants avec leur ID, nom et détails principaux.`;
+  // The pagination figures used to be typed by hand here and said
+  // "défaut: 20, max: 100" against a schema enforcing DEFAULT_PAGE_SIZE/
+  // MAX_PAGE_SIZE (30/500) — a contradiction shipped to every domain using the
+  // default. They now come from `constants.ts` via the builder.
+  const description = overrides.description ?? defaultSearchDescription(opts);
 
   server.registerTool(
     `${opts.prefix}_search`,
@@ -271,17 +273,7 @@ interface GetToolOverrides {
 export function registerGetTool(server: McpServer, opts: CrudToolOptions, overrides: GetToolOverrides = {}): void {
   const withTab = overrides.withTab ?? true;
   const title = overrides.title ?? `Détails d'un(e) ${opts.entityName}`;
-  const description =
-    overrides.description ??
-    (withTab
-      ? `Récupère les informations détaillées d'un(e) ${opts.entityName} par son ID. Optionnellement un onglet spécifique (information, technical, financial, actions, contracts, documents).
-
-Args:
-  - id (string): Identifiant unique du/de la ${opts.entityName}
-  - tab (string, optional): Onglet spécifique à récupérer
-
-Returns: Données JSON complètes de l'entité.`
-      : `Récupère les informations détaillées d'un(e) ${opts.entityName} par son ID.`);
+  const description = overrides.description ?? defaultGetDescription({ ...opts, withTab });
 
   server.registerTool(
     `${opts.prefix}_get`,
@@ -324,11 +316,7 @@ export function registerCreateTool(
     `${opts.prefix}_create`,
     {
       title: overrides.title ?? `Créer un(e) ${opts.entityName}`,
-      description:
-        overrides.description ??
-        `Crée un(e) nouvel(le) ${opts.entityName} dans BoondManager.
-
-Returns: Données du/de la ${opts.entityName} créé(e) avec son ID.`,
+      description: overrides.description ?? defaultCreateDescription(opts),
       inputSchema: schema,
       outputSchema: MutationOutputSchema,
       annotations: {
@@ -364,6 +352,9 @@ interface UpdateToolOverrides {
    * only accept updates on their `/information` sub-resource and return 405 on
    * PATCH/PUT against the base resource (see issue #124). */
   pathSuffix?: string;
+  title?: string;
+  /** Overrides the composed default (see `description-builders.ts`). */
+  description?: string;
 }
 
 export function registerUpdateTool(
@@ -378,10 +369,8 @@ export function registerUpdateTool(
   server.registerTool(
     `${opts.prefix}_update`,
     {
-      title: `Modifier un(e) ${opts.entityName}`,
-      description: `Met à jour un(e) ${opts.entityName} existant(e) dans BoondManager. Seuls les champs fournis sont modifiés.
-
-Returns: Données mises à jour du/de la ${opts.entityName}.`,
+      title: overrides.title ?? `Modifier un(e) ${opts.entityName}`,
+      description: overrides.description ?? defaultUpdateDescription(opts),
       inputSchema: schema,
       outputSchema: MutationOutputSchema,
       annotations: {
@@ -423,12 +412,7 @@ export function registerDeleteTool(
     `${opts.prefix}_delete`,
     {
       title: overrides.title ?? `Supprimer un(e) ${opts.entityName}`,
-      description:
-        overrides.description ??
-        `Supprime un(e) ${opts.entityName} de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée à l'utilisateur avant la suppression.
-
-Args:
-  - id (string): Identifiant de l'entité à supprimer`,
+      description: overrides.description ?? defaultDeleteDescription(opts),
       inputSchema: IdSchema,
       outputSchema: DeleteOutputSchema,
       annotations: {

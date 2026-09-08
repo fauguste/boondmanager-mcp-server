@@ -10,6 +10,7 @@ import {
 import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
+import { composeDescription, defaultGetDescription } from "./description-builders.js";
 
 const DeliveryCreateSchema = z
   .object({
@@ -33,7 +34,17 @@ export function registerDeliveryTools(server: McpServer): void {
     "boond_deliveries_create",
     {
       title: "Creer une prestation/livraison",
-      description: "Cree une prestation Boond via POST /deliveries, liee a un projet et une ressource.",
+      description: composeDescription({
+        purpose: "Crée une prestation (livraison) rattachée à un projet et à une ressource.",
+        when: "pour ouvrir la ligne de mission qui rendra la ressource facturable sur ce projet.",
+        instead: "`boond_projects_deliveries_groupments` pour lister les prestations déjà en place sur le projet.",
+        behaviour: [
+          "`project` et `resource` sont obligatoires et attendent des ID numériques.",
+          "L'ID de prestation retourné est celui qu'exigent les lignes de note de frais (`boond_expenses_create`).",
+          "Écriture non idempotente.",
+        ],
+        returns: "confirmation et fiche de la prestation créée.",
+      }),
       inputSchema: DeliveryCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -103,7 +114,10 @@ Returns: Liste des livraisons correspondantes.`,
     "boond_deliveries_get",
     {
       title: "Details d'une livraison / CRA",
-      description: "Recupere les informations detaillees d'une livraison (CRA) par son ID.",
+      description: defaultGetDescription({
+        ...{ entityName: "livraison (CRA)", entityNamePlural: "livraisons", prefix: "boond_deliveries" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,

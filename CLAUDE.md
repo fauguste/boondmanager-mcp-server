@@ -104,6 +104,10 @@ src/
 └── tools/
     ├── index.ts          # Barrel export of all register*Tools functions
     ├── crud-factory.ts   # Generic CRUD tool factory (registerSearchTool, registerGetTool, etc.) + structured output schemas + confirmDeletion() (elicitation)
+    ├── description-builders.ts    # composeDescription() + the five CRUD templates + tabDescription() — the tool-description contract
+    ├── tab-tools.ts               # registerTabTools() — the 42 entity-tab tools, one loop instead of six
+    ├── parameter-disclosure.ts    # withParameterDisclosure() — discloses `fields` / pagination semantics on the tools that declare them
+    ├── usage-guidance.ts          # USAGE_GUIDANCE — per-tool "when / rather than" for the hand-rolled tools, backfilled centrally
     ├── validation-wrapper.ts      # withFilterHints() — rebuilds *_search schemas with model-actionable unknown-key messages
     ├── registration-decorators.ts # Per-domain registerTool Proxy: applies the above + records tool→domain for icons
     └── *.ts              # One file per domain (38 tool files; documents.ts = download/upload/delete de documents & CV)
@@ -140,11 +144,20 @@ contacts, companies, opportunities, projects, products. Call signature:
 optionally swaps the default `SearchSchema` for a per-entity schema and
 overrides the title/description.
 
-**Tab tools**: Major entities (candidates, resources, contacts, companies,
-opportunities, projects) register additional tools for each tab endpoint.
-These are registered in loops over `ENTITY_TABS[entity]` from constants.ts.
-Tool name pattern: `boond_{entity}_{tab_name}` (hyphens replaced with
-underscores).
+**Tab tools** (`src/tools/tab-tools.ts`): Major entities (candidates, resources,
+contacts, companies, opportunities, projects) register one extra tool per tab
+endpoint — 42 in total. Tool name pattern: `boond_{entity}_{tab_name}` (hyphens
+replaced with underscores).
+
+They all go through `registerTabTools(server, opts, tabs)`; a `TabDefinition`
+supplies only `{ name, tab, title, subject, content?, returns }` and the
+description is composed by `tabDescription()`. This was six byte-identical
+registration loops in six domain files, each with its own copy of the
+`TabDefinition` interface. Centralising matters beyond deduplication: these are
+the catalogue's densest cluster of near-identical tools (same `IdSchema`, same
+annotations, all "some fields of one entity"), so the one thing their
+descriptions must do — name the slice *and* the sibling that reaches the rest —
+now comes from a single template that cannot drift per domain.
 
 **Simple domains**: Most admin/reference domains (accounts, agencies,
 roles, etc.) register only search + get with direct `server.registerTool()`
@@ -572,7 +585,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 64 test files, **1120 tests**
+- **Current stats**: 66 test files, **1152 tests**
 
 ### Test file template (for read-only search+get domains):
 
@@ -621,7 +634,11 @@ describe("registerXxxTools", () => {
 5. Export from `src/tools/index.ts`
 6. Register in `src/server.ts`
 7. Add API path to `API_PATHS` in `constants.ts` (if applicable)
-8. Create `src/tools/{domain}.test.ts` following the test pattern above
+8. Create `src/tools/{domain}.test.ts` following the test pattern above.
+   Descriptions are checked against the *Tool Description Contract* above — the
+   factory templates satisfy it for free, but a hand-written description needs
+   its own `Quand :` / `Plutôt que :` / `Returns :`, or an entry in
+   `USAGE_GUIDANCE`. `descriptions.test.ts` names the offending tool either way
 9. Regenerate the catalogue: `npm run docs:tools` (commit `TOOLS.md` along with the change — CI fails otherwise)
 10. Run `npm test && npm run lint && npm run typecheck && npm run build`
 
@@ -649,15 +666,89 @@ For a **new entity template**, append to `ENTITY_TEMPLATES` in
 policy) and add a row to `templates.test.ts`. Keep the tabs bounded — see the
 invariants above — and never hand the raw `{id}` to an API path.
 
-## Description Length Limits
+## Tool Description Contract
 
-To keep the MCP tools[] list digestible by the LLM and within the ~50KB total message limit, the codebase enforces maximum description lengths at test time (`src/tools/descriptions.test.ts`):
+Every advertised tool description states four things, in this order: **purpose**
+(verb + resource + scope, one sentence), **usage guidance** (`Quand :` /
+`Plutôt que :`, naming a real sibling), any **behaviour** a caller cannot infer
+from the schema, and **`Returns :`**. Composed by
+`src/tools/description-builders.ts` and asserted end-to-end over a real client
+in `src/tools/descriptions.test.ts` (`advertised tool descriptions`).
 
-- **Tools**: 2000 chars — enough for a concise summary + key filters. Anything longer dilutes focus and wastes context.
-- **Prompts**: 3000 chars — can be more verbose (they're user-facing templates), but still shouldn't become essays.
-- **Resources**: 1000 chars — metadata for the list, not the content itself.
+Why it is a contract and not a style guide: the catalogue is 182 tools, ~45 of
+which take a bare `id` and return "some fields of one entity". A description
+that only says what the tool does leaves a model choosing between them by name
+similarity. The measured state before this contract: **181 of 182** tools said
+nothing about which sibling to prefer, the median description was 170 chars, and
+30 tools sat under 75 — `boond_actions_get` was *"Récupère les détails d'une
+action par son ID."*, which restates its own name.
 
-These are tested on every CI run. If a description exceeds the limit, the test fails with the exact tool name and length, forcing either a trim or a justification bump to the constant.
+Where descriptions come from, in order of coverage:
+
+1. **The five CRUD templates + the tab template** (`description-builders.ts`)
+   — ~145 tools. Fixing a template fixes every domain at once, which is also
+   what keeps siblings phrased consistently.
+2. **Central disclosures** (`parameter-disclosure.ts`, `usage-guidance.ts`),
+   applied by the `registerTool` Proxy in `registration-decorators.ts` — same
+   mechanism and same rationale as the filter hints: a rule that has to be
+   remembered in 38 files is a rule that decays.
+3. **Hand-written bodies** in the domain files, for endpoint filter vocabulary
+   and the documented traps (expenses, documents, technical data). The
+   guidance section is backfilled around them, never over them — a
+   hand-written explanation always wins.
+
+### Invariants (each has a test)
+
+- **No `Args:` block that paraphrases the schema.** The client already received
+  the JSON Schema with its `.describe()`-d properties; restating it costs bytes
+  and adds nothing. The templates dropped theirs.
+- **`fields` and `page`/`pageSize` are disclosed wherever the schema accepts
+  them** — 32 and 38 tools. Both carry semantics a JSON Schema cannot express:
+  `fields` is applied *client-side* and never forwarded to BoondManager, and
+  the page ceiling **rejects** rather than clamps. This is the whole defect that
+  made `boond_poles_search` and `boond_accounts_search` the catalogue's
+  worst-described tools.
+- **Descriptions never contradict the ceilings the schemas enforce.** The
+  previous hand-typed template announced `pageSize (défaut: 20, max: 100)`
+  against a schema enforcing `DEFAULT_PAGE_SIZE`/`MAX_PAGE_SIZE` (30/500) and
+  shipped that to 11 domains. The disclosures interpolate `constants.ts`, and a
+  test flags any literal that disagrees — plus a second test proving that guard
+  actually catches the historical string, so it cannot pass vacuously.
+- **`USAGE_GUIDANCE` cannot rot silently.** It is keyed by tool name, so both
+  directions are asserted: no entry may name a tool that does not exist, and no
+  tool may end up without guidance.
+- **An `instead` names a tool or says none exists.** "See the other tools"
+  costs bytes and resolves no ambiguity; where a tool is genuinely the only
+  path (`boond_expenses_default`, `boond_documents_create`), saying *that* is
+  the actionable fact.
+
+### Length limits (`src/tools/descriptions.test.ts`)
+
+- **Tools**: 250–2400 chars. The **floor** is the load-bearing half — it is
+  what stops a new domain from landing another 50-char stub. The ceiling was
+  raised from 2000 when guidance and `Returns` became mandatory:
+  `boond_resources_search`, the widest filter vocabulary in the catalogue,
+  lands at 2149, and the cap's job is to stop essays, not to force a choice
+  between documenting filters and documenting siblings.
+- **Prompts**: 3000 chars — user-facing templates, but not essays.
+- **Resources**: 1000 chars — metadata for the list, not the content.
+
+### The cost, stated plainly
+
+`tools/list` went from **292 KiB to 359 KiB** (+23%). That is the deliberate
+trade: the descriptions are the thing a model reads to pick a tool, and 48 KiB
+of them across 182 tools was not enough to pick correctly. Two notes on it:
+
+- It partly **duplicates `SERVER_INSTRUCTIONS`**, which states the `fields` and
+  pagination rules once for the session precisely to avoid paying them 182
+  times. That duplication is intentional here and only here: a client that
+  lists tools without reading `instructions` — and any tool-definition
+  scorer — sees each tool in isolation. Both disclosures are therefore kept at
+  the shortest form that still carries the fact, with a test capping their
+  length, because every word is paid 32–38 times.
+- Operators who need the payload smaller have the existing levers:
+  `BOOND_MCP_PROFILE` / `BOOND_MCP_DOMAINS` cut the surface, and
+  `BOOND_MCP_ICONS=0` drops another 40 KiB.
 
 ## MCP Annotations
 

@@ -8,6 +8,7 @@ import {
   formatDetailResponse,
 } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
+import { defaultGetDescription } from "./description-builders.js";
 
 export function registerValidationTools(server: McpServer): void {
   server.registerTool(
@@ -48,7 +49,10 @@ Returns: Liste des validations correspondantes.`,
     "boond_validations_get",
     {
       title: "Détails d'une validation",
-      description: `Récupère les informations détaillées d'une validation par son ID.`,
+      description: defaultGetDescription({
+        ...{ entityName: "validation", entityNamePlural: "validations", prefix: "boond_validations" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,

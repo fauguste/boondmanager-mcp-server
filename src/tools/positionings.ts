@@ -7,6 +7,7 @@ import {
 } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody, registerDeleteTool, MutationOutputSchema } from "./crud-factory.js";
+import { composeDescription, defaultDeleteDescription, defaultGetDescription } from "./description-builders.js";
 
 export function registerPositioningTools(server: McpServer): void {
   // Search positionings
@@ -58,7 +59,10 @@ Returns: Liste des positionnements correspondants.`,
     "boond_positionings_get",
     {
       title: "Détails d'un positionnement",
-      description: `Récupère les informations détaillées d'un positionnement par son ID.`,
+      description: defaultGetDescription({
+        ...{ entityName: "positionnement", entityNamePlural: "positionnements", prefix: "boond_positionings" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,
@@ -80,7 +84,17 @@ Returns: Liste des positionnements correspondants.`,
     "boond_positionings_create",
     {
       title: "Créer un positionnement",
-      description: `Crée un nouveau positionnement pour placer un candidat ou une ressource sur un projet ou une opportunité.`,
+      description: composeDescription({
+        purpose: "Crée un positionnement : place un candidat ou une ressource sur une opportunité ou un projet.",
+        when: "pour matérialiser une proposition de profil au client.",
+        instead:
+          "`boond_positionings_update` pour faire avancer l'état d'un positionnement existant (proposé → retenu → refusé) plutôt que d'en créer un second.",
+        behaviour: [
+          "Écriture non idempotente : rien n'empêche deux positionnements du même profil sur la même affaire.",
+          "L'état est un ID entier du dictionnaire (`boond://dictionary/states/positionings`), pas un libellé.",
+        ],
+        returns: "confirmation et fiche du positionnement créé.",
+      }),
       inputSchema: PositioningCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -177,7 +191,11 @@ Returns: Données mises à jour du positionnement.`,
     },
     {
       title: "Supprimer un positionnement",
-      description: `Supprime un positionnement de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+      description: defaultDeleteDescription({
+        entityName: "positionnement",
+        entityNamePlural: "positionnements",
+        prefix: "boond_positionings",
+      }),
     }
   );
 }

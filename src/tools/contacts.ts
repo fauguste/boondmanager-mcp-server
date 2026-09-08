@@ -1,6 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ContactCreateSchema, ContactUpdateSchema, ContactSearchSchema, IdSchema } from "../schemas/index.js";
-import type { IdInput } from "../schemas/index.js";
+import { ContactCreateSchema, ContactUpdateSchema, ContactSearchSchema } from "../schemas/index.js";
 import {
   registerSearchTool,
   registerGetTool,
@@ -9,7 +8,8 @@ import {
   registerDeleteTool,
   buildJsonApiBody,
 } from "./crud-factory.js";
-import { apiRequest, formatTabResponse } from "../services/boond-client.js";
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
 
 const OPTS = {
   entityName: "contact",
@@ -18,86 +18,51 @@ const OPTS = {
   prefix: "boond_contacts",
 };
 
-const TAB_TOOL_ANNOTATIONS = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-} as const;
-
-interface TabDefinition {
-  name: string;
-  tab: string;
-  title: string;
-  description: string;
-}
-
 const CONTACT_TABS: TabDefinition[] = [
   {
     name: "information",
     tab: "information",
     title: "Informations générales d'un contact",
-    description: `Récupère les informations générales d'un contact (coordonnées, société, fonction, tags...).
-
-Args:
-  - id (string): ID du contact
-
-Returns: Données personnelles et professionnelles du contact.`,
+    subject: "les informations générales",
+    content: "coordonnées, société de rattachement, fonction, tags",
+    returns: "Bloc identité et rattachement du contact.",
   },
   {
     name: "actions",
     tab: "actions",
     title: "Actions liées à un contact",
-    description: `Récupère les actions (appels, emails, RDV, notes) associées à un contact.
-
-Args:
-  - id (string): ID du contact
-
-Returns: Liste des actions liées au contact.`,
+    subject: "les actions",
+    content: "appels, emails, RDV, notes",
+    returns: "Liste des actions rattachées au contact.",
   },
   {
     name: "opportunities",
     tab: "opportunities",
     title: "Opportunités d'un contact",
-    description: `Récupère les opportunités commerciales associées à un contact.
-
-Args:
-  - id (string): ID du contact
-
-Returns: Liste des opportunités du contact.`,
+    subject: "les opportunités commerciales",
+    content: "affaires portées par ce contact",
+    returns: "Liste des opportunités du contact.",
   },
   {
     name: "projects",
     tab: "projects",
     title: "Projets d'un contact",
-    description: `Récupère les projets associés à un contact.
-
-Args:
-  - id (string): ID du contact
-
-Returns: Liste des projets du contact.`,
+    subject: "les projets",
+    returns: "Liste des projets rattachés au contact.",
   },
   {
     name: "orders",
     tab: "orders",
     title: "Bons de commande d'un contact",
-    description: `Récupère les bons de commande associés à un contact.
-
-Args:
-  - id (string): ID du contact
-
-Returns: Liste des bons de commande du contact.`,
+    subject: "les bons de commande",
+    returns: "Liste des bons de commande du contact.",
   },
   {
     name: "invoices",
     tab: "invoices",
     title: "Factures d'un contact",
-    description: `Récupère les factures associées à un contact.
-
-Args:
-  - id (string): ID du contact
-
-Returns: Liste des factures du contact.`,
+    subject: "les factures",
+    returns: "Liste des factures adressées au contact.",
   },
 ];
 
@@ -150,23 +115,5 @@ export function registerContactTools(server: McpServer): void {
 
   registerDeleteTool(server, OPTS);
 
-  // Register one tool per contact tab
-  for (const tab of CONTACT_TABS) {
-    server.registerTool(
-      `boond_contacts_${tab.name}`,
-      {
-        title: tab.title,
-        description: tab.description,
-        inputSchema: IdSchema,
-        annotations: TAB_TOOL_ANNOTATIONS,
-      },
-      async (params: IdInput) => {
-        const response = await apiRequest(`/contacts/${params.id}/${tab.tab}`);
-        const text = formatTabResponse(response);
-        return {
-          content: [{ type: "text" as const, text }],
-        };
-      }
-    );
-  }
+  registerTabTools(server, { ...OPTS, prefix: OPTS.prefix }, CONTACT_TABS);
 }
