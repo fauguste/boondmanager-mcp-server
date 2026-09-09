@@ -85,6 +85,19 @@ export const PAGINATION_DISCLOSURE =
   `\`page\` 1–${MAX_SEARCH_PAGE} — au-delà : refus, affiner les filtres.`;
 
 /**
+ * The opposite contract, for the reference routes that accept `maxResults` and
+ * discard it (see `TOOLS_IGNORING_PAGINATION`, measured against the live API).
+ * Says the two things a caller acts on: asking for fewer rows changes nothing,
+ * and there is no second page to fetch.
+ *
+ * Stating the ceiling on these tools would be the same defect the catalogue
+ * just removed — a description promising behaviour the endpoint does not have.
+ */
+export const PAGINATION_INERT_DISCLOSURE =
+  "Pagination sans effet : cette route renvoie toujours la table complète, " +
+  "`pageSize` et `page` sont ignorés par l'API — inutile de paginer, tout est déjà là.";
+
+/**
  * `fields` is the catalogue's main token-economy lever and is invisible in the
  * schema alone: the name list is applied *client-side* to the response, is
  * never forwarded to BoondManager, and silently ignores names the entity does
@@ -117,15 +130,22 @@ export interface EntityWording {
 
 /**
  * Default search description for a reference/admin domain: no endpoint-specific
- * filter vocabulary, so the value it adds over the schema is the pagination
- * contract, the projection lever, and the pointer to the matching `_get`.
+ * filter vocabulary, so the value it adds over the schema is the pointer to the
+ * matching `_get` and the shape of what comes back.
+ *
+ * It deliberately does **not** state the pagination or `fields` contracts.
+ * Those are appended by `withParameterDisclosure`, which is the single source
+ * for both — and has to be, because the right pagination sentence depends on
+ * the *route*: four reference endpoints accept `maxResults` and discard it
+ * (`TOOLS_IGNORING_PAGINATION`), so a template that hard-coded the ceiling
+ * would make a promise the endpoint breaks, and would suppress the correct
+ * wording by having already mentioned `pageSize`.
  */
 export function defaultSearchDescription(opts: EntityWording): string {
   return composeDescription({
     purpose: `Liste et recherche les ${opts.entityNamePlural} de BoondManager, par mots-clés et pagination.`,
     when: `pour retrouver l'ID d'un(e) ${opts.entityName} à partir de son nom, ou pour énumérer les ${opts.entityNamePlural} existant(e)s.`,
     instead: `\`${opts.prefix}_get\` si l'ID est déjà connu — la recherche ne renvoie qu'un résumé d'une ligne par ${opts.entityName}.`,
-    behaviour: [PAGINATION_DISCLOSURE, FIELDS_DISCLOSURE],
     returns: `page de résumés (ID + libellé principal), plus \`structuredContent.total\` = nombre total côté BoondManager. Lecture seule.`,
   });
 }

@@ -1,4 +1,5 @@
-import { FIELDS_DISCLOSURE, PAGINATION_DISCLOSURE } from "./description-builders.js";
+import { FIELDS_DISCLOSURE, PAGINATION_DISCLOSURE, PAGINATION_INERT_DISCLOSURE } from "./description-builders.js";
+import { TOOLS_IGNORING_PAGINATION } from "../constants.js";
 
 /**
  * Central, drift-proof disclosure of the two parameters whose *semantics* live
@@ -45,7 +46,10 @@ function alreadyDiscloses(description: string, name: string): boolean {
   return new RegExp(`\`?\\b${name}\\b`, "i").test(description);
 }
 
-export function withParameterDisclosure<T extends { description?: string; inputSchema?: unknown }>(config: T): T {
+export function withParameterDisclosure<T extends { description?: string; inputSchema?: unknown }>(
+  config: T,
+  name?: string
+): T {
   const description = config.description;
   if (typeof description !== "string" || description.length === 0) return config;
 
@@ -56,9 +60,12 @@ export function withParameterDisclosure<T extends { description?: string; inputS
     additions.push(FIELDS_DISCLOSURE);
   }
   // One paragraph covers both keys; `pageSize` is the one whose ceiling gets
-  // exceeded in practice, so it decides.
+  // exceeded in practice, so it decides. A handful of reference routes accept
+  // the parameter and discard it — promising them the ceiling would be a
+  // description contradicting the endpoint, so they get the opposite sentence.
   if (keys.has("pageSize") && !alreadyDiscloses(description, "pageSize")) {
-    additions.push(PAGINATION_DISCLOSURE);
+    const inert = name !== undefined && TOOLS_IGNORING_PAGINATION.has(name);
+    additions.push(inert ? PAGINATION_INERT_DISCLOSURE : PAGINATION_DISCLOSURE);
   }
 
   if (additions.length === 0) return config;

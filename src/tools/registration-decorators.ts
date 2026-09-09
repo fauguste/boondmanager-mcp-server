@@ -62,7 +62,7 @@ export function decorateRegistrations(server: McpServer, domain: DomainName, ind
           const decorated =
             config === undefined
               ? config
-              : withValidationFeedback(name, withUsageGuidance(name, withParameterDisclosure(config)), domain);
+              : withValidationFeedback(name, withUsageGuidance(name, withParameterDisclosure(config, name)), domain);
           return (value as (...a: unknown[]) => unknown).apply(target, [name, decorated, ...args.slice(2)]);
         };
       }

@@ -11,6 +11,8 @@ import {
   FIELDS_DISCLOSURE,
 } from "./description-builders.js";
 import { withParameterDisclosure } from "./parameter-disclosure.js";
+import { PAGINATION_INERT_DISCLOSURE } from "./description-builders.js";
+import { TOOLS_IGNORING_PAGINATION } from "../constants.js";
 import { USAGE_GUIDANCE, injectUsageGuidance, withUsageGuidance } from "./usage-guidance.js";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
 
@@ -72,6 +74,13 @@ describe("the five CRUD templates", () => {
     defaultDeleteDescription(WORDING),
   ];
 
+  it("leaves the pagination and `fields` contracts to the central disclosure", () => {
+    // Single-sourced in `withParameterDisclosure`, because the correct
+    // pagination sentence depends on the route.
+    expect(defaultSearchDescription(WORDING)).not.toContain("Pagination");
+    expect(defaultSearchDescription(WORDING)).not.toContain("`fields`");
+  });
+
   it("all name a concrete sibling to prefer", () => {
     for (const d of all) {
       expect(d).toMatch(/^Plutôt que : /m);
@@ -131,6 +140,24 @@ describe("withParameterDisclosure", () => {
   it("adds nothing when the tool declares neither parameter", () => {
     const out = withParameterDisclosure({ ...base, inputSchema: { shape: { id: {} } } });
     expect(out.description).toBe(base.description);
+  });
+
+  it("states the ceiling for a normal search tool", () => {
+    const out = withParameterDisclosure({ ...base, inputSchema: { shape: { pageSize: {} } } }, "boond_accounts_search");
+    expect(out.description).toContain("Pagination : ");
+    expect(out.description).not.toContain(PAGINATION_INERT_DISCLOSURE);
+  });
+
+  it("states the opposite for a route that discards maxResults", () => {
+    // /poles, /agencies, /calendars and /webhooks answer maxResults=2 with
+    // their whole table (verified live). Promising the ceiling there would be
+    // the very defect this contract exists to prevent.
+    for (const name of TOOLS_IGNORING_PAGINATION) {
+      const out = withParameterDisclosure({ ...base, inputSchema: { shape: { pageSize: {} } } }, name);
+      expect(out.description, name).toContain(PAGINATION_INERT_DISCLOSURE);
+      expect(out.description, name).not.toContain(`1–${MAX_PAGE_SIZE}`);
+    }
+    expect(TOOLS_IGNORING_PAGINATION.size).toBeGreaterThan(0);
   });
 
   it("discloses only what the schema actually declares", () => {

@@ -708,6 +708,21 @@ Where descriptions come from, in order of coverage:
   the page ceiling **rejects** rather than clamps. This is the whole defect that
   made `boond_poles_search` and `boond_accounts_search` the catalogue's
   worst-described tools.
+- **Four reference routes ignore `maxResults` and say so.** `/poles`,
+  `/agencies`, `/calendars` and `/webhooks` answer `maxResults=2` with their
+  whole table (73, 11, 249 and 3 rows — verified against the live API on
+  2026-09-09; the server does send the parameter, BoondManager discards it).
+  They are listed in `TOOLS_IGNORING_PAGINATION` (`constants.ts`) and get
+  `PAGINATION_INERT_DISCLOSURE` instead of the ceiling. This is why the
+  pagination sentence is single-sourced in `withParameterDisclosure` and
+  **not** hard-coded in `defaultSearchDescription`: the correct wording depends
+  on the route, and a template that stated the ceiling would both make a false
+  promise and suppress the right sentence (by having already mentioned
+  `pageSize`). Not an operational risk — these are small tables, ~18 KB of tool
+  result at the largest, far under `CHARACTER_LIMIT`. Add a route only once it
+  has been *observed* returning more rows than it was asked for;
+  `/business-units`, `/products`, `/threads` and `/todolists` were empty on the
+  tenant probed, so their behaviour is unknown and they are deliberately absent.
 - **Descriptions never contradict the ceilings the schemas enforce.** The
   previous hand-typed template announced `pageSize (défaut: 20, max: 100)`
   against a schema enforcing `DEFAULT_PAGE_SIZE`/`MAX_PAGE_SIZE` (30/500) and
