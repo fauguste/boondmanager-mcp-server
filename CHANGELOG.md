@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.15.0] - 2026-09-10
 
 ### Changed
 
@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Nouveau `src/tools/tab-tools.ts`** : les 42 outils d'onglet passent par un unique `registerTabTools()` au lieu de six boucles identiques (et six copies de l'interface `TabDefinition`) dans `candidates.ts`, `resources.ts`, `contacts.ts`, `companies.ts`, `opportunities.ts` et `projects.ts`. Une `TabDefinition` ne porte plus que `{ name, tab, title, subject, content?, returns }`.
 - **Les blocs `Args:` qui paraphrasaient le schéma ont été retirés** des gabarits. Le client a déjà reçu le JSON Schema avec ses propriétés `.describe()`-ées ; le redire coûte des octets et n'apprend rien.
 - **`tools/list` passe de 292 à 359 KiB** (+23 %). Compromis assumé : les descriptions sont ce qu'un modèle lit pour choisir un outil, et 48 KiB réparties sur 182 outils ne suffisaient pas à choisir juste. Les leviers de réduction existants restent disponibles (`BOOND_MCP_PROFILE`, `BOOND_MCP_DOMAINS`, `BOOND_MCP_ICONS=0` qui retire 40 KiB).
+- **`hono` 4.12.34 → 4.13.7** (dépendance transitive, lockfile uniquement). Aucun code du serveur ne l'importe : elle arrive via l'outillage et n'est pas dans le chemin d'exécution du transport HTTP, qui utilise le `http` de Node et le `StreamableHTTPServerTransport` du SDK.
 
 ### Fixed
 
