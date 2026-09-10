@@ -41,7 +41,7 @@ Args:
 
 Note : l'ancienne forme "states/resources" (slash) n'est pas valide — utilisez "setting.state.resource".
 
-Retourne le sous-arbre (souvent un tableau \`{id, value, ...}\`) ou \`isError: true\` si le chemin est introuvable.`,
+Returns : le sous-arbre demandé (souvent un tableau \`{id, value, …}\`), ou \`isError: true\` avec le chemin fautif s'il est introuvable.`,
       inputSchema: DictionaryGetSchema,
       annotations: {
         readOnlyHint: true,

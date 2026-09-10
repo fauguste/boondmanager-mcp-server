@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DomainName } from "../constants.js";
 import { withValidationFeedback } from "./validation-wrapper.js";
+import { withParameterDisclosure } from "./parameter-disclosure.js";
+import { withUsageGuidance } from "./usage-guidance.js";
 
 /**
  * Per-domain registration decorations, applied centrally in
@@ -10,7 +12,12 @@ import { withValidationFeedback } from "./validation-wrapper.js";
  *
  *  1. enrich `*_search` input schemas with filter-correction messages
  *     (`validation-wrapper.ts`);
- *  2. record `tool name → domain` so the icon layer can attach the right
+ *  2. disclose the semantics of `fields` / `page` / `pageSize` on the tools
+ *     that declare them (`parameter-disclosure.ts`) — facts a JSON Schema
+ *     cannot carry, on ~32 tools spread over as many files;
+ *  3. backfill the "when / rather than" guidance on the hand-rolled tools
+ *     (`usage-guidance.ts`), which the composed templates already carry;
+ *  4. record `tool name → domain` so the icon layer can attach the right
  *     domain icon without parsing tool names (`icons.ts`).
  *
  * Deliberately NOT merged into `withPolicy`: that wrapper has a fast path
@@ -47,9 +54,15 @@ export function decorateRegistrations(server: McpServer, domain: DomainName, ind
       if (prop === "registerTool") {
         return (...args: unknown[]) => {
           const name = args[0] as string;
-          const config = args[1] as { inputSchema?: unknown } | undefined;
+          const config = args[1] as { description?: string; inputSchema?: unknown } | undefined;
           index?.toolDomains.set(name, domain);
-          const decorated = config === undefined ? config : withValidationFeedback(name, config, domain);
+          // Order matters: the disclosure reads the schema shape the tool
+          // declared, so it must run before `withValidationFeedback` rebuilds
+          // that schema with its own error messages.
+          const decorated =
+            config === undefined
+              ? config
+              : withValidationFeedback(name, withUsageGuidance(name, withParameterDisclosure(config, name)), domain);
           return (value as (...a: unknown[]) => unknown).apply(target, [name, decorated, ...args.slice(2)]);
         };
       }

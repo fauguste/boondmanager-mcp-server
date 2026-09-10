@@ -8,6 +8,7 @@ import {
   registerUpdateTool,
   registerDeleteTool,
 } from "./crud-factory.js";
+import { defaultDeleteDescription } from "./description-builders.js";
 
 const OPTS = {
   entityName: "bon de commande",
@@ -78,6 +79,10 @@ Returns: Liste des bons de commande correspondants.`,
   });
   registerDeleteTool(server, OPTS, {
     title: "Supprimer un bon de commande",
-    description: `Supprime un bon de commande de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+    description: defaultDeleteDescription({
+      entityName: "bon de commande",
+      entityNamePlural: "bons de commande",
+      prefix: "boond_orders",
+    }),
   });
 }

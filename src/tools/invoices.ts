@@ -10,6 +10,7 @@ import {
   registerUpdateTool,
   registerDeleteTool,
 } from "./crud-factory.js";
+import { defaultDeleteDescription } from "./description-builders.js";
 
 const OPTS = {
   entityName: "facture",
@@ -67,7 +68,9 @@ export function registerInvoiceTools(server: McpServer): void {
     "boond_invoices_search",
     {
       title: "Rechercher des factures",
-      description: "Recherche des factures dans BoondManager avec filtres par societe, projet et periode.",
+      description: `Liste et recherche les factures client, par société, projet, état ou période.
+
+Returns : page de résumés (référence, date, montants HT/TTC, état). Lecture seule.`,
       inputSchema: InvoiceSearchSchema,
       outputSchema: SearchOutputSchema,
       annotations: {
@@ -100,6 +103,10 @@ export function registerInvoiceTools(server: McpServer): void {
   });
   registerDeleteTool(server, OPTS, {
     title: "Supprimer une facture",
-    description: `Supprime une facture de BoondManager. ⚠️ Action irréversible. Si le client MCP supporte l'élicitation, une confirmation est demandée avant la suppression.`,
+    description: defaultDeleteDescription({
+      entityName: "facture",
+      entityNamePlural: "factures",
+      prefix: "boond_invoices",
+    }),
   });
 }

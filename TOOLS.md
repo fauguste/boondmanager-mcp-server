@@ -195,8 +195,8 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_opportunities_delete` | Supprimer un(e) opportunité | delete |
 | `boond_opportunities_get` | Détails d'un(e) opportunité | read · idempotent |
 | `boond_opportunities_information` | Informations générales d'une opportunité | read · idempotent |
-| `boond_opportunities_positionings` | Positionnements d'une opportunité | read · idempotent |
-| `boond_opportunities_projects` | Projets liés à une opportunité | read · idempotent |
+| `boond_opportunities_positionings` | Positionnements sur une opportunité | read · idempotent |
+| `boond_opportunities_projects` | Projets issus d'une opportunité | read · idempotent |
 | `boond_opportunities_search` | Rechercher des opportunités | read · idempotent · open-world |
 | `boond_opportunities_simulation` | Simulation financière d'une opportunité | read · idempotent |
 | `boond_opportunities_update` | Modifier un(e) opportunité | write · idempotent |
@@ -259,12 +259,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_projects_actions` | Actions liées à un projet | read · idempotent |
 | `boond_projects_create` | Créer un(e) projet | write |
 | `boond_projects_delete` | Supprimer un(e) projet | delete |
-| `boond_projects_deliveries_groupments` | Livraisons d'un projet | read · idempotent |
+| `boond_projects_deliveries_groupments` | Livraisons et groupements d'un projet | read · idempotent |
 | `boond_projects_get` | Détails d'un(e) projet | read · idempotent |
 | `boond_projects_information` | Informations générales d'un projet | read · idempotent |
 | `boond_projects_orders` | Bons de commande d'un projet | read · idempotent |
 | `boond_projects_productivity` | Productivité d'un projet | read · idempotent |
-| `boond_projects_purchases` | Achats/sous-traitance d'un projet | read · idempotent |
+| `boond_projects_purchases` | Achats d'un projet | read · idempotent |
 | `boond_projects_search` | Rechercher des projets | read · idempotent · open-world |
 | `boond_projects_simulation` | Simulation financière d'un projet | read · idempotent |
 | `boond_projects_update` | Modifier un(e) projet | write · idempotent |

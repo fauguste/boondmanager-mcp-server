@@ -3,6 +3,7 @@ import { PaymentSearchSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
+import { composeDescription, defaultGetDescription } from "./description-builders.js";
 
 const PaymentCreateSchema = z
   .object({
@@ -27,7 +28,17 @@ export function registerPaymentTools(server: McpServer): void {
     "boond_payments_create",
     {
       title: "Creer un paiement",
-      description: "Cree un paiement fournisseur lie a un achat. L'API Boond /payments requiert une relation purchase.",
+      description: composeDescription({
+        purpose: "Enregistre un paiement / règlement fournisseur adossé à un achat.",
+        when: "pour solder tout ou partie d'un achat existant.",
+        instead:
+          "`boond_purchases_create` si l'achat lui-même n'existe pas encore — un paiement ne peut pas être orphelin.",
+        behaviour: [
+          "L'API `/payments` **exige** une relation `purchase` : sans ID d'achat valide, l'appel est refusé.",
+          "Écriture non idempotente : deux appels identiques enregistrent deux règlements.",
+        ],
+        returns: "confirmation et fiche du paiement créé.",
+      }),
       inputSchema: PaymentCreateSchema,
       annotations: {
         readOnlyHint: false,
@@ -103,7 +114,10 @@ Returns: Liste des paiements correspondants.`,
     "boond_payments_get",
     {
       title: "Details d'un paiement",
-      description: "Recupere les informations detaillees d'un paiement / reglement par son ID.",
+      description: defaultGetDescription({
+        ...{ entityName: "paiement", entityNamePlural: "paiements", prefix: "boond_payments" },
+        withTab: false,
+      }),
       inputSchema: IdSchema,
       annotations: {
         readOnlyHint: true,
