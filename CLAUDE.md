@@ -1190,7 +1190,7 @@ read-only, confirmation *kept* for deletes. Pinned in
 
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 22 + 24 + 26 (Node 20 dropped — EOL 2026-04-30). Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **Claude Code plugin drift check** (Node 22 only), **version consistency** across `package.json` / `manifest.json` / `server.json` / `gemini-extension.json` / `plugin.json` / `marketplace.json` / the plugin's `@X.Y.Z` npm pin, coverage upload.
+- **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 22 + 24 + 26 (Node 20 dropped — EOL 2026-04-30). Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **Claude Code plugin drift check** (Node 22 only), **version consistency** across `package.json` / `manifest.json` / `server.json` / `gemini-extension.json` / `plugin.json` / `marketplace.json` / the plugin's `@X.Y.Z` npm pin / **both pins inside `server.json.packages[]`** (the npm `version` and the `v X.Y.Z` in the mcpb URL), coverage upload.
 - **Release** (`.github/workflows/release.yml`): Triggered on `v*` tags. Publishes to:
   - **npm** with `--provenance --access public`
   - **GitHub Releases** with `.mcpb` bundle attached; release body extracted from the matching `## [X.Y.Z]` section of `CHANGELOG.md`
@@ -1247,7 +1247,7 @@ Two traps this configuration must keep clear of, both of which produce the
 ## Releasing
 
 1. Update `CHANGELOG.md` — add a new `## [X.Y.Z] - YYYY-MM-DD` section at the top with the human-written notes (in French if matching the rest of the changelog). The release body is auto-extracted from this section by `release.yml`.
-2. Bump versions consistently: `package.json` + `manifest.json` + `server.json` + `gemini-extension.json`, then `npm run plugin:manifest` to propagate into `plugins/boondmanager-mcp/.claude-plugin/plugin.json`, `plugins/boondmanager-mcp/.mcp.json` (the `@X.Y.Z` npm pin) and hand-bump `.claude-plugin/marketplace.json`. CI fails on any drift, the npm pin included. Also bump the example URL inside `server.json.packages[1].identifier`.
+2. Bump versions consistently: `package.json` + `manifest.json` + `server.json` + `gemini-extension.json`, then `npm run plugin:manifest` to propagate into `plugins/boondmanager-mcp/.claude-plugin/plugin.json`, `plugins/boondmanager-mcp/.mcp.json` (the `@X.Y.Z` npm pin) and hand-bump `.claude-plugin/marketplace.json`. CI fails on any drift, the npm pin included. Also bump **both** entries of `server.json.packages[]` — `packages[0].version` (the npm pin a registry client installs) and the `vX.Y.Z` in `packages[1].identifier` (the mcpb URL). These two sat outside the CI check until v2.15.0 and `packages[0].version` had silently fossilised at `2.14.0`; they are checked now, which is what makes "the announced version is the installed version" true rather than hoped for — see the `Depannage` section of `README.md` for why that gap is expensive (issue #217).
 3. Sync `package-lock.json`: `npm install --package-lock-only`.
 4. Commit + tag + push: `git tag vX.Y.Z && git push origin main vX.Y.Z`. The `Release` workflow takes over.
 5. Post-tag, run the 7-point verification checklist in `docs/distribution.md` (npm version, MCP Registry, GitHub Release body, GHCR multi-arch pull, LobeHub mirror, Smithery refresh, Claude Code marketplace).

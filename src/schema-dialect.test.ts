@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import Ajv2020 from "ajv/dist/2020.js";
+import Ajv from "ajv";
 import { stripSchemaDialect } from "./schema-dialect.js";
 import { connectMcpClient, useDefaultServerSurface } from "./tools/test-helpers.js";
 
@@ -94,6 +95,42 @@ describe("advertised tool schemas (over a real client)", () => {
       expect(failures).toEqual([]);
       // Guard the guard: the suite is only meaningful while some tool actually
       // declares an outputSchema (that is the half the host validator compiles).
+      expect(tools.filter((t) => t.outputSchema).length).toBeGreaterThan(0);
+    } finally {
+      await close();
+    }
+  });
+
+  /**
+   * The other half of the "declare nothing" rationale, and the half that was
+   * unguarded until issue #217 sent us back through this file. Stripping the
+   * declaration is only correct while the catalogue uses no dialect-specific
+   * keyword: the moment one appears (tuple-form `items` vs `prefixItems`,
+   * `dependencies` vs `dependentRequired`, `$recursiveRef`), the schemas stop
+   * meaning the same thing to both families of validator and declaring nothing
+   * becomes a silent lie rather than a neutral choice.
+   *
+   * Ajv 8's default dialect is draft-07 — and it is the MCP SDK's own client,
+   * so this is not a hypothetical peer.
+   */
+  it("compile under a draft-07 validator too — declaring nothing must satisfy both", async () => {
+    const { client, close } = await connectMcpClient();
+    try {
+      const { tools } = await client.listTools();
+      const ajv = new Ajv({ strict: false });
+      const failures: string[] = [];
+      for (const tool of tools) {
+        for (const field of ["inputSchema", "outputSchema"] as const) {
+          const schema = tool[field];
+          if (!schema) continue;
+          try {
+            ajv.compile(schema);
+          } catch (error) {
+            failures.push(`${tool.name}.${field}: ${(error as Error).message}`);
+          }
+        }
+      }
+      expect(failures).toEqual([]);
       expect(tools.filter((t) => t.outputSchema).length).toBeGreaterThan(0);
     } finally {
       await close();

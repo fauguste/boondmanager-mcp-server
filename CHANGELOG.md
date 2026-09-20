@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.15.1] - 2026-09-20
+
+Version de correction de **distribution** : aucun changement de code d'exécution, aucun schéma annoncé ne bouge, le catalogue est inchangé (182 outils, 12 prompts, 22 ressources, 6 templates). Un client déjà connecté ne verra aucune différence. Déclenchée par l'[issue #217](https://github.com/fauguste/boondmanager-mcp-server/issues/217), dont le défaut serveur — le `$schema` draft-07 sur les schémas annoncés — était déjà corrigé depuis la **2.12.2** : ce qui restait à corriger, c'était la possibilité d'installer une version plus ancienne que celle annoncée, et l'absence de tout point de documentation où reconnaître le symptôme.
+
+### Fixed
+
+- **`server.json.packages[0].version` était figé à `2.14.0`** alors que tout le reste du dépôt annonçait `2.15.0`. C'est le champ qu'un client du MCP Registry installe réellement : la version *affichée* était juste, la version *installée* avait un patch de retard. Le contrôle de cohérence de version en CI couvrait `server.json.version` mais aucune des entrées sous `packages[]` — il vérifie désormais les deux (le pin npm et le `vX.Y.Z` de l'URL `.mcpb`), donc cette copie ne peut plus se fossiliser en silence. Même classe de défaut que le pin npm du plugin Claude Code, et même raison de la garder sous test : rien dans l'interface ne dit qu'une version épinglée n'est pas la version annoncée.
+
+### Added
+
+- **Test : les schémas annoncés compilent aussi sous un validateur draft-07** (`schema-dialect.test.ts`, 182 outils, vrai client). Le pendant 2020-12 existait depuis la 2.12.2 ; celui-ci manquait, alors que c'est *l'autre moitié* de la justification de `installSchemaDialectCompat` — ne déclarer aucun dialecte n'est correct que tant que le catalogue n'emploie aucun mot-clé spécifique à un dialecte (`items` tuple vs `prefixItems`, `dependencies` vs `dependentRequired`, `$recursiveRef`). Sans ce test, l'apparition d'un tel mot-clé ferait de « ne rien déclarer » un mensonge silencieux au lieu d'un choix neutre. Ajv 8 (dialecte par défaut : draft-07) est de surcroît le client du SDK MCP lui-même, donc ce pair n'a rien d'hypothétique.
+
+### Documentation
+
+- **Nouvelle section `Dépannage` dans `README.md`** pour le symptôme de l'[issue #217](https://github.com/fauguste/boondmanager-mcp-server/issues/217) : « JSON Schema declares an unsupported dialect (draft-07) » sur les seuls outils `*_search`. Le défaut serveur est corrigé depuis la **2.12.2** ; la section explique pourquoi la dissymétrie (recherches cassées, fiches et dictionnaires intacts) identifie à elle seule un binaire antérieur à cette version, pourquoi **redémarrer le connecteur ne corrige rien** (un redémarrage relance le binaire installé, il ne le met pas à jour), comment lire la version réellement chargée, et la marche à suivre par canal d'installation (`.mcpb`, plugin Claude Code, `npx`, Docker).
+
 ## [2.15.0] - 2026-09-10
 
 ### Changed

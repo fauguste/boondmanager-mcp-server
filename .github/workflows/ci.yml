@@ -71,6 +71,14 @@ jobs:
           # silently: a stale pin keeps installing an old release forever, with
           # nothing in the plugin UI hinting that it is not the announced version.
           PLUGIN_NPM_PIN=$(node -p "require('./plugins/boondmanager-mcp/.mcp.json').mcpServers.boondmanager.args.at(-1).split('@').at(-1)")
+          # Same fossilisation risk one level down, in the MCP Registry manifest:
+          # `server.json.version` is checked above, but the entries under
+          # `packages[]` are what a registry client actually installs. A stale
+          # npm pin there hands users an old server while every visible version
+          # string says otherwise -- which is how issue #217 (a draft-07 $schema
+          # fixed in 2.12.2) can still be reported against a current release.
+          SERVER_NPM_PIN=$(node -p "require('./server.json').packages.find(p => p.registryType === 'npm').version")
+          SERVER_MCPB_PIN=$(node -p "(require('./server.json').packages.find(p => p.registryType === 'mcpb').identifier.match(/\\/v([^/]+)\\//) || [])[1]")
           echo "package.json:          $PKG_VERSION"
           echo "manifest.json:         $MANIFEST_VERSION"
           echo "server.json:           $SERVER_VERSION"
@@ -78,6 +86,8 @@ jobs:
           echo "plugin.json:           $PLUGIN_VERSION"
           echo "marketplace.json:      $MARKETPLACE_VERSION"
           echo "plugin npm pin:        $PLUGIN_NPM_PIN"
+          echo "server.json npm pin:   $SERVER_NPM_PIN"
+          echo "server.json mcpb pin:  $SERVER_MCPB_PIN"
           FAILED=0
           for pair in \
             "manifest.json:$MANIFEST_VERSION" \
@@ -85,7 +95,9 @@ jobs:
             "gemini-extension.json:$GEMINI_VERSION" \
             "plugin.json:$PLUGIN_VERSION" \
             "marketplace.json:$MARKETPLACE_VERSION" \
-            "plugin npm pin:$PLUGIN_NPM_PIN"; do
+            "plugin npm pin:$PLUGIN_NPM_PIN" \
+            "server.json npm pin:$SERVER_NPM_PIN" \
+            "server.json mcpb pin:$SERVER_MCPB_PIN"; do
             name="${pair%:*}"
             value="${pair##*:}"
             if [ "$value" != "$PKG_VERSION" ]; then

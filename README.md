@@ -876,6 +876,49 @@ boondmanager-mcp-server/
 └── README.md
 ```
 
+## Depannage
+
+### « JSON Schema declares an unsupported dialect (draft-07) » sur les outils `*_search`
+
+**Symptome.** Les outils de recherche (`boond_candidates_search`, `boond_resources_search`,
+`boond_opportunities_search`...) echouent systematiquement, alors que les outils de fiche
+(`boond_*_get`), les dictionnaires et les workflows textuels fonctionnent. La dissymetrie est
+le diagnostic : seuls les ~59 outils qui declarent un `outputSchema` sont concernes, parce que
+c'est ce schema-la que l'hote compile -- au moment ou il enregistre l'outil, donc **avant tout
+appel**. L'outil n'echoue pas, il devient inutilisable.
+
+**Cause.** Les versions **2.1.0 a 2.12.1** annoncaient `"$schema": "http://json-schema.org/draft-07/schema#"`
+sur leurs schemas (le SDK MCP convertit les schemas Zod avec `target: 'draft-7'`, en dur). Un hote
+qui valide avec un validateur **2020-12 uniquement** refuse de compiler un tel schema.
+
+**Correctif : mettre a jour vers >= 2.12.2.** Depuis cette version le serveur n'annonce plus
+aucun dialecte (`src/schema-dialect.ts`), ce que la suite de tests verifie sur les 182 outils
+a travers un vrai client, sous validateur 2020-12 **et** draft-07.
+
+**Redemarrer le connecteur ne suffit pas** : un redemarrage relance le binaire installe, il ne le
+met pas a jour. Verifiez la version reellement chargee plutot que celle affichee par le catalogue :
+
+```bash
+# npm / npx : quelle version est resolue et depuis quel cache
+npm view boondmanager-mcp-server version
+npx --yes boondmanager-mcp-server@latest --version 2>/dev/null || true
+
+# Le serveur annonce sa version dans la reponse `initialize` (champ serverInfo.version),
+# lue depuis son propre package.json -- c'est la seule source fiable.
+```
+
+Selon le canal d'installation :
+
+| Canal | Mise a jour |
+|---|---|
+| Extension Claude Desktop (`.mcpb`) | Telecharger le `.mcpb` de la derniere release et le reinstaller -- les extensions tierces ne s'auto-mettent pas a jour |
+| Plugin Claude Code | `/plugin marketplace update boondmanager` puis reinstaller le plugin (le lancement est epingle sur `boondmanager-mcp-server@X.Y.Z`) |
+| `claude mcp add` / config manuelle | Epingler `boondmanager-mcp-server@latest` (ou une version >= 2.12.2) dans la commande `npx` |
+| Docker / GHCR | `docker pull ghcr.io/fauguste/boondmanager-mcp-server:latest` |
+
+> Verifiez aussi la version de Node : le serveur requiert **Node.js >= 22**. Un poste encore en
+> Node 20 est en general un poste dont l'installation n'a pas ete rafraichie depuis longtemps.
+
 ## Securite
 
 - Les credentials BoondManager (JWT ou BasicAuth) ne transitent jamais via le protocole MCP -- ils sont configures en variables d'environnement cote serveur uniquement
