@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.15.2] - 2026-09-20
+
+Correction du **pipeline de release** ; aucun changement de code serveur depuis la 2.15.1 (catalogue, schémas et comportement identiques). Cette version existe parce que la 2.15.1 n'a pas pu être publiée entièrement et qu'elle n'était pas rejouable — deux défauts distincts, tous deux corrigés ici.
+
+### Fixed
+
+- **La soumission au MCP Registry courait après la propagation npm.** Le registre revalide `packages[0].version` contre npm avant d'accepter la soumission, et la réplique de lecture de npm accuse un retard de quelques minutes sur son propre `publish`. La 2.15.1 a perdu la course : `NPM package 'boondmanager-mcp-server' exists, but version '2.15.1' was not found (status: 404)`. La course était **latente depuis toujours**, masquée par le défaut même que corrigeait la 2.15.1 : `packages[0].version` était une copie à la main figée sur une version *ancienne et depuis longtemps propagée*, donc le registre validait une version que l'on ne publiait pas. Épingler correctement ce champ est ce qui a rendu le défaut d'ordonnancement atteignable. Le workflow attend désormais que la version publiée soit réellement lisible sur npm (30 × 20 s) avant de soumettre.
+- **Un échec du registre emportait les images de conteneur.** GHCR et Docker Hub sont enchaînés après la soumission au registre alors qu'ils n'en dépendent en rien ; sur la 2.15.1 ils ont été sautés. Les deux étapes du registre échouent maintenant en douceur et leur échec est **relevé après** la construction des images — c'est l'entrée du registre, et elle seule, qui peut être resoumise isolément. `continue-on-error` plutôt qu'`if: always()` sur les étapes d'image : un `always()` aurait aussi publié des images après un échec des **tests**.
+- **`npm publish` rendait la release non rejouable.** Le workflow est un job unique : `gh run rerun --failed` le relance depuis le début, et npm refuse une seconde publication de la même version (`You cannot publish over the previously published versions`). Un échec tardif laissait donc la release à moitié faite, sans autre issue qu'un nouveau tag — exactement ce qui s'est produit. L'étape saute désormais une version déjà présente sur npm, ce qui ne coûte rien (npm l'aurait refusée) et fait du re-run le remède évident.
+
+> **Note sur la 2.15.1** : elle est bien publiée sur **npm** et en **GitHub Release** (bundle `.mcpb` inclus), mais n'a ni image de conteneur ni entrée au MCP Registry. La 2.15.2 lui est identique côté serveur et la remplace sur tous les canaux.
+
 ## [2.15.1] - 2026-09-20
 
 Version de correction de **distribution** : aucun changement de code d'exécution, aucun schéma annoncé ne bouge, le catalogue est inchangé (182 outils, 12 prompts, 22 ressources, 6 templates). Un client déjà connecté ne verra aucune différence. Déclenchée par l'[issue #217](https://github.com/fauguste/boondmanager-mcp-server/issues/217), dont le défaut serveur — le `$schema` draft-07 sur les schémas annoncés — était déjà corrigé depuis la **2.12.2** : ce qui restait à corriger, c'était la possibilité d'installer une version plus ancienne que celle annoncée, et l'absence de tout point de documentation où reconnaître le symptôme.

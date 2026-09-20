@@ -115,7 +115,22 @@ jobs:
         # is kept deliberately: it turns provenance into a hard requirement, so
         # if the automatic path ever stops applying the release fails loudly
         # instead of quietly shipping an unattested tarball.
-        run: npm publish --provenance --access public --tag "${{ steps.version.outputs.npm_tag }}"
+        #
+        # The existence check makes the whole job **re-runnable**, which it was
+        # not: this workflow is a single job, so `gh run rerun --failed` restarts
+        # it from the top, and npm answers a second publish of the same version
+        # with `You cannot publish over the previously published versions`. A
+        # failure in any later step — the MCP Registry submission on v2.15.1 —
+        # therefore stranded that release with no way to finish it except a new
+        # tag. Skipping an already-published version costs nothing (npm would
+        # have refused it anyway) and turns a re-run into the obvious remedy.
+        run: |
+          VERSION="${{ steps.version.outputs.tag_version }}"
+          if curl -fsS -o /dev/null "https://registry.npmjs.org/boondmanager-mcp-server/${VERSION}"; then
+            echo "::notice::boondmanager-mcp-server@${VERSION} is already on npm — skipping publish (re-run of a partially completed release)."
+            exit 0
+          fi
+          npm publish --provenance --access public --tag "${{ steps.version.outputs.npm_tag }}"
 
       # Strip devDependencies before packing — `mcpb pack` bundles the whole
       # node_modules tree, so without this the .mcpb ships vitest/typescript/
