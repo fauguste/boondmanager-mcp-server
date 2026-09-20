@@ -202,12 +202,53 @@ jobs:
           tar xzf "$ASSET" mcp-publisher
           chmod +x mcp-publisher
 
+      # The MCP Registry re-validates `packages[0].version` against npm before
+      # accepting the submission, and npm's read replica lags its own publish by
+      # up to a few minutes. v2.15.1 raced it and got:
+      #
+      #   NPM package 'boondmanager-mcp-server' exists, but version '2.15.1'
+      #   was not found (status: 404)
+      #
+      # That race had been latent for every release: `server.json.packages[0].version`
+      # was a hand-maintained copy that had fossilised at an *older, long-propagated*
+      # version, so the registry's check passed on a version we were not releasing.
+      # Fixing the pin (issue #217) is what made the ordering bug reachable. Wait for
+      # the version we just published to actually be readable before submitting.
+      - name: Wait for the published version to appear on npm
+        id: npm_propagation
+        continue-on-error: true
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          URL="https://registry.npmjs.org/boondmanager-mcp-server/${VERSION}"
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null "$URL"; then
+              echo "npm serves boondmanager-mcp-server@${VERSION} (attempt ${attempt})"
+              exit 0
+            fi
+            echo "attempt ${attempt}/30: not readable yet, retrying in 20s"
+            sleep 20
+          done
+          echo "::error::boondmanager-mcp-server@${VERSION} still not readable on npm after 10 minutes"
+          exit 1
+
+      # `continue-on-error` rather than `if: always()` on the image steps below:
+      # a blanket `always()` would also push images after a *test* failure. Here
+      # only the registry submission is allowed to fail soft; every earlier gate
+      # still stops the job dead. The outcome is re-raised after the images, so
+      # the run is still red and re-runnable.
       - name: Publish to MCP Registry
+        id: mcp_registry
+        continue-on-error: true
         run: |
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
 
       # ---- Docker image (HTTP gateway mode) ----
+      # These run after the registry submission but do not depend on it: the
+      # container artifacts have no relationship to the MCP Registry, and a
+      # registry hiccup leaving a release without its images — the exact shape
+      # of the v2.15.1 failure — is a worse outcome than a registry entry
+      # landing one re-run late. Hence the soft-fail above, not an `if:` here.
       # Multi-arch image so it runs on both x86 servers and Apple-Silicon /
       # Graviton hosts. Pushed to GHCR (always) and Docker Hub (when the
       # DOCKERHUB_TOKEN secret is set) alongside the npm/MCP Registry
@@ -306,3 +347,15 @@ jobs:
           short-description: ${{ github.event.repository.description }}
           readme-filepath: ./README-docker.md
           enable-url-completion: true
+
+      # Re-raise a soft-failed MCP Registry submission, once the container
+      # images are safely pushed. The registry entry is the one artifact that
+      # can be re-submitted on its own (`mcp-publisher publish` is idempotent
+      # on an unchanged server.json), so it is also the only one worth trading
+      # for the others' delivery.
+      - name: Fail the release if the MCP Registry submission did not land
+        if: steps.mcp_registry.outcome == 'failure' || steps.npm_propagation.outcome == 'failure'
+        run: |
+          echo "::error::MCP Registry submission failed (npm propagation: ${{ steps.npm_propagation.outcome }}, publish: ${{ steps.mcp_registry.outcome }})."
+          echo "npm, the GitHub Release and the container images were published. Re-run this job to retry the registry only."
+          exit 1
