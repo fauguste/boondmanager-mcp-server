@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { EntityIdSchema, IdSchema, PaymentSearchSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
@@ -83,7 +84,7 @@ export function registerPaymentTools(server: McpServer): void {
         instead:
           "`boond_purchases_search` pour les achats eux-mêmes, `boond_provider_invoices_search` pour les factures fournisseur.",
         behaviour: [
-          "`purchaseId`, `companyId`, `projectId` et `resourceId` sont convertis en préfixes `keywords` (`ACH<id>`, `CSOC<id>`, `PRJ<id>`, `COMP<id>`) et concaténés aux `keywords` fournis ; `invoiceId`, `startDate` et `endDate` sont transmis tels quels en paramètres de requête.",
+          "`purchaseId`, `companyId`, `projectId` et `resourceId` sont convertis en préfixes `keywords` (`ACH<id>`, `CSOC<id>`, `PRJ<id>`, `COMP<id>`) et concaténés aux `keywords` fournis — l'API n'a pas de paramètre dédié. Pas de filtre par facture : `/payments` ne connaît pas de référence `FACT<id>`.",
         ],
         returns: "page de résumés des paiements (ID + libellé principal). Lecture seule.",
       }),
@@ -96,14 +97,7 @@ export function registerPaymentTools(server: McpServer): void {
       },
     },
     async (params) => {
-      const { purchaseId, companyId, projectId, resourceId, keywords, ...rest } = params;
-      const tokens: string[] = [];
-      if (keywords) tokens.push(keywords);
-      if (purchaseId) tokens.push(`ACH${purchaseId}`);
-      if (companyId) tokens.push(`CSOC${companyId}`);
-      if (projectId) tokens.push(`PRJ${projectId}`);
-      if (resourceId) tokens.push(`COMP${resourceId}`);
-      const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
+      const query = buildSearchQuery(toKeywordReferences(params));
       const response = await apiRequest("/payments", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "paiement", params.fields) }],

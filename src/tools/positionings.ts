@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import {
   PositioningSearchSchema,
   PositioningCreateSchema,
@@ -37,16 +38,7 @@ Returns: Liste des positionnements correspondants.`,
       // L'API GET /positionings n'a pas de paramètres candidateId/resourceId/... :
       // le filtrage par entité passe par des références dans `keywords`
       // (cf. RAML officiel). Les paramètres bruts seraient silencieusement ignorés.
-      const { candidateId, resourceId, opportunityId, companyId, contactId, productId, keywords, ...rest } = params;
-      const tokens: string[] = [];
-      if (keywords) tokens.push(keywords);
-      if (opportunityId) tokens.push(`AO${opportunityId}`);
-      if (candidateId) tokens.push(`CAND${candidateId}`);
-      if (resourceId) tokens.push(`COMP${resourceId}`);
-      if (companyId) tokens.push(`CSOC${companyId}`);
-      if (contactId) tokens.push(`CCON${contactId}`);
-      if (productId) tokens.push(`PROD${productId}`);
-      const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
+      const query = buildSearchQuery(toKeywordReferences(params));
       const response = await apiRequest("/positionings", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "positionnement", params.fields) }],

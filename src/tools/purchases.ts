@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { EntityIdSchema, IdSchema, paginationShape } from "../schemas/index.js";
 import {
   apiRequest,
@@ -15,8 +16,8 @@ import { composeDescription, defaultGetDescription } from "./description-builder
 const PurchaseSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
-    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
     ...paginationShape,
   })
   .strict();
@@ -42,7 +43,7 @@ export function registerPurchaseTools(server: McpServer): void {
       description: `Recherche des achats et sous-traitances dans BoondManager.
 
 Args:
-  - keywords, companyId, projectId: Filtres
+  - keywords, companyId, projectId: Filtres — companyId / projectId sont convertis en références keywords CSOC<id> / PRJ<id> (l'API n'a pas de paramètre dédié)
   - page, pageSize: Pagination
 
 Returns: Liste des achats correspondants.`,
@@ -55,7 +56,7 @@ Returns: Liste des achats correspondants.`,
       },
     },
     async (params, extra: unknown) => {
-      const query = buildSearchQuery(params);
+      const query = buildSearchQuery(toKeywordReferences(params));
       const response = await apiSearch("/purchases", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "achat", params.fields) }],

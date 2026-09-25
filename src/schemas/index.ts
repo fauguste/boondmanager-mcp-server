@@ -863,10 +863,10 @@ export const OpportunityUpdateSchema = z
 export const ActionSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    candidateId: EntityIdSchema.optional().describe("Filtrer par ID candidat"),
-    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
-    contactId: EntityIdSchema.optional().describe("Filtrer par ID contact"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
+    candidateId: EntityIdSchema.optional().describe("Filtrer par ID candidat (référence keywords CAND<id>)"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
+    contactId: EntityIdSchema.optional().describe("Filtrer par ID contact (référence keywords CCON<id>)"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
     ...paginationShape,
   })
   .strict();
@@ -1027,8 +1027,8 @@ export const InvoiceUpdateSchema = z
 export const InvoiceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche (référence, société...)"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
-    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
     startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
     period: z
@@ -1075,8 +1075,8 @@ export const OrderUpdateSchema = z
 export const OrderSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
-    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
     ...paginationShape,
   })
   .strict();
@@ -1086,8 +1086,8 @@ export const OrderSearchSchema = z
 export const DeliverySearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     ...paginationShape,
@@ -1123,7 +1123,7 @@ export const AbsenceUpdateSchema = z
 export const AbsenceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
     startMonth: z.string().optional().describe("Mois de début de période (YYYY-MM)"),
     endMonth: z.string().optional().describe("Mois de fin de période (YYYY-MM)"),
     ...paginationShape,
@@ -1283,8 +1283,8 @@ export const ExpenseDefaultSchema = z
 export const ExpenseSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
-    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     ...paginationShape,
@@ -1366,11 +1366,10 @@ export const PositioningSearchSchema = z
 export const PaymentSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    invoiceId: EntityIdSchema.optional().describe("Filtrer par ID facture"),
-    purchaseId: EntityIdSchema.optional().describe("Filtrer par ID achat"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
-    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
-    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
+    purchaseId: EntityIdSchema.optional().describe("Filtrer par ID achat (référence keywords ACH<id>)"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     ...paginationShape,
@@ -1379,10 +1378,17 @@ export const PaymentSearchSchema = z
 
 // ---- Advantage schemas ----
 
+// `GET /advantages` does not exist (the RAML only has POST there, and the live
+// API answers with a WAF 403 page); advantages are listed per resource via
+// `GET /resources/{id}/advantages` (issue #247). Hence a required `resourceId`.
 export const AdvantageSearchSchema = z
   .object({
-    keywords: z.string().optional().describe("Mots-clés de recherche"),
-    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
+    resourceId: EntityIdSchema.describe(
+      "ID de la ressource dont on liste les avantages (route /resources/{id}/advantages)"
+    ),
+    advantageTypes: strArray(
+      "Types d'avantage à conserver, au format `<reference>_<agencyId>` (référence du type + ID d'agence, ex: '2_1')."
+    ),
     ...paginationShape,
   })
   .strict();

@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { AbsenceSearchSchema, AbsenceCreateSchema, AbsenceUpdateSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
@@ -33,11 +34,7 @@ Returns: Liste des demandes d'absence correspondantes.`,
       },
     },
     async (params) => {
-      const { resourceId, keywords, ...rest } = params;
-      const tokens: string[] = [];
-      if (keywords) tokens.push(keywords);
-      if (resourceId) tokens.push(`COMP${resourceId}`);
-      const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
+      const query = buildSearchQuery(toKeywordReferences(params));
       const response = await apiRequest("/absences-reports", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "absence", params.fields) }],

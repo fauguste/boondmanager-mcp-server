@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { InvoiceSearchSchema, InvoiceCreateSchema, InvoiceUpdateSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse } from "../services/boond-client.js";
 import {
@@ -70,6 +71,8 @@ export function registerInvoiceTools(server: McpServer): void {
       title: "Rechercher des factures",
       description: `Liste et recherche les factures client, par société, projet, état ou période.
 
+\`companyId\` / \`projectId\` sont convertis en références \`keywords\` (\`CSOC<id>\`, \`PRJ<id>\`) — l'API n'a pas de paramètre dédié et ignorerait un \`companyId\` brut.
+
 Returns : page de résumés (référence, date, montants HT/TTC, état). Lecture seule.`,
       inputSchema: InvoiceSearchSchema,
       outputSchema: SearchOutputSchema,
@@ -81,7 +84,7 @@ Returns : page de résumés (référence, date, montants HT/TTC, état). Lecture
       },
     },
     async (params) => {
-      const query = buildSearchQuery(params);
+      const query = buildSearchQuery(toKeywordReferences(params));
       if (params.startDate) query["startDate"] = params.startDate;
       if (params.endDate) query["endDate"] = params.endDate;
       query["period"] = params.period || "period";

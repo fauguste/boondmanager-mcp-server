@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { ActionSearchSchema, ActionCreateSchema, ActionUpdateSchema, IdSchema } from "../schemas/index.js";
 import {
   apiRequest,
@@ -46,7 +47,7 @@ export function registerActionTools(server: McpServer): void {
 
 Args:
   - keywords (string, optional): Termes de recherche
-  - candidateId, resourceId, contactId, companyId (string, optional): Filtrer par entité liée
+  - candidateId, resourceId, contactId, companyId (string, optional): Filtrer par entité liée — convertis en références keywords CAND<id> / COMP<id> / CCON<id> / CSOC<id> (l'API n'a pas de paramètre dédié)
   - page, pageSize: Pagination
 
 Returns: Liste des actions correspondantes.`,
@@ -59,7 +60,7 @@ Returns: Liste des actions correspondantes.`,
       },
     },
     async (params, extra: unknown) => {
-      const query = buildSearchQuery(params);
+      const query = buildSearchQuery(toKeywordReferences(params));
       // apiSearch chunks the request to respect BoondManager's 100-result cap
       // on /actions (heavy objects → memory overflow above 100).
       const response = await apiSearch("/actions", query, progressReporterFrom(extra));
