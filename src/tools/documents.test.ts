@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerDocumentTools } from "./documents.js";
-import { apiDownload, apiUploadForm } from "../services/boond-client.js";
+import { apiDownload, apiUploadForm, DownloadTooLargeError } from "../services/boond-client.js";
+import { MAX_DOCUMENT_BYTES } from "../constants.js";
 
 vi.mock("../services/boond-client.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/boond-client.js")>();
@@ -64,7 +65,9 @@ describe("registerDocumentTools", () => {
       });
       registerDocumentTools(server);
       const result = await handlerOf(server, "boond_documents_get")({ id: "123" });
-      expect(apiDownload).toHaveBeenCalledWith("/documents/123", expect.any(Function));
+      expect(apiDownload).toHaveBeenCalledWith("/documents/123", expect.any(Function), {
+        maxBytes: MAX_DOCUMENT_BYTES,
+      });
       expect(result.content[0].text).toContain("cv-dupont.pdf");
       const resource = result.content[1].resource!;
       expect(resource.uri).toBe("boond://documents/123");
@@ -90,7 +93,9 @@ describe("registerDocumentTools", () => {
       expect(schema.shape.id.safeParse("../invoices/5").success).toBe(false);
 
       const result = await handlerOf(server, "boond_documents_get")({ id: "123_resume" });
-      expect(apiDownload).toHaveBeenCalledWith("/documents/123_resume", expect.any(Function));
+      expect(apiDownload).toHaveBeenCalledWith("/documents/123_resume", expect.any(Function), {
+        maxBytes: MAX_DOCUMENT_BYTES,
+      });
       expect(result.content[1].resource!.uri).toBe("boond://documents/123_resume");
     });
 
@@ -112,16 +117,35 @@ describe("registerDocumentTools", () => {
       expect(result.content[0].text).toContain("Développeur TypeScript");
     });
 
-    it("refuses documents over the size cap", async () => {
-      vi.mocked(apiDownload).mockResolvedValue({
-        data: Buffer.alloc(6 * 1024 * 1024),
-        contentType: "application/pdf",
-        filename: "gros.pdf",
-      });
+    // The cap is enforced by `apiDownload` while the bytes arrive (#235); the
+    // tool's job is to hand it the ceiling and turn the refusal into a tool
+    // error the model can act on, with the size when the API announced it.
+    it("refuses documents over the size cap without buffering them (announced size)", async () => {
+      vi.mocked(apiDownload).mockRejectedValue(
+        new DownloadTooLargeError("/documents/9", 6 * 1024 * 1024, MAX_DOCUMENT_BYTES, true)
+      );
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "9" });
+      expect(apiDownload).toHaveBeenCalledWith("/documents/9", expect.any(Function), { maxBytes: MAX_DOCUMENT_BYTES });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("trop volumineux");
+      expect(result.content[0].text).toContain("6.0 Mo (max 5 Mo)");
+    });
+
+    it("says 'plus de' when the download was cut mid-stream (no Content-Length)", async () => {
+      vi.mocked(apiDownload).mockRejectedValue(
+        new DownloadTooLargeError("/documents/9", MAX_DOCUMENT_BYTES + 1, MAX_DOCUMENT_BYTES, false)
+      );
       registerDocumentTools(server);
       const result = await handlerOf(server, "boond_documents_get")({ id: "9" });
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("trop volumineux");
+      expect(result.content[0].text).toContain("plus de 5.0 Mo (max 5 Mo)");
+    });
+
+    it("lets any other download error propagate", async () => {
+      vi.mocked(apiDownload).mockRejectedValue(new Error("BoondManager API error 404"));
+      registerDocumentTools(server);
+      await expect(handlerOf(server, "boond_documents_get")({ id: "9" })).rejects.toThrow("404");
     });
   });
 

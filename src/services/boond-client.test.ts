@@ -28,6 +28,7 @@ import {
   apiDownload,
   apiUploadForm,
   parseContentDispositionFilename,
+  DownloadTooLargeError,
 } from "./boond-client.js";
 import { progressReporterFrom } from "./progress.js";
 import { oauthContext } from "./oauth.js";
@@ -2079,20 +2080,25 @@ describe("apiDownload", () => {
       let sent = 0;
       const headers = new Headers({ "content-type": "application/pdf" });
       if (withContentLength) headers.set("content-length", String(total));
+      const reader = {
+        read: () =>
+          Promise.resolve(
+            sent++ < chunks
+              ? { done: false, value: new Uint8Array(chunkBytes).fill(65) }
+              : { done: true, value: undefined }
+          ),
+        cancel: vi.fn().mockResolvedValue(undefined),
+      };
       return {
         ok: true,
         status: 200,
         headers,
         body: {
-          getReader: () => ({
-            read: () =>
-              Promise.resolve(
-                sent++ < chunks
-                  ? { done: false, value: new Uint8Array(chunkBytes).fill(65) }
-                  : { done: true, value: undefined }
-              ),
-          }),
+          getReader: () => reader,
+          cancel: vi.fn().mockResolvedValue(undefined),
         },
+        reader,
+        reads: () => sent,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(total)),
       };
     }
@@ -2123,14 +2129,18 @@ describe("apiDownload", () => {
       expect(params.at(-1)?.progress).toBe(20 * 50 * 1024);
     });
 
-    it("buffers as before (no streaming) without a progressToken", async () => {
+    it("streams without emitting anything when there is no progressToken", async () => {
+      // Streaming is the single read path (#235: the size cap is applied as
+      // bytes arrive); progress is only an observer on top of it.
       const response = streamedResponse(4, 1024);
       const readerSpy = vi.spyOn(response.body, "getReader");
+      const send = vi.fn();
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 
-      const doc = await apiDownload("/documents/12", progressReporterFrom(undefined));
+      const doc = await apiDownload("/documents/12", progressReporterFrom({ sendNotification: send }));
 
-      expect(readerSpy).not.toHaveBeenCalled();
+      expect(readerSpy).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
       expect(doc.data.length).toBe(4 * 1024);
     });
 
@@ -2143,6 +2153,116 @@ describe("apiDownload", () => {
       expect(spy.send).not.toHaveBeenCalled();
       expect(doc.data.length).toBe(4 * 1024);
     });
+  });
+});
+
+describe("apiDownload size cap (#235)", () => {
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    resetRateLimiterForTests();
+    resetClientForTests();
+    initClient();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    resetRateLimiterForTests();
+    resetClientForTests();
+  });
+
+  /** `chunks` × `chunkBytes` body; `contentLength` sets the header (undefined = none). */
+  function chunkedResponse(chunks: number, chunkBytes: number, contentLength?: number) {
+    let sent = 0;
+    const headers = new Headers({ "content-type": "application/pdf" });
+    if (contentLength !== undefined) headers.set("content-length", String(contentLength));
+    const reader = {
+      read: vi.fn(() =>
+        Promise.resolve(
+          sent++ < chunks
+            ? { done: false, value: new Uint8Array(chunkBytes).fill(65) }
+            : { done: true, value: undefined }
+        )
+      ),
+      cancel: vi.fn().mockResolvedValue(undefined),
+    };
+    const body = { getReader: vi.fn(() => reader), cancel: vi.fn().mockResolvedValue(undefined) };
+    return { response: { ok: true, status: 200, headers, body }, reader, body };
+  }
+
+  it("refuses an announced size over the cap before reading a single byte", async () => {
+    const { response, reader, body } = chunkedResponse(200, 1024 * 1024, 200 * 1024 * 1024);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const err = await apiDownload("/documents/12", undefined, { maxBytes: 5 * 1024 * 1024 }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(DownloadTooLargeError);
+    expect((err as DownloadTooLargeError).announced).toBe(true);
+    expect((err as DownloadTooLargeError).bytes).toBe(200 * 1024 * 1024);
+    expect((err as DownloadTooLargeError).maxBytes).toBe(5 * 1024 * 1024);
+    expect((err as Error).message).toContain("GET /documents/12");
+    expect(body.getReader).not.toHaveBeenCalled();
+    expect(reader.read).not.toHaveBeenCalled();
+    expect(body.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels an unannounced body the moment it crosses the cap", async () => {
+    // No Content-Length: 20 chunks of 1 MiB, cap at 5 MiB → cut on the 6th.
+    const { response, reader } = chunkedResponse(20, 1024 * 1024);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const err = await apiDownload("/documents/12", undefined, { maxBytes: 5 * 1024 * 1024 }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(DownloadTooLargeError);
+    expect((err as DownloadTooLargeError).announced).toBe(false);
+    expect((err as DownloadTooLargeError).bytes).toBe(6 * 1024 * 1024);
+    expect(reader.read).toHaveBeenCalledTimes(6);
+    expect(reader.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("also cuts a body whose Content-Length under-declares its size", async () => {
+    const { response, reader } = chunkedResponse(20, 1024 * 1024, 1024);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    await expect(apiDownload("/documents/12", undefined, { maxBytes: 5 * 1024 * 1024 })).rejects.toBeInstanceOf(
+      DownloadTooLargeError
+    );
+    expect(reader.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the whole payload when it fits, with or without Content-Length", async () => {
+    for (const contentLength of [4 * 1024, undefined]) {
+      const { response, reader } = chunkedResponse(4, 1024, contentLength);
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+      const doc = await apiDownload("/documents/12", undefined, { maxBytes: 4 * 1024 });
+      expect(doc.data.length).toBe(4 * 1024);
+      expect(reader.cancel).not.toHaveBeenCalled();
+    }
+  });
+
+  it("applies no cap when none is given", async () => {
+    const { response } = chunkedResponse(8, 1024 * 1024, 8 * 1024 * 1024);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    const doc = await apiDownload("/documents/12");
+    expect(doc.data.length).toBe(8 * 1024 * 1024);
+  });
+
+  it("checks a bodyless response after buffering it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/pdf" }),
+        body: null,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(6 * 1024)),
+      })
+    );
+    await expect(apiDownload("/documents/12", undefined, { maxBytes: 5 * 1024 })).rejects.toBeInstanceOf(
+      DownloadTooLargeError
+    );
   });
 });
 

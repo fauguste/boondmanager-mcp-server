@@ -751,22 +751,62 @@ function formatBytes(bytes: number): string {
 const DOWNLOAD_PROGRESS_STEPS = 10;
 
 /**
- * Read a download body, reporting bytes received as it goes.
- *
- * The streaming path only runs when someone is actually listening **and** the
- * response announced a `Content-Length` — without a total there is nothing
- * meaningful to report, and buffering through `arrayBuffer()` is both simpler
- * and faster. So the default path is byte-for-byte the previous behaviour.
+ * Thrown by `apiDownload` when the payload exceeds `maxBytes` — before the
+ * body is read when the response announces its size, otherwise the moment the
+ * running total crosses the cap (the stream is cancelled, nothing more is
+ * buffered). `bytes` is the announced size in the first case and a lower
+ * bound (bytes received so far) in the second; `announced` tells which.
  */
-async function readDownloadBody(response: Response, onProgress?: ProgressReporter): Promise<Buffer> {
-  const totalBytes = Number(response.headers.get("content-length"));
+export class DownloadTooLargeError extends Error {
+  readonly bytes: number;
+  readonly maxBytes: number;
+  readonly announced: boolean;
+  constructor(path: string, bytes: number, maxBytes: number, announced: boolean) {
+    super(
+      `Document exceeds the ${formatBytes(maxBytes)} limit (${announced ? "announced size" : "more than"} ${formatBytes(bytes)}).\nEndpoint: GET ${path}`
+    );
+    this.name = "DownloadTooLargeError";
+    this.bytes = bytes;
+    this.maxBytes = maxBytes;
+    this.announced = announced;
+  }
+}
+
+/** Options for `apiDownload`. */
+export interface DownloadOptions {
+  /** Refuse payloads larger than this many bytes (see `DownloadTooLargeError`). */
+  maxBytes?: number;
+}
+
+/**
+ * Read a download body chunk by chunk, enforcing `maxBytes` as the bytes
+ * arrive and reporting progress as it goes.
+ *
+ * Streaming is the single path (#235): the cap has to be applied *while*
+ * reading, or a 200 MB file is fully buffered before it is refused. Progress
+ * is only an observer on top of it — emitted when someone is listening and the
+ * response announced a `Content-Length` (without a total there is nothing
+ * meaningful to report). A response without a readable stream falls back to
+ * `arrayBuffer()` and is checked afterwards.
+ */
+async function readDownloadBody(
+  response: Response,
+  path: string,
+  maxBytes: number,
+  onProgress?: ProgressReporter
+): Promise<Buffer> {
+  const contentLength = Number(response.headers.get("content-length"));
+  const totalBytes = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined;
   const body = response.body;
-  if (!onProgress?.enabled || !body || !Number.isFinite(totalBytes) || totalBytes <= 0) {
-    return Buffer.from(await response.arrayBuffer());
+  if (!body) {
+    const buffered = Buffer.from(await response.arrayBuffer());
+    if (buffered.byteLength > maxBytes) throw new DownloadTooLargeError(path, buffered.byteLength, maxBytes, true);
+    return buffered;
   }
 
+  const reporting = onProgress?.enabled === true && totalBytes !== undefined;
   const reader = body.getReader();
-  const step = Math.max(1, Math.floor(totalBytes / DOWNLOAD_PROGRESS_STEPS));
+  const step = totalBytes !== undefined ? Math.max(1, Math.floor(totalBytes / DOWNLOAD_PROGRESS_STEPS)) : Infinity;
   const chunks: Uint8Array[] = [];
   let received = 0;
   let reported = 0;
@@ -775,18 +815,23 @@ async function readDownloadBody(response: Response, onProgress?: ProgressReporte
     const { done, value } = await reader.read();
     if (done) break;
     if (!value) continue;
-    chunks.push(value);
     received += value.byteLength;
+    if (received > maxBytes) {
+      // Stop pulling: what is already in `chunks` is dropped with this frame.
+      await reader.cancel().catch(() => undefined);
+      throw new DownloadTooLargeError(path, received, maxBytes, false);
+    }
+    chunks.push(value);
     // Throttled to ~10 notifications: a 5 MiB file arrives in ~80 network
     // chunks, and one notification each would be its own kind of flood.
-    if (received - reported >= step) {
+    if (reporting && received - reported >= step) {
       reported = received;
-      onProgress(received, totalBytes, `Téléchargement — ${formatBytes(received)} / ${formatBytes(totalBytes)}`);
+      onProgress!(received, totalBytes, `Téléchargement — ${formatBytes(received)} / ${formatBytes(totalBytes!)}`);
     }
   }
 
-  if (received > reported) {
-    onProgress(received, totalBytes, `Téléchargement terminé — ${formatBytes(received)}`);
+  if (reporting && received > reported) {
+    onProgress!(received, totalBytes, `Téléchargement terminé — ${formatBytes(received)}`);
   }
   return Buffer.concat(chunks);
 }
@@ -799,8 +844,17 @@ async function readDownloadBody(response: Response, onProgress?: ProgressReporte
  *
  * `onProgress` reports bytes received when the client asked for progress and
  * the response carries a `Content-Length`; otherwise nothing is emitted.
+ *
+ * `options.maxBytes` bounds memory: a `Content-Length` above it is refused
+ * before a single body byte is read, and a body without one is cancelled the
+ * moment it crosses the cap (`DownloadTooLargeError` either way).
  */
-export async function apiDownload(path: string, onProgress?: ProgressReporter): Promise<DownloadedDocument> {
+export async function apiDownload(
+  path: string,
+  onProgress?: ProgressReporter,
+  options: DownloadOptions = {}
+): Promise<DownloadedDocument> {
+  const maxBytes = options.maxBytes ?? Infinity;
   const { baseUrl, auth } = getConfig();
   const url = resolveApiUrl(baseUrl, path);
 
@@ -857,7 +911,15 @@ export async function apiDownload(path: string, onProgress?: ProgressReporter): 
     );
   }
 
-  const data = await readDownloadBody(response, onProgress);
+  // Announced size over the cap: refuse without reading the body. The
+  // 30 s timeout used to be the only bound on a 200 MB document (#235).
+  const announced = Number(response.headers.get("content-length"));
+  if (Number.isFinite(announced) && announced > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new DownloadTooLargeError(path, announced, maxBytes, true);
+  }
+
+  const data = await readDownloadBody(response, path, maxBytes, onProgress);
   return { data, contentType, filename };
 }
 

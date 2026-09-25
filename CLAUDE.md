@@ -170,7 +170,14 @@ Filters out undefined values.
 **Documents** (`src/tools/documents.ts`): `boond_documents_get` downloads a
 document (CV, justificatif…) via `apiDownload()` and returns it as an MCP
 embedded resource (base64 blob for binaries, plain text for text mimes;
-size cap `MAX_DOCUMENT_BYTES` = 5 MiB). Document ids are found in entity
+size cap `MAX_DOCUMENT_BYTES` = 5 MiB). The cap is handed to `apiDownload`
+as `{ maxBytes }` and enforced **while downloading** (issue #235): a
+`Content-Length` above it is refused before a body byte is read, and a body
+without one is cancelled (`reader.cancel()`) the moment the running total
+crosses it — both surface as `DownloadTooLargeError`, which the tool turns
+into an `isError` result. Before, the whole file was buffered and *then*
+measured, so a 200 MB document cost 200 MB of heap per concurrent call and
+was only bounded by the 30 s timeout. Document ids are found in entity
 tabs (e.g. `boond_candidates_information` → relations `resumes`/`files`).
 `boond_documents_create` uploads **by URL only** (`fileUrl` — Boond fetches
 the file server-side; the MCP server never reads local files), with
@@ -467,10 +474,11 @@ Design rules, each pinned by a test:
   so the handler brackets it with `0/1 … en cours` / `1/1 … terminé`. Here the
   "started" step *is* the signal that separates slow from hung.
 - **`boond_documents_get` reports bytes**, throttled to ~10 steps, and only when
-  the response carries a `Content-Length`. `apiDownload` streams the body
-  (`body.getReader()`) *only* in that case — hence `ProgressReporter.enabled`,
-  which lets a caller skip work that exists only to feed progress; otherwise it
-  buffers through `arrayBuffer()` exactly as before.
+  the response carries a `Content-Length`. Since #235 `apiDownload` always
+  streams the body (`body.getReader()`) because the size cap is enforced as
+  bytes arrive; progress is an observer on that single path, gated by
+  `ProgressReporter.enabled` + a known total, so a tokenless call reads the
+  same bytes and emits nothing.
 
 **Known limitation — `MCP_HTTP_JSON_RESPONSE=true`**: that mode answers with a
 plain JSON body instead of an SSE stream, so there is no response stream to
