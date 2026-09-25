@@ -1301,10 +1301,20 @@ server empty strings, not absent keys. Three shapes must therefore all read as
 This is the mirror of the `MCP_HTTP_ALLOWED_HOSTS` rule (a blank value must never
 silently switch a control *off*): here a blank value must never switch a
 restriction *on*, which would hide most of the catalogue with no visible cause.
-`readEnv` in `config/access-policy.ts` and `config/dictionary-overrides.ts` and
-`envOrUndefined` in `services/boond-client.ts` all implement it — the last one
-also rejects whitespace-only, without which `BOOND_BASE_URL=" "` became the
-request base URL and failed as an opaque fetch error.
+**One reader implements it: `src/config/env.ts`** (`readString`, `readBool`,
+`readPositiveInt`, `readCsv`, `readUrl`; issue #242). Six private readers used
+to coexist and only one rejected whitespace — `MCP_HTTP_PATH=" "` became the
+endpoint path, `BOOND_OAUTH_AUTHORIZATION_SERVER=" "` broke the discovery
+document, `BOOND_BASE_URL=" "` failed as an opaque fetch error. Do not read
+`process.env` directly in a module; import the reader (every function takes
+`env` as its last argument for the config modules that are tested with a
+fake environment). `readUrl` is the one reader that **throws** on a value
+that is present but malformed: the three URLs decide where credentials are
+sent or where clients are told to go, so a typo stops start-up with the
+variable's name instead of surfacing as a fetch error. `readCsv` returns
+`undefined` for a list with no token (`" , "`), so "nothing" never means
+"allow nothing". `src/config/env.test.ts` walks every documented variable
+through the three unset shapes.
 
 Both booleans (`mcp_read_only`, `confirm_delete`) arrive as *strings* and carry
 an explicit `default`. `"false"` must not read as "set, therefore on"; and every

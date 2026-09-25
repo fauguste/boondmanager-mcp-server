@@ -19,6 +19,7 @@ import {
   defaultDeleteDescription,
 } from "./description-builders.js";
 import { isFeatureDisabled } from "../config/env-flags.js";
+import { readString } from "../config/env.js";
 import type { SearchInput, IdInput, IdTabInput } from "../schemas/index.js";
 import type { JsonApiResponse, JsonApiResource } from "../types.js";
 
@@ -114,7 +115,7 @@ export function entityRef(response: JsonApiResponse): z.infer<typeof MutationOut
 
 /** `BOOND_MCP_CONFIRM_DELETE=0|false|no|off` opts out of the confirmation prompt. */
 function deleteConfirmationDisabled(): boolean {
-  return isFeatureDisabled(process.env.BOOND_MCP_CONFIRM_DELETE);
+  return isFeatureDisabled(readString("BOOND_MCP_CONFIRM_DELETE"));
 }
 
 /**

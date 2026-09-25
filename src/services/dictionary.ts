@@ -1,4 +1,5 @@
 import { apiRequest } from "./boond-client.js";
+import { readPositiveInt } from "../config/env.js";
 import { currentAuthIdentity } from "./oauth.js";
 import type { JsonApiResponse } from "../types.js";
 
@@ -51,10 +52,7 @@ const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 export const MAX_DICTIONARY_CACHE_ENTRIES = 50;
 
 function resolveTtlMs(): number {
-  const raw = process.env["BOOND_DICTIONARY_TTL_MS"];
-  if (!raw) return DEFAULT_TTL_MS;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_TTL_MS;
+  return readPositiveInt("BOOND_DICTIONARY_TTL_MS", DEFAULT_TTL_MS);
 }
 
 /** Identity half of the cache key — see `currentAuthIdentity` in `oauth.ts`. */

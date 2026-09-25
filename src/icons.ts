@@ -3,6 +3,7 @@ import { ListPromptsRequestSchema, ListToolsRequestSchema } from "@modelcontextp
 import type { DomainName } from "./constants.js";
 import { PROMPTS } from "./prompts/index.js";
 import { isFeatureDisabled } from "./config/env-flags.js";
+import { readString } from "./config/env.js";
 import type { RegistrationIndex } from "./tools/registration-decorators.js";
 
 /**
@@ -65,7 +66,7 @@ const ICON_COLOR = "%237d8794";
  * that doesn't — hence the switch.
  */
 function iconsDisabled(): boolean {
-  return isFeatureDisabled(process.env.BOOND_MCP_ICONS);
+  return isFeatureDisabled(readString("BOOND_MCP_ICONS"));
 }
 
 /**

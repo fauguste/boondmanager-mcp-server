@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readString } from "./env.js";
 import { z } from "zod";
 import { logger } from "../services/logger.js";
 
@@ -68,15 +69,6 @@ const OverridesFileSchema = z
 
 // --- Env parsing helper (mirroring config/access-policy.ts) ---
 
-function readEnv(env: NodeJS.ProcessEnv, key: string): string | undefined {
-  const raw = env[key];
-  if (raw === undefined) return undefined;
-  // Ignore unresolved placeholders like "${SOMETHING}" (same guard as http.ts).
-  if (raw.startsWith("${")) return undefined;
-  if (raw.trim().length === 0) return undefined;
-  return raw;
-}
-
 /** Keep only known entity keys; warn-and-ignore the rest (never fatal). */
 function filterKnownEntities(
   section: OverrideSection,
@@ -104,7 +96,7 @@ function filterKnownEntities(
  */
 export function loadDictionaryOverrides(env: NodeJS.ProcessEnv = process.env): DictionaryOverrides | null {
   const log = logger.child({ component: "dictionary-overrides" });
-  const raw = readEnv(env, "BOOND_DICTIONARY_OVERRIDES");
+  const raw = readString("BOOND_DICTIONARY_OVERRIDES", env);
   if (raw === undefined) return null;
 
   // Inline JSON if the value starts with "{", otherwise a file path.

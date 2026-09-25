@@ -7,11 +7,12 @@ import { initClient, initClientWithAuth, oauthContextAuth, hasEnvCredentials } f
 import { createMcpServer, REGISTERED_DOMAINS } from "./server.js";
 import { runUpdateNotification } from "./services/update-checker.js";
 import { resolveHttpOptions, startHttpTransport } from "./transports/http.js";
+import { readString } from "./config/env.js";
 
 type TransportKind = "stdio" | "http";
 
 function resolveTransport(): TransportKind {
-  const raw = (process.env["MCP_TRANSPORT"] ?? "").toLowerCase().trim();
+  const raw = (readString("MCP_TRANSPORT") ?? "").toLowerCase().trim();
   if (raw === "http" || raw === "streamable-http" || raw === "streamablehttp") return "http";
   return "stdio";
 }
@@ -34,17 +35,14 @@ function scheduleUpdateCheck(): void {
   void runUpdateNotification({ currentVersion: meta.version, packageName: meta.name });
 }
 
-function resolveStaticAuth(): boolean {
-  const v = process.env["BOOND_HTTP_STATIC_AUTH"];
-  if (!v || v.startsWith("${")) return false;
-  return v.toLowerCase() === "true" || v === "1" || v.toLowerCase() === "yes";
-}
-
 async function main(): Promise<void> {
   const kind = resolveTransport();
 
   if (kind === "http") {
-    const useStaticAuth = resolveStaticAuth();
+    // Read once, here: `BOOND_HTTP_STATIC_AUTH` used to be parsed a second
+    // time by a private reader in this file (#242).
+    const options = resolveHttpOptions();
+    const useStaticAuth = options.staticAuth === true;
 
     if (useStaticAuth) {
       // Static-auth mode: operator provides env credentials; no per-request
@@ -68,7 +66,6 @@ async function main(): Promise<void> {
       initClientWithAuth(oauthContextAuth);
     }
 
-    const options = resolveHttpOptions();
     const handle = await startHttpTransport(createMcpServer, options);
     console.error("🚀 BoondManager MCP Server running (streamable HTTP transport)");
     console.error(`📡 Endpoint: http://${handle.address.host}:${handle.address.port}${handle.address.path}`);

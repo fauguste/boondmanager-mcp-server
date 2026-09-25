@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger, generateCorrelationId } from "../services/logger.js";
+import { readBool, readCsv, readPositiveInt, readString, readUrl } from "../config/env.js";
 import { SERVER_VERSION } from "../server.js";
 import {
   buildProtectedResourceMetadata,
@@ -148,35 +149,12 @@ const IDLE_REAP_INTERVAL_MS = 100;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const LOCALHOST_ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
-function readEnv(key: string): string | undefined {
-  const v = process.env[key];
-  if (!v || v.startsWith("${")) return undefined;
-  return v;
-}
-
-function readPositiveInt(key: string, fallback: number): number {
-  const raw = readEnv(key);
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
-}
-
-function readCsvEnv(key: string): string[] | undefined {
-  const raw = readEnv(key);
-  if (raw === undefined) return undefined;
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
 function readAllowedHosts(): string[] | undefined {
-  return readCsvEnv("MCP_HTTP_ALLOWED_HOSTS");
+  return readCsv("MCP_HTTP_ALLOWED_HOSTS");
 }
 
 function readAllowedOrigins(): string[] | undefined {
-  return readCsvEnv("MCP_HTTP_ALLOWED_ORIGINS");
+  return readCsv("MCP_HTTP_ALLOWED_ORIGINS");
 }
 
 /**
@@ -354,25 +332,24 @@ function extractHostname(hostHeader: string | string[] | undefined): string | un
 }
 
 export function resolveHttpOptions(): HttpTransportOptions {
-  const portRaw = readEnv("MCP_HTTP_PORT");
+  const portRaw = readString("MCP_HTTP_PORT")?.trim();
   const port = portRaw ? Number.parseInt(portRaw, 10) : 3000;
   if (!Number.isFinite(port) || port <= 0 || port > 65535) {
     throw new Error(`Invalid MCP_HTTP_PORT: ${portRaw}`);
   }
 
-  const stateless = (readEnv("MCP_HTTP_STATEFUL") ?? "false").toLowerCase() !== "true";
-  const enableJsonResponse = (readEnv("MCP_HTTP_JSON_RESPONSE") ?? "false").toLowerCase() === "true";
+  const stateless = !readBool("MCP_HTTP_STATEFUL", false);
+  const enableJsonResponse = readBool("MCP_HTTP_JSON_RESPONSE", false);
 
-  const staticAuth = readBoolEnv("BOOND_HTTP_STATIC_AUTH");
-  const insecureStaticAuth = readBoolEnv("MCP_HTTP_INSECURE_STATIC_AUTH");
+  const staticAuth = readBool("BOOND_HTTP_STATIC_AUTH", false);
+  const insecureStaticAuth = readBool("MCP_HTTP_INSECURE_STATIC_AUTH", false);
   // A blank key is "not configured", never an empty secret that every request matches.
-  const apiKeyRaw = readEnv("MCP_HTTP_API_KEY")?.trim();
-  const apiKey = apiKeyRaw && apiKeyRaw.length > 0 ? apiKeyRaw : undefined;
+  const apiKey = readString("MCP_HTTP_API_KEY")?.trim();
 
   return {
-    host: readEnv("MCP_HTTP_HOST") ?? "127.0.0.1",
+    host: readString("MCP_HTTP_HOST")?.trim() ?? "127.0.0.1",
     port,
-    path: readEnv("MCP_HTTP_PATH") ?? "/mcp",
+    path: readString("MCP_HTTP_PATH")?.trim() ?? "/mcp",
     stateless,
     enableJsonResponse,
     sessionTtlMs: readPositiveInt("MCP_HTTP_SESSION_TTL_MS", DEFAULT_SESSION_TTL_MS),
@@ -380,7 +357,7 @@ export function resolveHttpOptions(): HttpTransportOptions {
     maxSessions: readPositiveInt("MCP_HTTP_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
     allowedHosts: readAllowedHosts(),
     allowedOrigins: readAllowedOrigins(),
-    publicUrl: readEnv("MCP_HTTP_PUBLIC_URL"),
+    publicUrl: readUrl("MCP_HTTP_PUBLIC_URL"),
     staticAuth,
     apiKey,
     insecureStaticAuth,
@@ -407,11 +384,6 @@ export function resolveServerTimeouts(
   const headersTimeout = coerced ? keepAliveTimeout + 1_000 : requestedHeaders;
   const requestTimeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   return { keepAliveTimeout, headersTimeout, requestTimeout, coerced };
-}
-
-function readBoolEnv(key: string): boolean {
-  const raw = (readEnv(key) ?? "").trim().toLowerCase();
-  return raw === "true" || raw === "1" || raw === "yes";
 }
 
 /**
