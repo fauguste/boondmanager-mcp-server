@@ -307,6 +307,26 @@ to attach context and `logger.info({ key: value }, "message")` for
 structured output. In production (`NODE_ENV=production`), JSON is default;
 in dev, pino-pretty (colorized) is active unless `LOG_FORMAT=json`.
 
+**Every log line goes to stderr, on both transports** (`LOG_DESTINATION_FD`,
+issue #225). On stdio, stdout *is* the JSON-RPC stream: anything else written
+there corrupts a frame and the client drops the connection. Pino defaults to
+fd 1, and so does the pino-pretty transport without a `destination` — which is
+how the "Access policy active" line (any `BOOND_MCP_PROFILE` / `READ_ONLY`
+user), the update notice and the dictionary-override warnings used to land
+between two protocol messages. The two output shapes are built by
+`resolveLoggerConfig()` and both name fd 2: as `pino.destination(2)` on the
+JSON branch, as `transport.options.destination` on the pretty branch (pino
+refuses a stream argument alongside `transport`, which runs in a worker
+thread). Pinned twice: `logger.test.ts` on the config, and
+`src/stdio-stdout.test.ts` end-to-end — it spawns the real `dist/index.js`
+with an invalid access policy, sends `initialize`, and asserts that every
+stdout line parses as JSON-RPC while the warnings are on stderr. The child
+process is the only vantage point that sees the defect: neither the worker
+thread nor a SonicBoom on a raw fd goes through `process.stdout`, so an
+in-process spy stays green. CI builds before testing for that reason; locally
+the test compiles on demand rather than skipping. The `console.error` banners
+in `src/index.ts` were already on stderr.
+
 **Prompts** (`src/prompts/index.ts`): pre-orchestrated workflows that
 resolve to a `user` message guiding the model through a fixed tool
 sequence with the correct filter names. Server-side we *only* assemble
@@ -585,7 +605,7 @@ How it is wired, and why it is wired that way:
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
 - **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 66 test files, **1152 tests**
+- **Current stats**: 66 test files, **1166 tests**
 
 ### Test file template (for read-only search+get domains):
 
