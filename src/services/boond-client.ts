@@ -442,12 +442,49 @@ export function resetRateLimiterForTests(): void {
 }
 
 /** Status-specific hint to help the LLM (or human) recover from common failures. */
+/**
+ * What a caller can do about a BoondManager 401, which depends on who holds
+ * the credentials (issue #234). Under the HTTP OAuth transport the token
+ * belongs to the MCP client, and the only remedy is a new authorization —
+ * there is no CLI to re-run (the historical hint named one that is no longer
+ * shipped). With env credentials it is the operator's configuration.
+ */
+export function hintForUnauthorized(): string {
+  if (oauthContext.getStore()) {
+    return (
+      "The BoondManager access token was rejected (expired or revoked). Re-authorize the connector from the MCP client. " +
+      'With MCP_HTTP_VALIDATE_TOKEN=true the server answers the next request with HTTP 401 + `error="invalid_token"`, ' +
+      "which makes spec-compliant clients restart the OAuth flow on their own; otherwise disconnect and reconnect the server in the client."
+    );
+  }
+  return "Authentication failed. Verify BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY (or BOOND_API_TOKEN, or BOOND_USER + BOOND_PASSWORD).";
+}
+
+/**
+ * A non-2xx answer from BoondManager, with the status kept as data so callers
+ * (the HTTP transport's token validation, #234) can branch on it instead of
+ * parsing the message. The message is unchanged from the plain `Error` this
+ * replaces — `formatApiError()` output.
+ */
+export class BoondApiError extends Error {
+  readonly status: number;
+  readonly method: string;
+  readonly path: string;
+  constructor(message: string, status: number, method: string, path: string) {
+    super(message);
+    this.name = "BoondApiError";
+    this.status = status;
+    this.method = method;
+    this.path = path;
+  }
+}
+
 function hintForStatus(status: number): string {
   switch (status) {
     case 400:
       return "Check the request body or query parameters — likely a malformed field.";
     case 401:
-      return "Authentication failed. Verify BOOND_USER_TOKEN + BOOND_CLIENT_TOKEN + BOOND_CLIENT_KEY (or BOOND_API_TOKEN, or BOOND_USER + BOOND_PASSWORD). On HTTP transport, the OAuth access token may have expired — re-run boondmanager-mcp-oauth-login.";
+      return hintForUnauthorized();
     case 403:
       return "Authenticated, but the user lacks permission for this endpoint or scope.";
     case 404:
@@ -665,7 +702,12 @@ export async function apiRequest(
 
     if (response) {
       const errorText = await response.text().catch(() => "");
-      attemptError = new Error(formatApiError(response.status, response.statusText, method, path, errorText));
+      attemptError = new BoondApiError(
+        formatApiError(response.status, response.statusText, method, path, errorText),
+        response.status,
+        method,
+        path
+      );
     } else {
       attemptError = networkError!;
       isNetworkOrTimeout = true;
@@ -867,7 +909,12 @@ export async function apiDownload(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(formatApiError(response.status, response.statusText, "GET", path, errorText));
+    throw new BoondApiError(
+      formatApiError(response.status, response.statusText, "GET", path, errorText),
+      response.status,
+      "GET",
+      path
+    );
   }
 
   const contentType = response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream";
@@ -933,7 +980,12 @@ export async function apiUploadForm(path: string, fields: Record<string, string>
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(formatApiError(response.status, response.statusText, "POST", path, errorText));
+    throw new BoondApiError(
+      formatApiError(response.status, response.statusText, "POST", path, errorText),
+      response.status,
+      "POST",
+      path
+    );
   }
   if (response.status === 204 || response.headers.get("content-length") === "0") {
     return { data: [] };

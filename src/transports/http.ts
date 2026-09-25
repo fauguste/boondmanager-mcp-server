@@ -1,9 +1,10 @@
 import { createServer, IncomingMessage, ServerResponse, type Server } from "node:http";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger, generateCorrelationId } from "../services/logger.js";
+import { apiRequest, BoondApiError } from "../services/boond-client.js";
 import { readBool, readCsv, readPositiveInt, readString, readUrl } from "../config/env.js";
 import { SERVER_VERSION } from "../server.js";
 import {
@@ -101,6 +102,19 @@ export interface HttpTransportOptions {
    */
   requestTimeoutMs?: number;
   /**
+   * OAuth mode only (issue #234): validate each Bearer against BoondManager
+   * (`GET /application/current-user`, cached per token for
+   * `tokenValidationTtlMs`) **before** dispatching, so an expired or revoked
+   * token is answered with HTTP `401` + `WWW-Authenticate: … error="invalid_token"`
+   * (RFC 6750 §3.1) — the signal a spec-compliant MCP client turns into a new
+   * authorization flow. Without it the 401 only surfaces inside a `tools/call`
+   * result, which no client re-authorizes from. Off by default because it
+   * costs one BoondManager call per token per TTL; env `MCP_HTTP_VALIDATE_TOKEN`.
+   */
+  validateToken?: boolean;
+  /** Positive/negative cache lifetime of a token validation, in ms. Default 60 s; env `MCP_HTTP_TOKEN_VALIDATION_TTL_MS`. */
+  tokenValidationTtlMs?: number;
+  /**
    * Grace period `close()` gives in-flight connections (an open SSE stream, a
    * request mid-body) before destroying them with `closeAllConnections()`.
    * Idle keep-alive connections are closed immediately. Default 10 s; env
@@ -144,6 +158,10 @@ export const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 /** How often `close()` re-reaps idle keep-alive sockets while draining. */
 const IDLE_REAP_INTERVAL_MS = 100;
+// Token validation (issue #234): one BoondManager round-trip per token per
+// minute is the cost of turning an expired token into a real 401.
+export const DEFAULT_TOKEN_VALIDATION_TTL_MS = 60_000;
+export const MAX_TOKEN_VALIDATION_ENTRIES = 500;
 
 // Loopback addresses that should default to the localhost host allow-list.
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -365,6 +383,8 @@ export function resolveHttpOptions(): HttpTransportOptions {
     headersTimeoutMs: readPositiveInt("MCP_HTTP_HEADERS_TIMEOUT_MS", DEFAULT_HEADERS_TIMEOUT_MS),
     requestTimeoutMs: readPositiveInt("MCP_HTTP_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS),
     shutdownTimeoutMs: readPositiveInt("MCP_HTTP_SHUTDOWN_TIMEOUT_MS", DEFAULT_SHUTDOWN_TIMEOUT_MS),
+    validateToken: readBool("MCP_HTTP_VALIDATE_TOKEN", false),
+    tokenValidationTtlMs: readPositiveInt("MCP_HTTP_TOKEN_VALIDATION_TTL_MS", DEFAULT_TOKEN_VALIDATION_TTL_MS),
   };
 }
 
@@ -620,6 +640,48 @@ export async function startHttpTransport(
   const metadataUrl = `${resourceOrigin}${OAUTH_METADATA_PATH}${options.path}`;
   const wwwAuthenticate = `Bearer realm="${resourceUrl}", resource_metadata="${metadataUrl}"`;
 
+  // Bearer validation cache (issue #234): sha256(token) → verdict + expiry,
+  // LRU-bounded like the other per-identity maps. The token itself is never
+  // stored. A negative verdict is cached too, so a client retrying with a
+  // dead token does not turn into a BoondManager call per retry.
+  const tokenValidationTtlMs = options.tokenValidationTtlMs ?? DEFAULT_TOKEN_VALIDATION_TTL_MS;
+  const tokenVerdicts = new Map<string, { valid: boolean; expiresAt: number }>();
+  const validateAccessToken = async (accessToken: string): Promise<"valid" | "invalid" | "unknown"> => {
+    const key = createHash("sha256").update(accessToken).digest("hex");
+    const now = Date.now();
+    const cached = tokenVerdicts.get(key);
+    if (cached && cached.expiresAt > now) {
+      // Refresh LRU position.
+      tokenVerdicts.delete(key);
+      tokenVerdicts.set(key, cached);
+      return cached.valid ? "valid" : "invalid";
+    }
+    let verdict: "valid" | "invalid" | "unknown";
+    try {
+      await oauthContext.run({ accessToken }, () => apiRequest("/application/current-user"));
+      verdict = "valid";
+    } catch (error) {
+      if (error instanceof BoondApiError && error.status === 401) {
+        verdict = "invalid";
+      } else {
+        // BoondManager down, rate-limited, network error: not a verdict on
+        // the token. Fail open — the tool call will surface the real error —
+        // and cache nothing.
+        logger.warn({ err: error }, "Token validation could not reach BoondManager; letting the request through");
+        verdict = "unknown";
+      }
+    }
+    if (verdict !== "unknown") {
+      tokenVerdicts.set(key, { valid: verdict === "valid", expiresAt: now + tokenValidationTtlMs });
+      while (tokenVerdicts.size > MAX_TOKEN_VALIDATION_ENTRIES) {
+        const oldest = tokenVerdicts.keys().next().value;
+        if (oldest === undefined) break;
+        tokenVerdicts.delete(oldest);
+      }
+    }
+    return verdict;
+  };
+
   const sweepIdleSessions = async (): Promise<number> => {
     const cutoff = Date.now() - sessionTtlMs;
     const expired: Array<[string, SessionEntry]> = [];
@@ -656,10 +718,20 @@ export async function startHttpTransport(
     res.end(JSON.stringify(doc));
   };
 
-  /** RFC 6750 §3.1 challenge for missing/invalid bearer tokens. */
-  const writeOAuthChallenge = (res: ServerResponse, status: number, message: string): void => {
+  /**
+   * RFC 6750 §3.1 challenge. `error` is omitted when no token was presented
+   * (the RFC says a bare challenge is the right answer there) and set to
+   * `invalid_token` when one was and BoondManager rejected it — that value is
+   * what an MCP client keys its "start a new authorization" logic on.
+   */
+  const writeOAuthChallenge = (res: ServerResponse, status: number, message: string, error?: string): void => {
     res.statusCode = status;
-    res.setHeader("WWW-Authenticate", wwwAuthenticate);
+    res.setHeader(
+      "WWW-Authenticate",
+      error
+        ? `${wwwAuthenticate}, error="${error}", error_description="${message.replace(/"/g, "'")}"`
+        : wwwAuthenticate
+    );
     res.setHeader("Content-Type", "application/json");
     res.end(
       JSON.stringify({
@@ -900,6 +972,16 @@ export async function startHttpTransport(
             res,
             401,
             "Missing Bearer token. Authenticate against BoondManager and include `Authorization: Bearer <access_token>`."
+          );
+          return;
+        }
+        if (options.validateToken && (await validateAccessToken(accessToken)) === "invalid") {
+          reqLogger.info("Bearer rejected by BoondManager; answering 401 invalid_token");
+          writeOAuthChallenge(
+            res,
+            401,
+            "BoondManager rejected the access token (expired or revoked). Re-authorize and retry.",
+            "invalid_token"
           );
           return;
         }

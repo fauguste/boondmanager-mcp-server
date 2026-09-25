@@ -29,6 +29,8 @@ import {
   apiUploadForm,
   parseContentDispositionFilename,
   DownloadTooLargeError,
+  BoondApiError,
+  hintForUnauthorized,
 } from "./boond-client.js";
 import { progressReporterFrom } from "./progress.js";
 import { oauthContext } from "./oauth.js";
@@ -2371,5 +2373,69 @@ describe("formatListResponse — custom summary and empty windows (#243)", () =>
     // Every kept row is whole: the line before the banner ends with the padding.
     const body = text.split("\n\n[Résultats tronqués")[0];
     for (const line of body.split("\n").slice(2)) expect(line.endsWith("x".repeat(200))).toBe(true);
+  });
+});
+
+describe("401 hint and typed API errors (#234)", () => {
+  it("names re-authorization, not a CLI that no longer ships, under the OAuth transport", () => {
+    const hint = oauthContext.run({ accessToken: "t" }, () => hintForUnauthorized());
+    expect(hint).toContain("Re-authorize the connector");
+    expect(hint).toContain("MCP_HTTP_VALIDATE_TOKEN");
+    expect(hint).not.toContain("oauth-login");
+    expect(hint).not.toContain("BOOND_USER_TOKEN");
+  });
+
+  it("points at the env credentials outside the OAuth transport", () => {
+    const hint = hintForUnauthorized();
+    expect(hint).toContain("BOOND_USER_TOKEN");
+    expect(hint).not.toContain("oauth-login");
+    expect(hint).not.toContain("Re-authorize");
+  });
+
+  it("formatApiError(401) carries the transport-aware hint", () => {
+    const inOauth = oauthContext.run({ accessToken: "t" }, () => formatApiError(401, "Unauthorized", "GET", "/x", ""));
+    expect(inOauth).toContain("Re-authorize the connector");
+    expect(formatApiError(401, "Unauthorized", "GET", "/x", "")).toContain("BOOND_USER_TOKEN");
+  });
+
+  it("apiRequest throws a BoondApiError with the status, same message as before", async () => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+    resetRateLimiterForTests();
+    resetClientForTests();
+    initClient();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        headers: new Headers(),
+        text: () => Promise.resolve('{"errors":[{"detail":"token expired"}]}'),
+      })
+    );
+    try {
+      const err = await apiRequest("/application/current-user").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BoondApiError);
+      expect((err as BoondApiError).status).toBe(401);
+      expect((err as BoondApiError).path).toBe("/application/current-user");
+      expect((err as Error).message).toBe(
+        formatApiError(
+          401,
+          "Unauthorized",
+          "GET",
+          "/application/current-user",
+          '{"errors":[{"detail":"token expired"}]}'
+        )
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      delete process.env.BOOND_API_TOKEN;
+      delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+      delete process.env.BOOND_HTTP_MAX_RETRIES;
+      resetRateLimiterForTests();
+      resetClientForTests();
+    }
   });
 });

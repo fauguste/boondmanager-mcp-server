@@ -17,8 +17,11 @@ import {
   DEFAULT_HEADERS_TIMEOUT_MS,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  DEFAULT_TOKEN_VALIDATION_TTL_MS,
 } from "./http.js";
 import { createMcpServer } from "../server.js";
+import { initClientWithAuth, oauthContextAuth, resetClientForTests } from "../services/boond-client.js";
+import { resetRateLimiterForTests } from "../services/boond-client.js";
 
 /**
  * Performs a low-level HTTP POST so we can override the Host header (which
@@ -72,6 +75,8 @@ const ENV_KEYS = [
   "MCP_HTTP_HEADERS_TIMEOUT_MS",
   "MCP_HTTP_REQUEST_TIMEOUT_MS",
   "MCP_HTTP_SHUTDOWN_TIMEOUT_MS",
+  "MCP_HTTP_VALIDATE_TOKEN",
+  "MCP_HTTP_TOKEN_VALIDATION_TTL_MS",
   "MCP_HTTP_SESSION_SWEEP_INTERVAL_MS",
   "MCP_HTTP_ALLOWED_HOSTS",
   "MCP_HTTP_ALLOWED_ORIGINS",
@@ -173,6 +178,15 @@ describe("resolveHttpOptions", () => {
       requestTimeout: DEFAULT_REQUEST_TIMEOUT_MS,
       coerced: false,
     });
+  });
+
+  it("reads the token validation knobs (#234), off by default", () => {
+    expect(resolveHttpOptions().validateToken).toBe(false);
+    expect(resolveHttpOptions().tokenValidationTtlMs).toBe(DEFAULT_TOKEN_VALIDATION_TTL_MS);
+    process.env["MCP_HTTP_VALIDATE_TOKEN"] = "true";
+    process.env["MCP_HTTP_TOKEN_VALIDATION_TTL_MS"] = "5000";
+    expect(resolveHttpOptions().validateToken).toBe(true);
+    expect(resolveHttpOptions().tokenValidationTtlMs).toBe(5_000);
   });
 
   it("reads configuration from environment variables", () => {
@@ -1519,6 +1533,147 @@ describe("startHttpTransport (integration)", () => {
       const started = Date.now();
       await handle.close();
       expect(Date.now() - started).toBeLessThan(2_000);
+    });
+  });
+
+  describe("Bearer validation against BoondManager (#234)", () => {
+    const realFetch = globalThis.fetch;
+    let upstream: Array<{ url: string; auth: string | undefined }>;
+    let upstreamStatus: number;
+
+    beforeEach(() => {
+      process.env["BOOND_HTTP_RATE_LIMIT_RPS"] = "0";
+      process.env["BOOND_HTTP_MAX_RETRIES"] = "0";
+      resetRateLimiterForTests();
+      resetClientForTests();
+      initClientWithAuth(oauthContextAuth);
+      upstream = [];
+      upstreamStatus = 200;
+      // Requests to the local MCP server go through; anything else is
+      // "BoondManager" and answers `upstreamStatus`.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url.includes("127.0.0.1")) return realFetch(input, init);
+          const headers = new Headers(init?.headers);
+          upstream.push({ url, auth: headers.get("authorization") ?? undefined });
+          const body =
+            upstreamStatus === 200 ? '{"data":{"id":"1","type":"account"}}' : '{"errors":[{"detail":"token expired"}]}';
+          return Promise.resolve(
+            new Response(body, { status: upstreamStatus, headers: { "Content-Type": "application/json" } })
+          );
+        })
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      delete process.env["BOOND_HTTP_RATE_LIMIT_RPS"];
+      delete process.env["BOOND_HTTP_MAX_RETRIES"];
+      resetRateLimiterForTests();
+      resetClientForTests();
+    });
+
+    async function start(validateToken: boolean, tokenValidationTtlMs?: number) {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+        publicUrl: "https://mcp.example.com/mcp",
+        validateToken,
+        tokenValidationTtlMs,
+      });
+      return `http://127.0.0.1:${handle.address.port}/mcp`;
+    }
+    const post = (url: string, token: string) =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          Authorization: `Bearer ${token}`,
+        },
+        body: INIT_BODY,
+      });
+
+    it('answers 401 + error="invalid_token" when BoondManager rejects the token, and caches the verdict', async () => {
+      upstreamStatus = 401;
+      const url = await start(true);
+      const res = await post(url, "expired-token");
+      expect(res.status).toBe(401);
+      const challenge = res.headers.get("www-authenticate") ?? "";
+      expect(challenge).toContain('error="invalid_token"');
+      expect(challenge).toContain(
+        'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"'
+      );
+      expect(challenge).toContain("Re-authorize");
+      const body = (await res.json()) as { error?: { code?: number; message?: string } };
+      expect(body.error?.code).toBe(-32001);
+      expect(body.error?.message).toContain("expired or revoked");
+      // The token went upstream exactly as presented, to the lightweight probe.
+      expect(upstream).toHaveLength(1);
+      expect(upstream[0].url).toContain("/application/current-user");
+      expect(upstream[0].auth).toBe("Bearer expired-token");
+
+      // Retrying with the same dead token costs no second BoondManager call.
+      const again = await post(url, "expired-token");
+      expect(again.status).toBe(401);
+      await again.text();
+      expect(upstream).toHaveLength(1);
+    });
+
+    it("lets a valid token through and validates it once per TTL", async () => {
+      const url = await start(true, 200);
+      const first = await post(url, "good-token");
+      expect(first.status).toBe(200);
+      await first.text();
+      const second = await post(url, "good-token");
+      expect(second.status).toBe(200);
+      await second.text();
+      expect(upstream).toHaveLength(1);
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const third = await post(url, "good-token");
+      expect(third.status).toBe(200);
+      await third.text();
+      expect(upstream).toHaveLength(2);
+    });
+
+    it("fails open when BoondManager cannot answer, and caches nothing", async () => {
+      upstreamStatus = 503;
+      const url = await start(true);
+      const first = await post(url, "some-token");
+      expect(first.status).toBe(200);
+      await first.text();
+      const second = await post(url, "some-token");
+      expect(second.status).toBe(200);
+      await second.text();
+      expect(upstream).toHaveLength(2);
+    });
+
+    it("makes no upstream call when validation is off (the default)", async () => {
+      upstreamStatus = 401;
+      const url = await start(false);
+      const res = await post(url, "expired-token");
+      expect(res.status).toBe(200);
+      await res.text();
+      expect(upstream).toHaveLength(0);
+    });
+
+    it("keeps the bare challenge (no error parameter) when no token is presented", async () => {
+      const url = await start(true);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: INIT_BODY,
+      });
+      expect(res.status).toBe(401);
+      expect(res.headers.get("www-authenticate")).not.toContain("error=");
+      await res.text();
+      expect(upstream).toHaveLength(0);
     });
   });
 
