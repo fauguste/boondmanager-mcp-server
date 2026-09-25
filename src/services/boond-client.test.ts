@@ -2203,3 +2203,53 @@ describe("apiUploadForm", () => {
     await expect(apiUploadForm("/documents", { parentType: "nope" })).rejects.toThrow(/invalid parentType/);
   });
 });
+
+describe("formatListResponse — custom summary and empty windows (#243)", () => {
+  it("renders 'aucun résultat' on data: null instead of crashing on [null]", () => {
+    expect(formatListResponse({ data: null } as never, "feuille de temps")).toBe(
+      "Aucun(e) feuille de temps trouvé(e)."
+    );
+    expect(formatListResponse({ data: undefined } as never, "feuille de temps")).toBe(
+      "Aucun(e) feuille de temps trouvé(e)."
+    );
+  });
+
+  it("uses the caller's per-row summary when one is given", () => {
+    const response = {
+      data: [
+        { id: "1", type: "timesreport", attributes: { term: "2026-09" } },
+        { id: "2", type: "timesreport", attributes: { term: "2026-10" } },
+      ],
+      meta: { totals: { rows: 2 } },
+    };
+    const summary = (e: { id: string; attributes: Record<string, unknown> }) => `CRA ${e.id} (${e.attributes.term})`;
+    expect(formatListResponse(response as never, "feuille de temps", undefined, summary as never)).toBe(
+      "Total: 2 feuille de temps(s)\n\nCRA 1 (2026-09)\nCRA 2 (2026-10)"
+    );
+  });
+
+  it("lets `fields` take precedence over the custom summary", () => {
+    const response = { data: [{ id: "1", type: "timesreport", attributes: { term: "2026-09", state: 3 } }] };
+    const summary = () => "SHOULD NOT APPEAR";
+    const text = formatListResponse(response as never, "feuille de temps", ["term"], summary as never);
+    expect(text).not.toContain("SHOULD NOT APPEAR");
+    expect(text).toContain("2026-09");
+  });
+
+  it("truncates a custom-summary page on line boundaries with the shown/total banner", () => {
+    const rows = Array.from({ length: 500 }, (_, i) => ({
+      id: String(i),
+      type: "timesreport",
+      attributes: { term: "2026-09" },
+    }));
+    const summary = (e: { id: string }) => `[timesreport #${e.id}] ${"x".repeat(200)}`;
+    const text = formatListResponse({ data: rows } as never, "feuille de temps", undefined, summary as never);
+    expect(text.length).toBeLessThanOrEqual(CHARACTER_LIMIT);
+    const shown = Number(/\[Résultats tronqués : (\d+)\/500/.exec(text)?.[1]);
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(500);
+    // Every kept row is whole: the line before the banner ends with the padding.
+    const body = text.split("\n\n[Résultats tronqués")[0];
+    for (const line of body.split("\n").slice(2)) expect(line.endsWith("x".repeat(200))).toBe(true);
+  });
+});

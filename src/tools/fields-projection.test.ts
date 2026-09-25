@@ -12,6 +12,7 @@ import { registerPlanningAbsenceTools } from "./planning-absences.js";
 import { registerPositioningTools } from "./positionings.js";
 import { registerProviderInvoiceTools } from "./provider-invoices.js";
 import { registerPurchaseTools } from "./purchases.js";
+import { registerTimesheetTools } from "./timesheets.js";
 import { registerValidationTools } from "./validations.js";
 
 vi.mock("../services/boond-client.js", () => ({
@@ -39,6 +40,8 @@ const HAND_ROLLED_SEARCH_TOOLS: ReadonlyArray<{
   register: (server: McpServer) => void;
   tool: string;
   entityName: string;
+  /** The tool hands `formatListResponse` its own per-row summary (4th argument). */
+  ownSummary?: boolean;
 }> = [
   { register: registerAbsenceTools, tool: "boond_absences_search", entityName: "absence" },
   { register: registerActionTools, tool: "boond_actions_search", entityName: "action" },
@@ -59,6 +62,12 @@ const HAND_ROLLED_SEARCH_TOOLS: ReadonlyArray<{
     entityName: "facture fournisseur",
   },
   { register: registerPurchaseTools, tool: "boond_purchases_search", entityName: "achat" },
+  {
+    register: registerTimesheetTools,
+    tool: "boond_timesheets_search",
+    entityName: "feuille de temps",
+    ownSummary: true,
+  },
   { register: registerValidationTools, tool: "boond_validations_search", entityName: "validation" },
 ];
 
@@ -70,7 +79,8 @@ describe("fields projection forwarding (hand-rolled search tools)", () => {
     vi.mocked(formatListResponse).mockClear();
   });
 
-  for (const { register, tool, entityName } of HAND_ROLLED_SEARCH_TOOLS) {
+  for (const { register, tool, entityName, ownSummary } of HAND_ROLLED_SEARCH_TOOLS) {
+    const tail = ownSummary ? [expect.any(Function)] : [];
     it(`${tool} forwards params.fields to formatListResponse`, async () => {
       register(server);
       const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === tool);
@@ -79,7 +89,7 @@ describe("fields projection forwarding (hand-rolled search tools)", () => {
       const handler = call?.[2] as (params: unknown) => Promise<unknown>;
       await handler({ page: 1, pageSize: 30, fields: ["reference", "date"] });
 
-      expect(formatListResponse).toHaveBeenCalledWith(expect.anything(), entityName, ["reference", "date"]);
+      expect(formatListResponse).toHaveBeenCalledWith(expect.anything(), entityName, ["reference", "date"], ...tail);
     });
 
     it(`${tool} renders the standard summary when fields is absent`, async () => {
@@ -88,14 +98,14 @@ describe("fields projection forwarding (hand-rolled search tools)", () => {
       const handler = call?.[2] as (params: unknown) => Promise<unknown>;
       await handler({ page: 1, pageSize: 30 });
 
-      expect(formatListResponse).toHaveBeenCalledWith(expect.anything(), entityName, undefined);
+      expect(formatListResponse).toHaveBeenCalledWith(expect.anything(), entityName, undefined, ...tail);
     });
   }
 
   it("covers every hand-rolled search tool that formats a list", () => {
     // Guard against a new hand-rolled search tool being added without a row
-    // above. `boond_timesheets_search` and the `boond_reporting_*` family are
-    // deliberately absent: they render through their own formatters.
-    expect(HAND_ROLLED_SEARCH_TOOLS).toHaveLength(12);
+    // above. The `boond_reporting_*` family is deliberately absent: it renders
+    // through its own formatters.
+    expect(HAND_ROLLED_SEARCH_TOOLS).toHaveLength(13);
   });
 });

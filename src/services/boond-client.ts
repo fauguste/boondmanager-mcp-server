@@ -1245,8 +1245,16 @@ function formatProjectedSummary(entity: unknown, fields: string[]): string {
   return parts.join(" | ");
 }
 
-export function formatListResponse(response: JsonApiResponse, entityType: string, fields?: string[]): string {
-  const data = Array.isArray(response.data) ? response.data : [response.data];
+export function formatListResponse(
+  response: JsonApiResponse,
+  entityType: string,
+  fields?: string[],
+  summaryFn: (entity: JsonApiResource) => string = formatEntitySummary
+): string {
+  // `data: null` is what BoondManager answers on some empty windows
+  // (`/times-reports` on a month with no report, #243); it used to become
+  // `[null]` and crash the per-row summary.
+  const data = Array.isArray(response.data) ? response.data : response.data ? [response.data] : [];
   const total = response.meta?.totals?.rows;
 
   if (data.length === 0) {
@@ -1254,7 +1262,7 @@ export function formatListResponse(response: JsonApiResponse, entityType: string
   }
 
   const projected = fields !== undefined && fields.length > 0;
-  const lines = data.map((item) => (projected ? formatProjectedSummary(item, fields) : formatEntitySummary(item)));
+  const lines = data.map((item) => (projected ? formatProjectedSummary(item, fields) : summaryFn(item)));
   const header = total !== undefined ? `Total: ${total} ${entityType}(s)\n\n` : "";
   const body = lines.join("\n");
 
@@ -1295,12 +1303,7 @@ export function formatTabResponse(response: JsonApiResponse): string {
     return formatDetailResponse(response);
   }
 
-  const entities = response.data.map((entity) => ({
-    id: entity.id,
-    type: entity.type,
-    attributes: entity.attributes,
-    relationships: entity.relationships,
-  }));
+  const entities = response.data.map(projectEntity);
 
   let result = `${entities.length} élément(s)\n\n` + JSON.stringify(entities, null, 2);
 
