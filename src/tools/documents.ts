@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { apiDownload, apiUploadForm, formatDetailResponse } from "../services/boond-client.js";
+import { apiDownload, apiUploadForm, formatDetailResponse, DownloadTooLargeError } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
 import { DocumentIdSchema, DocumentCreateSchema } from "../schemas/index.js";
 import type { DocumentIdInput, DocumentCreateInput } from "../schemas/index.js";
@@ -35,22 +35,31 @@ Un ID inconnu est rejeté explicitement plutôt que de renvoyer la page d'accuei
     },
     async (params: DocumentIdInput, extra: unknown) => {
       // Byte-level progress, but only when the client asked for it and the
-      // response announces a Content-Length (see readDownloadBody).
-      const doc = await apiDownload(`/documents/${params.id}`, progressReporterFrom(extra));
-      const uri = `boond://documents/${params.id}`;
-      const name = doc.filename ?? `document-${params.id}`;
-
-      if (doc.data.length > MAX_DOCUMENT_BYTES) {
+      // response announces a Content-Length (see readDownloadBody). The size
+      // cap is enforced *during* the download (#235): an announced size over
+      // the cap is refused before the body is read, an unannounced one is cut
+      // the moment it crosses it — never buffered whole and then refused.
+      let doc;
+      try {
+        doc = await apiDownload(`/documents/${params.id}`, progressReporterFrom(extra), {
+          maxBytes: MAX_DOCUMENT_BYTES,
+        });
+      } catch (err) {
+        if (!(err instanceof DownloadTooLargeError)) throw err;
+        const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+        const size = err.announced ? `${mb(err.bytes)} Mo` : `plus de ${mb(err.bytes)} Mo`;
         return {
           isError: true,
           content: [
             {
               type: "text" as const,
-              text: `❌ Document #${params.id} (${name}) trop volumineux pour être retourné inline: ${(doc.data.length / 1024 / 1024).toFixed(1)} Mo (max ${Math.round(MAX_DOCUMENT_BYTES / 1024 / 1024)} Mo).`,
+              text: `❌ Document #${params.id} trop volumineux pour être retourné inline: ${size} (max ${Math.round(MAX_DOCUMENT_BYTES / 1024 / 1024)} Mo). Le téléchargement a été interrompu sans charger le fichier en mémoire.`,
             },
           ],
         };
       }
+      const uri = `boond://documents/${params.id}`;
+      const name = doc.filename ?? `document-${params.id}`;
 
       if (isTextMime(doc.contentType)) {
         let text = doc.data.toString("utf8");
