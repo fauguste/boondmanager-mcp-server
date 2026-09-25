@@ -594,6 +594,8 @@ Pour eviter qu'une boucle d'outils emballee n'inonde l'API (et n'enchaine les `4
 | `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Debit soutenu (requetes/seconde). `0` desactive completement. |
 | `BOOND_HTTP_RATE_LIMIT_BURST` | `20` | Capacite du bucket = taille maximale de rafale immediate. |
 
+En transport HTTP OAuth, le bucket est **par utilisateur** (identite derivee du Bearer) : la rafale d'un utilisateur ne ralentit pas les autres. En stdio et en static auth, une seule identite, donc un seul bucket — la limite est par identite, pas par processus.
+
 ### Cache du dictionnaire
 
 L'API BoondManager n'expose qu'un seul endpoint `/application/dictionary` qui renvoie l'intégralité des libellés (états, types, pays…). Le serveur le met en cache en mémoire pour éviter de le re-télécharger à chaque résolution état/type → libellé.

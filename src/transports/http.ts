@@ -7,6 +7,7 @@ import { logger, generateCorrelationId } from "../services/logger.js";
 import { SERVER_VERSION } from "../server.js";
 import {
   buildProtectedResourceMetadata,
+  currentAuthIdentity,
   extractBearerToken,
   oauthContext,
   resolveAdvertisedScopes,
@@ -503,6 +504,16 @@ interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   server: McpServer;
   lastActivityAt: number;
+  /**
+   * `currentAuthIdentity()` of the `initialize` request that opened the
+   * session (issue #232). A later request naming this session with another
+   * identity is answered exactly like an unknown session — `404 Session not
+   * found` — so a leaked `Mcp-Session-Id` (log, proxy) plus any Bearer cannot
+   * attach to someone else's GET stream, read their notifications, or answer
+   * their delete elicitations. In static-auth mode every caller shares the
+   * `env` identity and this collapses to the previous behaviour.
+   */
+  ownerIdentity: string;
   /** Memoised teardown — set on first destroy so concurrent callers share it. */
   closing?: Promise<void>;
 }
@@ -738,12 +749,26 @@ export async function startHttpTransport(
         // Stateful mode: route by Mcp-Session-Id header
         const sessionIdHeader = req.headers["mcp-session-id"];
         const sessionId = Array.isArray(sessionIdHeader) ? sessionIdHeader[0] : sessionIdHeader;
+        const identity = currentAuthIdentity();
 
-        if (sessionId && sessions.has(sessionId)) {
-          const entry = sessions.get(sessionId)!;
-          entry.lastActivityAt = Date.now();
-          await entry.transport.handleRequest(req, res, parsedBody);
-          return;
+        if (sessionId) {
+          const entry = sessions.get(sessionId);
+          if (entry && entry.ownerIdentity === identity) {
+            entry.lastActivityAt = Date.now();
+            await entry.transport.handleRequest(req, res, parsedBody);
+            return;
+          }
+          // Unknown session, or a session opened under another identity: one
+          // answer for both, so the probe does not learn whether the id exists
+          // (#232). A POST `initialize` carrying a stale id still opens a new
+          // session below, as it always did.
+          if (!(req.method === "POST" && isInitializeRequest(parsedBody))) {
+            if (entry) {
+              reqLogger.warn({ sessionId }, "Session ownership mismatch; answering as unknown session");
+            }
+            writeJsonRpcError(res, 404, "Session not found", -32001);
+            return;
+          }
         }
 
         if (req.method !== "POST") {
@@ -776,7 +801,7 @@ export async function startHttpTransport(
           sessionIdGenerator: () => randomUUID(),
           enableJsonResponse: options.enableJsonResponse,
           onsessioninitialized: (id) => {
-            sessions.set(id, { transport, server, lastActivityAt: Date.now() });
+            sessions.set(id, { transport, server, lastActivityAt: Date.now(), ownerIdentity: identity });
             reqLogger.info({ sessionId: id, sessionCount: sessions.size }, "MCP session initialized");
           },
           onsessionclosed: (id) => {

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 
 /**
  * OAuth2 plumbing for the HTTP transport.
@@ -35,6 +36,23 @@ export interface OAuthRequestContext {
  * on env-var credentials.
  */
 export const oauthContext = new AsyncLocalStorage<OAuthRequestContext>();
+
+/**
+ * Identity of the caller, as far as this process can tell — the key every
+ * per-user structure is partitioned on (dictionary cache #226, rate-limit
+ * buckets and session ownership #232).
+ *
+ * - OAuth (HTTP transport): the request's Bearer token, hashed so the raw
+ *   credential never sits in a long-lived structure. Two users of the same
+ *   tenant get two identities — the price of not decoding an opaque token.
+ * - Everything else (stdio, HTTP static auth): the credentials are process
+ *   wide, so a single constant identity is exact.
+ */
+export function currentAuthIdentity(): string {
+  const ctx = oauthContext.getStore();
+  if (!ctx) return "env";
+  return `oauth:${createHash("sha256").update(ctx.accessToken).digest("hex")}`;
+}
 
 /**
  * Extract a Bearer token from an HTTP `Authorization` header.
