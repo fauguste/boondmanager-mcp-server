@@ -28,7 +28,7 @@ export const fieldsField = z
 // ("Too big: expected number to be <=100") says what was refused but not what
 // to do instead, and a model that hit the page ceiling should refine its
 // filters rather than retry one page lower.
-const pageField = z
+export const pageField = z
   .number()
   .int()
   .min(1)
@@ -37,15 +37,29 @@ const pageField = z
   })
   .default(1)
   .describe(`Numéro de page (défaut: 1, max: ${MAX_SEARCH_PAGE})`);
-const pageSizeField = z
+export const pageSizeField = z
   .number()
   .int()
   .min(1)
   .max(MAX_PAGE_SIZE, { error: `pageSize > ${MAX_PAGE_SIZE} refusé : maximum ${MAX_PAGE_SIZE} résultats par page.` })
   .default(DEFAULT_PAGE_SIZE)
   .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`);
-const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
-const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri (asc/desc)");
+export const sortField = z.string().optional().describe("Champ de tri (ex: lastName, firstName, updateDate)");
+export const orderField = z.enum(["asc", "desc"]).optional().describe("Ordre de tri (asc/desc)");
+
+/** `page` / `pageSize` / `fields` — every paginated search. */
+export const paginationShape = {
+  page: pageField,
+  pageSize: pageSizeField,
+  fields: fieldsField,
+} as const;
+
+/** `sort` / `order` + pagination — the six entity searches that accept sorting. */
+export const sortedPaginationShape = {
+  sort: sortField,
+  order: orderField,
+  ...paginationShape,
+} as const;
 // Integer-id filters take ids, and a model that passes labels ("actif",
 // "Acme") gets an invalid_type issue. Point it at the resolution path in the
 // message itself rather than making it re-read the field description — but at
@@ -71,9 +85,7 @@ const strArray = (doc: string) => z.array(z.string()).optional().describe(doc);
 export const SearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche (nom, email, compétences...)"),
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -132,6 +144,51 @@ const endDateField = z
   .optional()
   .describe("Date de fin (YYYY-MM-DD), à utiliser avec `period`.");
 
+// ---- Shared shapes (issue #240) ----
+// Composed by spread into the entity search schemas so a change to one field
+// (a `.describe()`, the page-ceiling message) propagates everywhere. Before,
+// the six perimeter fields were copied six times, `shields` five times and the
+// `page`/`pageSize` pair ~16 times — ten of those copies had already lost the
+// `MAX_SEARCH_PAGE` explanation `pageField` carries.
+
+/** The six RAML-trait `searchable` perimeter filters, in API order. */
+export const perimeterShape = {
+  perimeterManagers: perimeterManagersField,
+  perimeterAgencies: perimeterAgenciesField,
+  perimeterPoles: perimeterPolesField,
+  perimeterBusinessUnits: perimeterBusinessUnitsField,
+  perimeterDynamic: perimeterDynamicField,
+  narrowPerimeter: narrowPerimeterField,
+} as const;
+
+/** Completeness level of the conditional fields (RAML trait `shields`). */
+export const shieldsField = z
+  .array(z.enum(["uncomplete", "minimum", "complete"]))
+  .optional()
+  .describe("Niveau de complétude des champs conditionnels.");
+
+/** `keywordsType` values shared by the two people endpoints (resources, candidates). */
+export const peopleKeywordsTypeEnum = z.enum([
+  "resumeTd",
+  "lastName",
+  "firstName",
+  "fullName",
+  "strictFullName",
+  "emails",
+  "title",
+  "titleSkills",
+  "phones",
+  "reference",
+  "resume",
+  "td",
+]);
+
+/** `perimeterManagersType` — candidates and opportunities only. */
+const perimeterManagersTypeField = z
+  .enum(["main", "hr"])
+  .optional()
+  .describe("Type de responsable visé par `perimeterManagers`: 'main' (Main Manager) ou 'hr' (HR Manager).");
+
 // ---- Resource search schema (collaborateurs internes) ----
 // Source: https://doc.boondmanager.com/api-externe/raml-build/resources/resources/search.raml
 export const ResourceSearchSchema = z
@@ -143,32 +200,13 @@ export const ResourceSearchSchema = z
         "Mots-clés (par défaut, recherche dans CV + dossier technique). Pour cibler un champ précis, " +
           "fournir aussi `keywordsType` (ex: lastName, firstName, fullName, emails, title, titleSkills, phones, reference)."
       ),
-    keywordsType: z
-      .enum([
-        "resumeTd",
-        "lastName",
-        "firstName",
-        "fullName",
-        "strictFullName",
-        "emails",
-        "title",
-        "titleSkills",
-        "phones",
-        "reference",
-        "resume",
-        "td",
-      ])
+    keywordsType: peopleKeywordsTypeEnum
       .optional()
       .describe(
         "Champ ciblé par `keywords`. Défaut: 'resumeTd' (CV + dossier technique). " +
           "Pour 'fullName' utiliser `keywords = 'NOM#PRENOM'`."
       ),
-    perimeterManagers: perimeterManagersField,
-    perimeterAgencies: perimeterAgenciesField,
-    perimeterPoles: perimeterPolesField,
-    perimeterBusinessUnits: perimeterBusinessUnitsField,
-    perimeterDynamic: perimeterDynamicField,
-    narrowPerimeter: narrowPerimeterField,
+    ...perimeterShape,
     resourceStates: intArray(
       "IDs d'états de ressource (dictionnaire setting.state.resource via boond_application_dictionary)."
     ),
@@ -216,15 +254,8 @@ export const ResourceSearchSchema = z
         "Rayon en km pour la recherche géographique (5-200). Requis si `coordinates` ou `location` est fourni."
       ),
     excludeManager: z.boolean().optional().describe("Si true, ne retourne que les ressources sans compte manager."),
-    shields: z
-      .array(z.enum(["uncomplete", "minimum", "complete"]))
-      .optional()
-      .describe("Niveau de complétude des champs conditionnels."),
-    sort: sortField,
-    order: orderField,
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    shields: shieldsField,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -236,33 +267,9 @@ export const CandidateSearchSchema = z
       .string()
       .optional()
       .describe("Mots-clés (par défaut, recherche dans CV + dossier technique). Combinable avec `keywordsType`."),
-    keywordsType: z
-      .enum([
-        "resumeTd",
-        "lastName",
-        "firstName",
-        "fullName",
-        "strictFullName",
-        "emails",
-        "title",
-        "titleSkills",
-        "phones",
-        "reference",
-        "resume",
-        "td",
-      ])
-      .optional()
-      .describe("Champ ciblé par `keywords` (défaut: 'resumeTd')."),
-    perimeterManagers: perimeterManagersField,
-    perimeterAgencies: perimeterAgenciesField,
-    perimeterPoles: perimeterPolesField,
-    perimeterBusinessUnits: perimeterBusinessUnitsField,
-    perimeterDynamic: perimeterDynamicField,
-    perimeterManagersType: z
-      .enum(["main", "hr"])
-      .optional()
-      .describe("Type de responsable visé par `perimeterManagers`: 'main' (Main Manager) ou 'hr' (HR Manager)."),
-    narrowPerimeter: narrowPerimeterField,
+    keywordsType: peopleKeywordsTypeEnum.optional().describe("Champ ciblé par `keywords` (défaut: 'resumeTd')."),
+    ...perimeterShape,
+    perimeterManagersType: perimeterManagersTypeField,
     candidateStates: intArray(
       "IDs d'états de candidat (dictionnaire setting.state.candidate via boond_application_dictionary)."
     ),
@@ -292,15 +299,8 @@ export const CandidateSearchSchema = z
     coordinates: z.string().optional().describe("Coordonnées GPS 'lat,lon'. Requiert `geoDistance`."),
     location: z.string().optional().describe("Adresse texte. Requiert `geoDistance`."),
     geoDistance: z.number().int().min(5).max(200).optional().describe("Rayon km (5-200)."),
-    shields: z
-      .array(z.enum(["uncomplete", "minimum", "complete"]))
-      .optional()
-      .describe("Niveau de complétude."),
-    sort: sortField,
-    order: orderField,
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    shields: shieldsField,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -332,12 +332,7 @@ export const ContactSearchSchema = z
         "Champ ciblé. Défaut: 'default'. Pour 'fullName' utiliser `keywords = 'NOM#PRENOM'`. " +
           "Pour 'companyFullName' utiliser `keywords = 'CSOCid#NOM#PRENOM'`."
       ),
-    perimeterManagers: perimeterManagersField,
-    perimeterAgencies: perimeterAgenciesField,
-    perimeterPoles: perimeterPolesField,
-    perimeterBusinessUnits: perimeterBusinessUnitsField,
-    perimeterDynamic: perimeterDynamicField,
-    narrowPerimeter: narrowPerimeterField,
+    ...perimeterShape,
     states: intArray("IDs d'états de contact (dictionnaire setting.state.contact)."),
     companyStates: intArray("IDs d'états des sociétés rattachées (dictionnaire setting.state.company)."),
     typesOf: intArray(
@@ -363,15 +358,8 @@ export const ContactSearchSchema = z
       "Filtre par complétude des champs au format `fieldId:mode` (fieldId: email/phone/socialNetworks ; " +
         "mode: empty/filled). Logique OU par défaut, '#AND#' en 1er pour ET. Ex: ['email:empty','phone:empty']."
     ),
-    shields: z
-      .array(z.enum(["uncomplete", "minimum", "complete"]))
-      .optional()
-      .describe("Niveau de complétude."),
-    sort: sortField,
-    order: orderField,
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    shields: shieldsField,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -387,12 +375,7 @@ export const CompanySearchSchema = z
       .enum(["default", "name", "phones", "emails", "socialNetworks"])
       .optional()
       .describe("Champ ciblé par `keywords`. Défaut: 'default'."),
-    perimeterManagers: perimeterManagersField,
-    perimeterAgencies: perimeterAgenciesField,
-    perimeterPoles: perimeterPolesField,
-    perimeterBusinessUnits: perimeterBusinessUnitsField,
-    perimeterDynamic: perimeterDynamicField,
-    narrowPerimeter: narrowPerimeterField,
+    ...perimeterShape,
     states: intArray("IDs d'états de société (dictionnaire setting.state.company)."),
     expertiseAreas: strArray("IDs de domaines d'expertise (dictionnaire setting.expertiseArea)."),
     origins: strArray("IDs d'origines (dictionnaire setting.origin)."),
@@ -407,15 +390,8 @@ export const CompanySearchSchema = z
       ),
     startDate: startDateField,
     endDate: endDateField,
-    shields: z
-      .array(z.enum(["uncomplete", "minimum", "complete"]))
-      .optional()
-      .describe("Niveau de complétude."),
-    sort: sortField,
-    order: orderField,
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    shields: shieldsField,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -431,16 +407,8 @@ export const OpportunitySearchSchema = z
           "'CCONnnn' (contact), 'CANDnnn' (candidat), 'COMPnnn' (ressource), 'PRODnnn' (produit). " +
           "Sinon recherche plein texte sur titre/société."
       ),
-    perimeterManagers: perimeterManagersField,
-    perimeterAgencies: perimeterAgenciesField,
-    perimeterPoles: perimeterPolesField,
-    perimeterBusinessUnits: perimeterBusinessUnitsField,
-    perimeterDynamic: perimeterDynamicField,
-    perimeterManagersType: z
-      .enum(["main", "hr"])
-      .optional()
-      .describe("Type de responsable visé par `perimeterManagers` (main/hr)."),
-    narrowPerimeter: narrowPerimeterField,
+    ...perimeterShape,
+    perimeterManagersType: perimeterManagersTypeField,
     opportunityStates: intArray("IDs d'états d'opportunité (dictionnaire setting.state.opportunity)."),
     opportunityTypes: strArray("IDs de types d'opportunité (dictionnaire setting.typeOf.project)."),
     positioningStates: strArray("IDs d'états de positionnement, ou 'none' pour les opportunités sans positionnement."),
@@ -461,15 +429,8 @@ export const OpportunitySearchSchema = z
       ),
     startDate: startDateField,
     endDate: endDateField,
-    shields: z
-      .array(z.enum(["uncomplete", "minimum", "complete"]))
-      .optional()
-      .describe("Niveau de complétude."),
-    sort: sortField,
-    order: orderField,
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    shields: shieldsField,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -484,12 +445,7 @@ export const ProjectSearchSchema = z
         "Mots-clés. Pour cibler par ID préfixé : 'PRJnnn' (projet), 'CSOCnnn' (société), " +
           "'CCONnnn' (contact), 'AOnnn' (opportunité), 'COMPnnn' (ressource), 'CTRnnn' (contrat)."
       ),
-    perimeterManagers: perimeterManagersField,
-    perimeterAgencies: perimeterAgenciesField,
-    perimeterPoles: perimeterPolesField,
-    perimeterBusinessUnits: perimeterBusinessUnitsField,
-    perimeterDynamic: perimeterDynamicField,
-    narrowPerimeter: narrowPerimeterField,
+    ...perimeterShape,
     projectStates: intArray("IDs d'états de projet (dictionnaire setting.state.project)."),
     projectTypes: intArray("IDs de types de projet (dictionnaire setting.typeOf.project)."),
     companies: entityIdArray("IDs de sociétés clientes : projets rattachés à ces sociétés."),
@@ -505,11 +461,7 @@ export const ProjectSearchSchema = z
       ),
     startDate: startDateField,
     endDate: endDateField,
-    sort: sortField,
-    order: orderField,
-    page: pageField,
-    pageSize: pageSizeField,
-    fields: fieldsField,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -915,9 +867,7 @@ export const ActionSearchSchema = z
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
     contactId: EntityIdSchema.optional().describe("Filtrer par ID contact"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1004,15 +954,7 @@ export const TimesheetSearchSchema = z
       .regex(/^\d{4}-\d{2}$/)
       .describe("Mois de fin au format YYYY-MM (ex: '2025-03'). Requis."),
     keywords: z.string().optional().describe("Mots-clés (préfixes 'TPS', 'COMP'...)."),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_PAGE_SIZE)
-      .default(DEFAULT_PAGE_SIZE)
-      .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1093,9 +1035,7 @@ export const InvoiceSearchSchema = z
       .string()
       .optional()
       .describe("Type de période (created, updated, expectedPayment, performedPayment, period)"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1137,9 +1077,7 @@ export const OrderSearchSchema = z
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
     projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1152,9 +1090,7 @@ export const DeliverySearchSchema = z
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1190,9 +1126,7 @@ export const AbsenceSearchSchema = z
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
     startMonth: z.string().optional().describe("Mois de début de période (YYYY-MM)"),
     endMonth: z.string().optional().describe("Mois de fin de période (YYYY-MM)"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1353,9 +1287,7 @@ export const ExpenseSearchSchema = z
     projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1425,9 +1357,7 @@ export const PositioningSearchSchema = z
     productId: EntityIdSchema.optional().describe(
       "Filtrer par ID produit (envoyé à l'API comme référence keywords PROD<id>)"
     ),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1443,9 +1373,7 @@ export const PaymentSearchSchema = z
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1455,9 +1383,7 @@ export const AdvantageSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1493,15 +1419,7 @@ export const ValidationSearchSchema = z
       .optional()
       .describe("États de validation."),
     validationAlerts: z.boolean().optional().describe("Filtrer sur les validations avec alertes."),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_PAGE_SIZE)
-      .default(DEFAULT_PAGE_SIZE)
-      .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
@@ -1521,15 +1439,7 @@ export const NotificationSearchSchema = z
       .array(z.string())
       .optional()
       .describe("Types de modules parents (ex: 'contract', 'global', 'project'...)."),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_PAGE_SIZE)
-      .default(DEFAULT_PAGE_SIZE)
-      .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 

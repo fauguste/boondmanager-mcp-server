@@ -563,6 +563,21 @@ Common gotchas:
   `entity.attributes ?? entity` bag as the text path (`buildListStructured`), or
   flat reference rows (`/calendars`, dictionary payloads) come back as bare ids.
 
+### Shared schema shapes (issue #240)
+
+`src/schemas/index.ts` composes the search schemas from exported shapes rather
+than repeating fields: `perimeterShape` (the six RAML-trait `searchable`
+filters), `paginationShape` (`page` / `pageSize` / `fields`),
+`sortedPaginationShape` (+ `sort` / `order`), `shieldsField`,
+`peopleKeywordsTypeEnum` (resources + candidates). Spread them
+(`{ ...perimeterShape, ...sortedPaginationShape }`) — never redeclare `page`
+with a bare `z.number().max(MAX_SEARCH_PAGE)`: ten schemas had done exactly
+that and lost the self-correcting `MAX_SEARCH_PAGE` message `pageField`
+carries. `src/tools/page-ceiling.test.ts` calls every tool that declares
+`page` with `MAX_SEARCH_PAGE + 1` through a real client and fails by tool name
+on a rejection that does not explain itself. Hand-rolled schemas in domain
+files (`purchases.ts`, `provider-invoices.ts`) import `paginationShape` too.
+
 ### Rejections that carry their own correction (SEP-1303)
 
 The Zod schemas in `src/schemas/index.ts` are `.strict()`, so a wrong filter

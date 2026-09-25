@@ -1,9 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { EntityIdSchema, IdSchema, fieldsField } from "../schemas/index.js";
+import { EntityIdSchema, IdSchema, paginationShape } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
 import { composeDescription, defaultGetDescription } from "./description-builders.js";
 
 const ProviderInvoiceSearchSchema = z
@@ -11,9 +10,7 @@ const ProviderInvoiceSearchSchema = z
     keywords: z.string().optional().describe("Mots-cles de recherche"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID societe fournisseur"),
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource via mot-cle COMP<id>"),
-    page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numero de page (max: ${MAX_SEARCH_PAGE})`),
-    pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Resultats par page"),
-    fields: fieldsField,
+    ...paginationShape,
   })
   .strict();
 
