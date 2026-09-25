@@ -104,6 +104,40 @@ Optional env vars for the discovery metadata:
 
 ---
 
+## 2bis. Static auth: skipping OAuth on purpose
+
+`BOOND_HTTP_STATIC_AUTH=true` makes the HTTP transport use the **env
+credentials** (`BOOND_USER_TOKEN` + `BOOND_CLIENT_TOKEN` + `BOOND_CLIENT_KEY`,
+`BOOND_API_TOKEN`, or BasicAuth) for every request instead of a per-request
+Bearer. It exists for single-tenant self-hosted deployments, CI pipelines and
+internal gateways that have no OAuth flow.
+
+What it costs: **the MCP client is no longer authenticated at all**. Every
+caller acts as the operator in BoondManager, with the operator's read and
+write rights, and the discovery document is not served (an OAuth-aware client
+would otherwise start a dance that cannot complete). Off loopback, `Host` and
+`Origin` validation are disabled too — which is the Docker image's default
+bind. So:
+
+| Var | Purpose |
+|-----|---------|
+| `MCP_HTTP_API_KEY` | Shared secret clients must send as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Constant-time comparison; missing or wrong → `401` with `WWW-Authenticate: Bearer realm="…"` (no `resource_metadata`). **Required on a non-loopback bind** — the server refuses to start without it. |
+| `MCP_HTTP_INSECURE_STATIC_AUTH` | `1` to start anyway without a key off loopback, when the network itself is the boundary. |
+
+```bash
+export MCP_TRANSPORT=http
+export MCP_HTTP_HOST=0.0.0.0
+export BOOND_HTTP_STATIC_AUTH=true
+export MCP_HTTP_API_KEY="$(openssl rand -hex 32)"
+export BOOND_USER_TOKEN=… BOOND_CLIENT_TOKEN=… BOOND_CLIENT_KEY=…
+npx boondmanager-mcp-server
+```
+
+`/healthz` stays unauthenticated. Everything below this point assumes the
+default OAuth mode.
+
+---
+
 ## 3. Configure the MCP client
 
 The MCP client discovers the OAuth flow automatically by fetching the

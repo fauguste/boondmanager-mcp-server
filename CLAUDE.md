@@ -1046,6 +1046,9 @@ HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only: how often to scan for idle sessions |
 | `MCP_HTTP_MAX_SESSIONS` | `1000` | Stateful only: max concurrent sessions. New `initialize` requests beyond the cap get `503` (after an idle sweep). Guards against memory exhaustion via unbounded session creation. |
 | `MCP_HTTP_ALLOWED_HOSTS` | (auto) | Comma-separated allow-list of `Host` header hostnames for DNS rebinding protection (CVE-2025-66414). Default = `localhost,127.0.0.1,[::1]` when bound to a loopback interface, otherwise validation is disabled. Set to exactly `*` (sole entry) to opt out explicitly when fronting the server with a reverse proxy that already validates hosts; a `*` mixed with real hostnames is ignored (validation stays on) with a warning. |
+| `BOOND_HTTP_STATIC_AUTH` | `false` | `true`/`1`/`yes`: use the env credentials (`BOOND_USER_TOKEN`+`BOOND_CLIENT_TOKEN`+`BOOND_CLIENT_KEY`, `BOOND_API_TOKEN` or BasicAuth) for every request instead of a per-request OAuth Bearer. See *Static auth* below — with no `MCP_HTTP_API_KEY` this is an **anonymous proxy** carrying the operator's rights. |
+| `MCP_HTTP_API_KEY` | (none) | Static auth only: shared secret the MCP client must present as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Constant-time comparison; missing/wrong → `401`. **Required** when `BOOND_HTTP_STATIC_AUTH=true` and the bind is not loopback (the server refuses to start otherwise). Blank / unresolved `${…}` = unconfigured. Ignored (with a warning) in OAuth mode. |
+| `MCP_HTTP_INSECURE_STATIC_AUTH` | `false` | Explicit opt-out of that start-up refusal, for a deployment whose network is the boundary. Named "insecure" on purpose. |
 | `MCP_HTTP_ALLOWED_ORIGINS` | (auto) | Comma-separated allow-list of `Origin` header values (scheme + host + port) accepted from browser-based clients — required by spec 2025-11-25, which mandates a `403` on an invalid `Origin`. Default when bound to a loopback interface = **any loopback origin on any port** (`http`/`https` on `localhost` / `127.0.0.1` / `[::1]`) plus the origin of `MCP_HTTP_PUBLIC_URL` if set; validation is disabled otherwise. Same `*` semantics as `MCP_HTTP_ALLOWED_HOSTS`. **A request with no `Origin` is always accepted** (curl, gateways, non-browser MCP clients never send one). |
 
 `Origin` validation runs right after the `Host` check, in the same block.
@@ -1070,6 +1073,29 @@ An **empty** `MCP_HTTP_ALLOWED_HOSTS` / `MCP_HTTP_ALLOWED_ORIGINS` (blank value,
 or only commas) counts as *unconfigured* and falls back to the default — a blank
 env var must never silently switch a security control off. `*` is the explicit
 opt-out.
+
+**Static auth** (`BOOND_HTTP_STATIC_AUTH=true`, issue #230): the HTTP transport
+runs with the operator's env credentials and the Bearer check is skipped — so
+whoever reaches the port acts with the operator's BoondManager rights, read and
+write, and off loopback the `Host` / `Origin` validations are off too (the Docker
+image binds `0.0.0.0`). Meant for single-tenant self-hosted deployments, CI
+pipelines and internal gateways without an OAuth flow, **never** as a public
+endpoint. Three guards, each with a test in `http.test.ts`:
+
+- `MCP_HTTP_API_KEY` gates the MCP endpoint (`isApiKeyMatch`: `timingSafeEqual`
+  on equal-length buffers; a length mismatch still pays one full comparison and
+  answers `false` — hashing both sides to equalise lengths trips CodeQL's
+  `js/insufficient-password-hash`, and the length of a random key is not
+  secret). The
+  `401` carries `WWW-Authenticate: Bearer realm="…"` **without**
+  `resource_metadata` — there is no authorization server to discover, and the
+  RFC 9728 document is not served in this mode. `/healthz` stays open.
+- `assertStaticAuthPolicy` **refuses to start** (throws before `listen`) on
+  static auth + non-loopback bind + no key, unless
+  `MCP_HTTP_INSECURE_STATIC_AUTH=1`. A warning on stderr is exactly what
+  `docker run -e BOOND_HTTP_STATIC_AUTH=true` does not read.
+- A `warn` log at start-up states the mode's perimeter (key configured /
+  loopback only / insecure).
 
 Request bodies are capped at 1 MiB (`MAX_BODY_BYTES`): a `Content-Length`
 precheck, then a streaming guard in `readJsonBody`, which is the **only** body

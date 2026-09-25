@@ -74,7 +74,11 @@ async function main(): Promise<void> {
     console.error(`📡 Endpoint: http://${handle.address.host}:${handle.address.port}${handle.address.path}`);
     console.error(`🔑 Mode: ${options.stateless ? "stateless" : "stateful"}`);
     if (useStaticAuth) {
-      console.error("🔐 Boond auth: JWT statique (credentials env, pas de Bearer requis par le client)");
+      console.error(
+        options.apiKey
+          ? "🔐 Boond auth: JWT statique (credentials env) — clients authentifiés par MCP_HTTP_API_KEY"
+          : "🔐 Boond auth: JWT statique (credentials env) — ⚠️ aucune authentification client (bind loopback ou MCP_HTTP_INSECURE_STATIC_AUTH)"
+      );
     } else {
       console.error("🔐 Boond auth: OAuth2 (per-request Bearer from MCP client)");
     }

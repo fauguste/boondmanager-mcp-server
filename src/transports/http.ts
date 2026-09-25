@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -57,8 +57,26 @@ export interface HttpTransportOptions {
    * or BOOND_API_TOKEN, or BasicAuth). Intended for single-tenant / self-hosted
    * deployments where the operator owns both the server and the credentials.
    * Set `BOOND_HTTP_STATIC_AUTH=true` to enable via `resolveHttpOptions()`.
+   *
+   * In this mode **nothing** authenticates the MCP client: whoever reaches the
+   * port acts with the operator's BoondManager rights. `apiKey` is what closes
+   * that (issue #230), and `assertStaticAuthPolicy` refuses to start without
+   * one on a non-loopback bind.
    */
   staticAuth?: boolean;
+  /**
+   * Shared secret the MCP client must present in static-auth mode, as
+   * `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Compared in constant
+   * time. Set via `MCP_HTTP_API_KEY`. Ignored (with a warning) in OAuth mode,
+   * where the Bearer is the BoondManager access token.
+   */
+  apiKey?: string;
+  /**
+   * Explicit opt-out of the "static auth off loopback requires an API key"
+   * start-up refusal — for a deployment whose network is the boundary (a
+   * private gateway). Set via `MCP_HTTP_INSECURE_STATIC_AUTH=1`.
+   */
+  insecureStaticAuth?: boolean;
 }
 
 export interface HttpServerHandle {
@@ -298,8 +316,11 @@ export function resolveHttpOptions(): HttpTransportOptions {
   const stateless = (readEnv("MCP_HTTP_STATEFUL") ?? "false").toLowerCase() !== "true";
   const enableJsonResponse = (readEnv("MCP_HTTP_JSON_RESPONSE") ?? "false").toLowerCase() === "true";
 
-  const staticAuthRaw = (readEnv("BOOND_HTTP_STATIC_AUTH") ?? "").toLowerCase();
-  const staticAuth = staticAuthRaw === "true" || staticAuthRaw === "1" || staticAuthRaw === "yes";
+  const staticAuth = readBoolEnv("BOOND_HTTP_STATIC_AUTH");
+  const insecureStaticAuth = readBoolEnv("MCP_HTTP_INSECURE_STATIC_AUTH");
+  // A blank key is "not configured", never an empty secret that every request matches.
+  const apiKeyRaw = readEnv("MCP_HTTP_API_KEY")?.trim();
+  const apiKey = apiKeyRaw && apiKeyRaw.length > 0 ? apiKeyRaw : undefined;
 
   return {
     host: readEnv("MCP_HTTP_HOST") ?? "127.0.0.1",
@@ -314,7 +335,72 @@ export function resolveHttpOptions(): HttpTransportOptions {
     allowedOrigins: readAllowedOrigins(),
     publicUrl: readEnv("MCP_HTTP_PUBLIC_URL"),
     staticAuth,
+    apiKey,
+    insecureStaticAuth,
   };
+}
+
+function readBoolEnv(key: string): boolean {
+  const raw = (readEnv(key) ?? "").trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
+/**
+ * Refuses a static-auth deployment that would expose the operator's
+ * BoondManager credentials to anyone who can reach the port (issue #230).
+ *
+ * Static auth skips the Bearer check entirely, and off loopback the `Host` /
+ * `Origin` validations are disabled too — the Docker image binds `0.0.0.0` by
+ * default — so with no `apiKey` the endpoint is an anonymous proxy carrying
+ * the operator's read *and* write rights. Loopback is exempt (only local
+ * processes can connect), and `insecureStaticAuth` is the explicit,
+ * named opt-out for a deployment whose network is the boundary. Throwing here
+ * rather than warning is deliberate: a warning on stderr is exactly what an
+ * operator running `docker run -e BOOND_HTTP_STATIC_AUTH=true` does not read.
+ */
+export function assertStaticAuthPolicy(options: HttpTransportOptions): void {
+  if (!options.staticAuth || options.apiKey) return;
+  if (LOOPBACK_HOSTS.has(options.host)) return;
+  if (options.insecureStaticAuth) return;
+  throw new Error(
+    `BOOND_HTTP_STATIC_AUTH=true on a non-loopback interface (${options.host}) requires MCP_HTTP_API_KEY: ` +
+      "without it, anyone who can reach the port acts with the operator's BoondManager credentials. " +
+      "Set MCP_HTTP_API_KEY=<secret> (clients send `Authorization: Bearer <secret>` or `X-Api-Key: <secret>`), " +
+      "bind to 127.0.0.1 behind an authenticating proxy, or set MCP_HTTP_INSECURE_STATIC_AUTH=1 to accept the exposure explicitly."
+  );
+}
+
+/**
+ * Constant-time comparison of a presented API key against the configured one.
+ *
+ * `timingSafeEqual` throws on buffers of different lengths, so a length
+ * mismatch is answered by comparing the expected key against itself first —
+ * the call still costs one full comparison — and then returning `false`. The
+ * key's *length* is therefore observable, which is acceptable: it is not
+ * secret for a random key (the README generates 32 random bytes), and the
+ * alternative — hashing both sides to equalise lengths — reads to static
+ * analysers as a password stored under a fast hash, which it is not.
+ */
+export function isApiKeyMatch(presented: string | null | undefined, expected: string): boolean {
+  if (!presented) return false;
+  const a = Buffer.from(presented, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) {
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+/** The key a request presents: `Authorization: Bearer <key>` first, then `X-Api-Key`. */
+function presentedApiKey(req: IncomingMessage): string | null {
+  const bearer = extractBearerToken(req.headers["authorization"]);
+  if (bearer) return bearer;
+  const raw = req.headers["x-api-key"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /**
@@ -442,6 +528,27 @@ export async function startHttpTransport(
   createServerFactory: () => McpServer,
   options: HttpTransportOptions
 ): Promise<HttpServerHandle> {
+  assertStaticAuthPolicy(options);
+  if (options.staticAuth) {
+    logger.warn(
+      {
+        host: options.host,
+        apiKey: options.apiKey ? "configured" : "none",
+        insecureStaticAuth: options.insecureStaticAuth === true,
+      },
+      "Static auth mode: every MCP request runs with the operator's BoondManager credentials" +
+        (options.apiKey
+          ? "; clients must present MCP_HTTP_API_KEY"
+          : LOOPBACK_HOSTS.has(options.host)
+            ? "; no client authentication (loopback bind only)"
+            : "; NO CLIENT AUTHENTICATION on a non-loopback bind (MCP_HTTP_INSECURE_STATIC_AUTH)")
+    );
+  } else if (options.apiKey) {
+    logger.warn(
+      "MCP_HTTP_API_KEY is set but BOOND_HTTP_STATIC_AUTH is not: ignored. In OAuth mode the Bearer is the BoondManager access token."
+    );
+  }
+
   const sessions = new Map<string, SessionEntry>();
   const sessionTtlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const sessionSweepIntervalMs = options.sessionSweepIntervalMs ?? DEFAULT_SESSION_SWEEP_INTERVAL_MS;
@@ -701,7 +808,18 @@ export async function startHttpTransport(
 
       if (options.staticAuth) {
         // Static-auth mode: env-based JWT credentials configured at startup via
-        // initClient(). No Bearer token required from the MCP client.
+        // initClient(). The MCP client authenticates with the shared API key
+        // when one is configured (#230) — never with a BoondManager token.
+        if (options.apiKey && !isApiKeyMatch(presentedApiKey(req), options.apiKey)) {
+          res.setHeader("WWW-Authenticate", `Bearer realm="${resourceUrl}"`);
+          writeJsonRpcError(
+            res,
+            401,
+            "Missing or invalid API key. Send `Authorization: Bearer <MCP_HTTP_API_KEY>` or `X-Api-Key: <MCP_HTTP_API_KEY>`.",
+            -32001
+          );
+          return;
+        }
         await dispatchMcpRequest();
       } else {
         // OAuth2 Bearer is mandatory on the MCP endpoint. The token is opaque
