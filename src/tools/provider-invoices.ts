@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { EntityIdSchema, IdSchema, paginationShape } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
@@ -8,7 +9,7 @@ import { composeDescription, defaultGetDescription } from "./description-builder
 const ProviderInvoiceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-cles de recherche"),
-    companyId: EntityIdSchema.optional().describe("Filtrer par ID societe fournisseur"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID societe fournisseur (reference keywords CSOC<id>)"),
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource via mot-cle COMP<id>"),
     ...paginationShape,
   })
@@ -99,12 +100,7 @@ export function registerProviderInvoiceTools(server: McpServer): void {
       },
     },
     async (params) => {
-      const { resourceId, companyId, keywords, ...rest } = params;
-      const tokens: string[] = [];
-      if (keywords) tokens.push(keywords);
-      if (resourceId) tokens.push(`COMP${resourceId}`);
-      if (companyId) tokens.push(`CSOC${companyId}`);
-      const query = buildSearchQuery(tokens.length > 0 ? { ...rest, keywords: tokens.join(" ") } : rest);
+      const query = buildSearchQuery(toKeywordReferences(params));
       const response = await apiRequest("/provider-invoices", "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "facture fournisseur", params.fields) }],

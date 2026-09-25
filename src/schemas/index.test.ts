@@ -838,22 +838,30 @@ describe("PaymentSearchSchema", () => {
 
   it("should accept filters", () => {
     const result = PaymentSearchSchema.safeParse({
-      invoiceId: "1",
+      purchaseId: "1",
       companyId: "2",
     });
     expect(result.success).toBe(true);
   });
+
+  it("rejects invoiceId: /payments has no FACT<id> reference (#247)", () => {
+    expect(PaymentSearchSchema.safeParse({ invoiceId: "1" }).success).toBe(false);
+  });
 });
 
 describe("AdvantageSearchSchema", () => {
-  it("should accept empty search with defaults", () => {
-    const result = AdvantageSearchSchema.parse({});
+  // The list lives under the resource (GET /resources/{id}/advantages, #247):
+  // no resourceId, no route.
+  it("requires resourceId and applies the pagination defaults", () => {
+    expect(AdvantageSearchSchema.safeParse({}).success).toBe(false);
+    const result = AdvantageSearchSchema.parse({ resourceId: "123" });
     expect(result.page).toBe(1);
+    expect(result.resourceId).toBe("123");
   });
 
-  it("should accept resourceId filter", () => {
-    const result = AdvantageSearchSchema.safeParse({ resourceId: "123" });
-    expect(result.success).toBe(true);
+  it("accepts advantageTypes and rejects keywords (the route has none)", () => {
+    expect(AdvantageSearchSchema.safeParse({ resourceId: "123", advantageTypes: ["2_1"] }).success).toBe(true);
+    expect(AdvantageSearchSchema.safeParse({ resourceId: "123", keywords: "x" }).success).toBe(false);
   });
 });
 
@@ -1018,7 +1026,7 @@ describe("fields projection availability", () => {
     ["ExpenseSearchSchema", ExpenseSearchSchema, {}],
     ["PositioningSearchSchema", PositioningSearchSchema, {}],
     ["PaymentSearchSchema", PaymentSearchSchema, {}],
-    ["AdvantageSearchSchema", AdvantageSearchSchema, {}],
+    ["AdvantageSearchSchema", AdvantageSearchSchema, { resourceId: "1" }],
     ["ValidationSearchSchema", ValidationSearchSchema, { startMonth: "2026-01", endMonth: "2026-03" }],
     ["NotificationSearchSchema", NotificationSearchSchema, { category: "activity" }],
   ];

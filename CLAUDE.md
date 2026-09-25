@@ -545,7 +545,19 @@ Common gotchas:
   the `keywords` prefix syntax: `CSOC<id>` (society), `CCON<id>` (contact),
   `CAND<id>` (candidate), `COMP<id>` (resource), `AO<id>` (opportunity),
   `PRJ<id>` (project), `MIS<id>` (delivery), `PROD<id>` (product),
-  `CTR<id>` (contract)
+  `CTR<id>` (contract). **No list endpoint has a `companyId` / `projectId` /
+  `resourceId` query parameter** (issue #247, verified live on 2026-09-25:
+  `GET /invoices?companyId=6221` returned all 29 893 rows, `keywords=CSOC6221`
+  returned 2). The search schemas still expose those `*Id` fields because
+  that is what a model reaches for, and every search handler — the
+  crud-factory one and all hand-rolled ones — runs its params through
+  `toKeywordReferences()` (`src/tools/linked-entity-filters.ts`), which moves
+  them into `keywords` as prefixed references. Never forward a `*Id` search
+  filter verbatim; `src/tools/linked-entity-filters.test.ts` asserts the
+  query actually sent for every (tool, filter) pair. `boond_advantages_search`
+  is the one list that is *not* a collection search: `GET /advantages` does
+  not exist (WAF 403 page), the route is `GET /resources/{id}/advantages`, so
+  `resourceId` is required there
 - **Period vocabulary differs per endpoint**: e.g. `running` (projects),
   `closingDate` (opportunities), `available`/`working` (resources). See
   the per-endpoint description in `src/schemas/index.ts`.

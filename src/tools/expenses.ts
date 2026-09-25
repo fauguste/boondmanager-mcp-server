@@ -167,7 +167,7 @@ export function registerExpenseTools(server: McpServer): void {
 
 Args:
   - keywords (string, optional): Termes de recherche
-  - resourceId, projectId (string, optional): Filtrer par entité liée
+  - resourceId, projectId (string, optional): Filtrer par entité liée — convertis en références keywords COMP<id> / PRJ<id> (l'API n'a pas de paramètre dédié)
   - startDate, endDate (string, optional): Période (YYYY-MM-DD)
   - page, pageSize: Pagination
 

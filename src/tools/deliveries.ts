@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { DeliverySearchSchema, EntityIdSchema, IdSchema } from "../schemas/index.js";
 import {
   apiRequest,
@@ -88,7 +89,7 @@ export function registerDeliveryTools(server: McpServer): void {
 
 Args:
   - keywords (string, optional): Termes de recherche
-  - projectId, companyId (string, optional): Filtrer par entite liee
+  - projectId, companyId (string, optional): Filtrer par entite liee — convertis en references keywords PRJ<id> / CSOC<id> (l'API n'a pas de parametre dedie)
   - startDate, endDate (string, optional): Periode (YYYY-MM-DD)
   - page, pageSize: Pagination
 
@@ -102,7 +103,7 @@ Returns: Liste des livraisons correspondantes.`,
       },
     },
     async (params, extra: unknown) => {
-      const query = buildSearchQuery(params);
+      const query = buildSearchQuery(toKeywordReferences(params));
       const response = await apiSearch("/deliveries-groupments", query, progressReporterFrom(extra));
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "livraison", params.fields) }],

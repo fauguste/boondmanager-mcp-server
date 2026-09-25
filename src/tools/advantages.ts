@@ -1,13 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AdvantageSearchSchema, IdSchema } from "../schemas/index.js";
-import {
-  apiRequest,
-  apiSearch,
-  buildSearchQuery,
-  formatListResponse,
-  formatDetailResponse,
-} from "../services/boond-client.js";
-import { progressReporterFrom } from "../services/progress.js";
+import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { defaultGetDescription } from "./description-builders.js";
 
 export function registerAdvantageTools(server: McpServer): void {
@@ -16,14 +9,11 @@ export function registerAdvantageTools(server: McpServer): void {
     "boond_advantages_search",
     {
       title: "Rechercher des avantages",
-      description: `Recherche des avantages (tickets restaurant, mutuelle, véhicule, primes...) dans BoondManager, avec filtre optionnel par ressource.
+      description: `Liste les avantages (tickets restaurant, mutuelle, véhicule, primes...) d'une ressource.
 
-Args:
-  - keywords (string, optional): Termes de recherche
-  - resourceId (string, optional): Filtrer par ID ressource
-  - page, pageSize: Pagination
+\`resourceId\` est obligatoire : l'API n'a pas de recherche globale des avantages (\`GET /advantages\` n'existe pas), la liste est servie par \`GET /resources/{id}/avantages\`. \`advantageTypes\` restreint aux types \`<reference>_<agencyId>\`.
 
-Returns: Liste des avantages correspondants.`,
+Returns: Liste des avantages de la ressource.`,
       inputSchema: AdvantageSearchSchema,
       annotations: {
         readOnlyHint: true,
@@ -32,9 +22,10 @@ Returns: Liste des avantages correspondants.`,
         openWorldHint: true,
       },
     },
-    async (params, extra: unknown) => {
-      const query = buildSearchQuery(params);
-      const response = await apiSearch("/advantages", query, progressReporterFrom(extra));
+    async (params) => {
+      const { resourceId, ...rest } = params;
+      const query = buildSearchQuery(rest);
+      const response = await apiRequest(`/resources/${resourceId}/advantages`, "GET", undefined, query);
       return {
         content: [{ type: "text" as const, text: formatListResponse(response, "avantage", params.fields) }],
       };

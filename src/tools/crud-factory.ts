@@ -19,6 +19,7 @@ import {
   defaultDeleteDescription,
 } from "./description-builders.js";
 import { isFeatureDisabled } from "../config/env-flags.js";
+import { toKeywordReferences } from "./linked-entity-filters.js";
 import { readString } from "../config/env.js";
 import type { SearchInput, IdInput, IdTabInput } from "../schemas/index.js";
 import type { JsonApiResponse, JsonApiResource } from "../types.js";
@@ -245,7 +246,9 @@ export function registerSearchTool(
     },
     async (params: unknown, extra: unknown) => {
       const p = params as SearchInput & { fields?: string[] };
-      const query = buildSearchQuery(p);
+      // Linked-entity `*Id` filters become `keywords` references: the API has
+      // no such query parameters and ignores them silently (#247).
+      const query = buildSearchQuery(toKeywordReferences(p));
       // apiSearch respects BoondManager's per-route maxResults ceiling,
       // chunking large requests transparently (see ROUTE_MAX_RESULTS). The
       // reporter is a no-op unless the client sent a progressToken, and
