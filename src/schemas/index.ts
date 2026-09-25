@@ -601,7 +601,7 @@ export const CandidateCreateSchema = z
 
 export const PositioningUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID du positionnement \u00e0 modifier"),
+    id: EntityIdSchema.describe("ID du positionnement \u00e0 modifier"),
     state: z
       .number()
       .int()
@@ -622,7 +622,7 @@ export const PositioningUpdateSchema = z
 
 export const CandidateUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID du candidat à modifier"),
+    id: EntityIdSchema.describe("ID du candidat à modifier"),
     firstName: z.string().optional().describe("Prénom"),
     lastName: z.string().optional().describe("Nom"),
     email1: z.string().email().optional().describe("Email principal"),
@@ -654,7 +654,7 @@ export const ResourceCreateSchema = z
 
 export const ResourceUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de la ressource à modifier"),
+    id: EntityIdSchema.describe("ID de la ressource à modifier"),
     firstName: z.string().optional().describe("Prénom"),
     lastName: z.string().optional().describe("Nom"),
     email1: z.string().email().optional().describe("Email principal"),
@@ -688,7 +688,7 @@ const technicalDataLanguageItemSchema = z
 
 export const ResourceTechnicalDataUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de la ressource dont le dossier technique est mis à jour."),
+    id: EntityIdSchema.describe("ID de la ressource dont le dossier technique est mis à jour."),
     mode: z
       .enum(["merge", "replace"])
       .default("merge")
@@ -738,7 +738,7 @@ const referenceYear = z.coerce
 
 export const ReferenceCreateSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource à laquelle rattacher la référence."),
+    resourceId: EntityIdSchema.describe("ID de la ressource à laquelle rattacher la référence."),
     title: z.string().min(1).describe("Intitulé du poste."),
     company: z.string().min(1).describe("Société / employeur."),
     description: z
@@ -756,11 +756,10 @@ export const ReferenceCreateSchema = z
 
 export const ReferenceUpdateSchema = z
   .object({
-    resourceId: z
-      .string()
-      .min(1)
-      .describe("ID de la ressource portant la référence (les references sont embarquées dans le DT)."),
-    referenceId: z.string().min(1).describe("ID de la référence à modifier."),
+    resourceId: EntityIdSchema.describe(
+      "ID de la ressource portant la référence (les references sont embarquées dans le DT)."
+    ),
+    referenceId: EntityIdSchema.describe("ID de la référence à modifier."),
     title: z.string().optional().describe("Intitulé du poste."),
     company: z.string().optional().describe("Société / employeur."),
     description: z.string().optional().describe("Description / missions / réalisations."),
@@ -775,11 +774,10 @@ export const ReferenceUpdateSchema = z
 
 export const ReferenceIdSchema = z
   .object({
-    resourceId: z
-      .string()
-      .min(1)
-      .describe("ID de la ressource portant la référence (les references sont embarquées dans le DT)."),
-    referenceId: z.string().min(1).describe("ID de la référence à supprimer."),
+    resourceId: EntityIdSchema.describe(
+      "ID de la ressource portant la référence (les references sont embarquées dans le DT)."
+    ),
+    referenceId: EntityIdSchema.describe("ID de la référence à supprimer."),
   })
   .strict();
 
@@ -794,14 +792,14 @@ export const ContactCreateSchema = z
     city: z.string().optional().describe("Ville"),
     country: z.string().optional().describe("Pays"),
     title: z.string().optional().describe("Titre / fonction"),
-    companyId: z.string().optional().describe("ID de la société associée"),
+    companyId: EntityIdSchema.optional().describe("ID de la société associée"),
     note: z.string().optional().describe("Notes"),
   })
   .strict();
 
 export const ContactUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID du contact à modifier"),
+    id: EntityIdSchema.describe("ID du contact à modifier"),
     firstName: z.string().optional().describe("Prénom"),
     lastName: z.string().optional().describe("Nom"),
     email1: z.string().email().optional().describe("Email"),
@@ -830,7 +828,7 @@ export const CompanyCreateSchema = z
 
 export const CompanyUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de la société à modifier"),
+    id: EntityIdSchema.describe("ID de la société à modifier"),
     name: z.string().optional().describe("Nom"),
     email1: z.string().email().optional().describe("Email"),
     phone1: z.string().optional().describe("Téléphone"),
@@ -863,8 +861,8 @@ const opportunityWritableShape = {
     .describe(
       "Type d'opportunité : ID numérique du dictionnaire setting.typeOf.project (ex: 1, 3), via boond_application_dictionary"
     ),
-  companyId: z.string().optional().describe("ID de la société cliente (relation company)"),
-  contactId: z.string().optional().describe("ID du contact associé (relation contact)"),
+  companyId: EntityIdSchema.optional().describe("ID de la société cliente (relation company)"),
+  contactId: EntityIdSchema.optional().describe("ID du contact associé (relation contact)"),
   state: stateField("opportunity", "État de l'opportunité"),
   startDate: z.string().optional().describe("Date de début prévue (YYYY-MM-DD ou 'immediate')"),
   endDate: z.string().optional().describe("Date de fin prévue (YYYY-MM-DD)"),
@@ -885,13 +883,12 @@ const opportunityWritableShape = {
     .optional()
     .describe("Domaine d'expertise : ID du dictionnaire setting.expertiseArea (via boond_application_dictionary)"),
   turnoverEstimatedExcludingTax: z.coerce.number().optional().describe("Chiffre d'affaires estimé HT (montant)"),
-  poleId: z.string().optional().describe("ID du pôle (relation pole)"),
-  hrManagerId: z.string().optional().describe("ID de la ressource responsable RH (relation hrManager)"),
-  mainManagerId: z
-    .string()
-    .optional()
-    .describe("ID de la ressource responsable principal / commercial (relation mainManager)"),
-  agencyId: z.string().optional().describe("ID de l'agence (relation agency)"),
+  poleId: EntityIdSchema.optional().describe("ID du pôle (relation pole)"),
+  hrManagerId: EntityIdSchema.optional().describe("ID de la ressource responsable RH (relation hrManager)"),
+  mainManagerId: EntityIdSchema.optional().describe(
+    "ID de la ressource responsable principal / commercial (relation mainManager)"
+  ),
+  agencyId: EntityIdSchema.optional().describe("ID de l'agence (relation agency)"),
 } as const;
 
 export const OpportunityCreateSchema = z
@@ -903,7 +900,7 @@ export const OpportunityCreateSchema = z
 
 export const OpportunityUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de l'opportunité à modifier"),
+    id: EntityIdSchema.describe("ID de l'opportunité à modifier"),
     name: z.string().optional().describe("Nom / titre"),
     ...opportunityWritableShape,
   })
@@ -914,10 +911,10 @@ export const OpportunityUpdateSchema = z
 export const ActionSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    candidateId: z.string().optional().describe("Filtrer par ID candidat"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
-    contactId: z.string().optional().describe("Filtrer par ID contact"),
-    companyId: z.string().optional().describe("Filtrer par ID société"),
+    candidateId: EntityIdSchema.optional().describe("Filtrer par ID candidat"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
+    contactId: EntityIdSchema.optional().describe("Filtrer par ID contact"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
     fields: fieldsField,
@@ -944,18 +941,17 @@ export const ActionCreateSchema = z
       .optional()
       .describe("Date de début au format ISO 8601 avec timezone (ex: 2026-06-05T10:00:00+0200)"),
     endDate: z.string().regex(actionDateTimeRegex).optional().describe("Date de fin (même format que startDate)"),
-    candidateId: z.string().optional().describe("ID du candidat auquel rattacher l'action (dependsOn)"),
-    resourceId: z.string().optional().describe("ID de la ressource à laquelle rattacher l'action (dependsOn)"),
-    contactId: z.string().optional().describe("ID du contact auquel rattacher l'action (dependsOn)"),
-    opportunityId: z.string().optional().describe("ID de l'opportunité à laquelle rattacher l'action (dependsOn)"),
-    projectId: z.string().optional().describe("ID du projet auquel rattacher l'action (dependsOn)"),
-    companyId: z.string().optional().describe("ID de la société associée (uniquement en complément d'un contactId)"),
-    positioningId: z
-      .string()
-      .optional()
-      .describe(
-        "ID du positionnement à lier à l'action (relation positioning). Requis par l'API pour les types d'action liés aux positionnements (ex. RQ) — sans lui, erreur 422 « 1002 - Wrong or missing attribute (/data/relationships/positioning) »."
-      ),
+    candidateId: EntityIdSchema.optional().describe("ID du candidat auquel rattacher l'action (dependsOn)"),
+    resourceId: EntityIdSchema.optional().describe("ID de la ressource à laquelle rattacher l'action (dependsOn)"),
+    contactId: EntityIdSchema.optional().describe("ID du contact auquel rattacher l'action (dependsOn)"),
+    opportunityId: EntityIdSchema.optional().describe("ID de l'opportunité à laquelle rattacher l'action (dependsOn)"),
+    projectId: EntityIdSchema.optional().describe("ID du projet auquel rattacher l'action (dependsOn)"),
+    companyId: EntityIdSchema.optional().describe(
+      "ID de la société associée (uniquement en complément d'un contactId)"
+    ),
+    positioningId: EntityIdSchema.optional().describe(
+      "ID du positionnement à lier à l'action (relation positioning). Requis par l'API pour les types d'action liés aux positionnements (ex. RQ) — sans lui, erreur 422 « 1002 - Wrong or missing attribute (/data/relationships/positioning) »."
+    ),
   })
   .strict();
 
@@ -966,7 +962,7 @@ export const ActionCreateSchema = z
 // de résolution de libellé, faute d'entité `dependsOn` connue sur l'update).
 export const ActionUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de l'action à modifier"),
+    id: EntityIdSchema.describe("ID de l'action à modifier"),
     typeOf: z.coerce
       .number()
       .int()
@@ -988,7 +984,7 @@ export const ActionUpdateSchema = z
 
 export const ResourceTimesheetSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource"),
+    resourceId: EntityIdSchema.describe("ID de la ressource"),
     month: z.number().int().min(1).max(12).optional().describe("Mois (1-12). Si omis, mois courant."),
     year: z.number().int().min(2000).optional().describe("Année (ex: 2025). Si omis, année courante."),
   })
@@ -1021,7 +1017,7 @@ export const TimesheetSearchSchema = z
 
 export const TimesheetGetSchema = z
   .object({
-    id: z.string().min(1).describe("Identifiant unique de la feuille de temps"),
+    id: EntityIdSchema.describe("Identifiant unique de la feuille de temps"),
   })
   .strict();
 
@@ -1030,9 +1026,9 @@ export const TimesheetGetSchema = z
 export const ProjectCreateSchema = z
   .object({
     name: z.string().min(1).describe("Nom du projet / mission"),
-    companyId: z.string().optional().describe("ID de la société cliente"),
-    contactId: z.string().optional().describe("ID du contact associé"),
-    opportunityId: z.string().optional().describe("ID de l'opportunité liée"),
+    companyId: EntityIdSchema.optional().describe("ID de la société cliente"),
+    contactId: EntityIdSchema.optional().describe("ID du contact associé"),
+    opportunityId: EntityIdSchema.optional().describe("ID de l'opportunité liée"),
     typeOf: z.number().int().optional().describe("Type de projet (ID du dictionnaire setting.typeOf.project)"),
     state: stateField("project", "État du projet (0=en cours, 1=terminé, 2=archivé...)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
@@ -1043,7 +1039,7 @@ export const ProjectCreateSchema = z
 
 export const ProjectUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID du projet à modifier"),
+    id: EntityIdSchema.describe("ID du projet à modifier"),
     name: z.string().optional().describe("Nom du projet"),
     typeOf: z.number().int().optional().describe("Type de projet (ID du dictionnaire setting.typeOf.project)"),
     state: stateField("project", "État du projet"),
@@ -1058,7 +1054,7 @@ export const ProjectUpdateSchema = z
 export const InvoiceCreateSchema = z
   .object({
     reference: z.string().optional().describe("Référence de la facture"),
-    orderId: z.string().optional().describe("ID du bon de commande associé"),
+    orderId: EntityIdSchema.optional().describe("ID du bon de commande associé"),
     state: z.number().int().optional().describe("État de la facture"),
     invoiceDate: z.string().optional().describe("Date de facturation (YYYY-MM-DD)"),
     expectedPaymentDate: z.string().optional().describe("Date d'échéance/paiement attendu (YYYY-MM-DD)"),
@@ -1072,7 +1068,7 @@ export const InvoiceCreateSchema = z
 
 export const InvoiceUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de la facture à modifier"),
+    id: EntityIdSchema.describe("ID de la facture à modifier"),
     reference: z.string().optional().describe("Référence de la facture"),
     state: z.number().int().optional().describe("État de la facture"),
     invoiceDate: z.string().optional().describe("Date de facturation (YYYY-MM-DD)"),
@@ -1088,8 +1084,8 @@ export const InvoiceUpdateSchema = z
 export const InvoiceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche (référence, société...)"),
-    companyId: z.string().optional().describe("Filtrer par ID société"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
     startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
     period: z
@@ -1107,8 +1103,8 @@ export const InvoiceSearchSchema = z
 export const OrderCreateSchema = z
   .object({
     reference: z.string().optional().describe("Référence du bon de commande"),
-    companyId: z.string().optional().describe("ID de la société"),
-    projectId: z.string().optional().describe("ID du projet associé"),
+    companyId: EntityIdSchema.optional().describe("ID de la société"),
+    projectId: EntityIdSchema.optional().describe("ID du projet associé"),
     state: z.number().int().optional().describe("État du bon de commande"),
     orderDate: z.string().optional().describe("Date du bon de commande (YYYY-MM-DD)"),
     startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
@@ -1122,7 +1118,7 @@ export const OrderCreateSchema = z
 
 export const OrderUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID du bon de commande à modifier"),
+    id: EntityIdSchema.describe("ID du bon de commande à modifier"),
     reference: z.string().optional().describe("Référence"),
     state: z.number().int().optional().describe("État"),
     orderDate: z.string().optional().describe("Date (YYYY-MM-DD)"),
@@ -1138,8 +1134,8 @@ export const OrderUpdateSchema = z
 export const OrderSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    companyId: z.string().optional().describe("Filtrer par ID société"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
     fields: fieldsField,
@@ -1151,8 +1147,8 @@ export const OrderSearchSchema = z
 export const DeliverySearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
-    companyId: z.string().optional().describe("Filtrer par ID société"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
@@ -1165,7 +1161,7 @@ export const DeliverySearchSchema = z
 
 export const AbsenceCreateSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource en absence"),
+    resourceId: EntityIdSchema.describe("ID de la ressource en absence"),
     typeOf: z.string().min(1).describe("Libellé de l'absence (congé payé, RTT, maladie, sans solde...)"),
     startDate: z.string().min(1).describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().min(1).describe("Date de fin (YYYY-MM-DD)"),
@@ -1179,7 +1175,7 @@ export const AbsenceCreateSchema = z
 
 export const AbsenceUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de l'absence à modifier"),
+    id: EntityIdSchema.describe("ID de l'absence à modifier"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     state: z.number().int().optional().describe("État de la demande"),
@@ -1190,7 +1186,7 @@ export const AbsenceUpdateSchema = z
 export const AbsenceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
     startMonth: z.string().optional().describe("Mois de début de période (YYYY-MM)"),
     endMonth: z.string().optional().describe("Mois de fin de période (YYYY-MM)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
@@ -1272,17 +1268,13 @@ export const ExpenseLineSchema = z
       ),
     numberOfKilometers: z.number().optional().describe("Nombre de kilomètres (frais kilométrique uniquement)."),
     activityType: z.enum(EXPENSE_ACTIVITY_TYPES).default("production").describe("Type d'activité rattachée au frais."),
-    projectId: z
-      .string()
-      .min(1)
-      .describe(
-        "ID du projet à imputer. Obligatoire — les couples (projet, prestation) autorisés sont donnés par `boond_expenses_default`."
-      ),
-    deliveryId: z
-      .string()
-      .min(1)
-      .describe("ID de la prestation (delivery) à imputer. Obligatoire — voir `boond_expenses_default`."),
-    batchId: z.string().optional().describe("ID du lot. Absent = aucun lot."),
+    projectId: EntityIdSchema.describe(
+      "ID du projet à imputer. Obligatoire — les couples (projet, prestation) autorisés sont donnés par `boond_expenses_default`."
+    ),
+    deliveryId: EntityIdSchema.describe(
+      "ID de la prestation (delivery) à imputer. Obligatoire — voir `boond_expenses_default`."
+    ),
+    batchId: EntityIdSchema.optional().describe("ID du lot. Absent = aucun lot."),
     reinvoiced: z.boolean().default(false).describe("Frais refacturable au client."),
     currency: z.number().int().default(0).describe("ID de devise (`setting.currency`, 0 = EUR)."),
     exchangeRate: z.number().default(1).describe("Taux de change vers la devise agence."),
@@ -1299,11 +1291,10 @@ export const ExpenseLineSchema = z
 
 export const ExpenseCreateSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource (le collaborateur qui a engagé les frais)."),
-    agencyId: z
-      .string()
-      .optional()
-      .describe("ID de l'agence — voir `boond_expenses_default`. Déduit de la ressource si omis."),
+    resourceId: EntityIdSchema.describe("ID de la ressource (le collaborateur qui a engagé les frais)."),
+    agencyId: EntityIdSchema.optional().describe(
+      "ID de l'agence — voir `boond_expenses_default`. Déduit de la ressource si omis."
+    ),
     term: z
       .string()
       .regex(/^\d{4}-\d{2}$/)
@@ -1326,7 +1317,7 @@ export const ExpenseCreateSchema = z
 
 export const ExpenseUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID de la note de frais à modifier"),
+    id: EntityIdSchema.describe("ID de la note de frais à modifier"),
     exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
     currencyAgency: z.number().int().optional().describe("ID de devise de l'agence"),
     informationComments: z.string().optional().describe("Commentaires"),
@@ -1345,20 +1336,20 @@ export const ExpenseUpdateSchema = z
 
 export const ExpenseDefaultSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource"),
+    resourceId: EntityIdSchema.describe("ID de la ressource"),
     term: z
       .string()
       .regex(/^\d{4}-\d{2}$/)
       .describe("Mois ciblé (YYYY-MM)"),
-    agencyId: z.string().optional().describe("ID de l'agence (optionnel — déduit de la ressource)"),
+    agencyId: EntityIdSchema.optional().describe("ID de l'agence (optionnel — déduit de la ressource)"),
   })
   .strict();
 
 export const ExpenseSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
@@ -1382,7 +1373,7 @@ export const ProductCreateSchema = z
 
 export const ProductUpdateSchema = z
   .object({
-    id: z.string().min(1).describe("ID du produit à modifier"),
+    id: EntityIdSchema.describe("ID du produit à modifier"),
     name: z.string().optional().describe("Nom du produit"),
     reference: z.string().optional().describe("Référence"),
     unitPrice: z.number().optional().describe("Prix unitaire HT"),
@@ -1396,10 +1387,10 @@ export const ProductUpdateSchema = z
 
 export const PositioningCreateSchema = z
   .object({
-    candidateId: z.string().optional().describe("ID du candidat positionné"),
-    resourceId: z.string().optional().describe("ID de la ressource positionnée"),
-    projectId: z.string().optional().describe("ID du projet"),
-    opportunityId: z.string().optional().describe("ID de l'opportunité"),
+    candidateId: EntityIdSchema.optional().describe("ID du candidat positionné"),
+    resourceId: EntityIdSchema.optional().describe("ID de la ressource positionnée"),
+    projectId: EntityIdSchema.optional().describe("ID du projet"),
+    opportunityId: EntityIdSchema.optional().describe("ID de l'opportunité"),
     state: z.number().int().optional().describe("État du positionnement"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
@@ -1415,30 +1406,24 @@ export const PositioningSearchSchema = z
       .describe(
         "Mots-clés de recherche. L'API y accepte aussi des références d'entités (AO<id>, CAND<id>, COMP<id>...) — les filtres *Id ci-dessous sont convertis automatiquement en de telles références."
       ),
-    candidateId: z
-      .string()
-      .optional()
-      .describe("Filtrer par ID candidat (envoyé à l'API comme référence keywords CAND<id>)"),
-    resourceId: z
-      .string()
-      .optional()
-      .describe("Filtrer par ID ressource (envoyé à l'API comme référence keywords COMP<id>)"),
-    opportunityId: z
-      .string()
-      .optional()
-      .describe("Filtrer par ID opportunité (envoyé à l'API comme référence keywords AO<id>)"),
-    companyId: z
-      .string()
-      .optional()
-      .describe("Filtrer par ID société (envoyé à l'API comme référence keywords CSOC<id>)"),
-    contactId: z
-      .string()
-      .optional()
-      .describe("Filtrer par ID contact (envoyé à l'API comme référence keywords CCON<id>)"),
-    productId: z
-      .string()
-      .optional()
-      .describe("Filtrer par ID produit (envoyé à l'API comme référence keywords PROD<id>)"),
+    candidateId: EntityIdSchema.optional().describe(
+      "Filtrer par ID candidat (envoyé à l'API comme référence keywords CAND<id>)"
+    ),
+    resourceId: EntityIdSchema.optional().describe(
+      "Filtrer par ID ressource (envoyé à l'API comme référence keywords COMP<id>)"
+    ),
+    opportunityId: EntityIdSchema.optional().describe(
+      "Filtrer par ID opportunité (envoyé à l'API comme référence keywords AO<id>)"
+    ),
+    companyId: EntityIdSchema.optional().describe(
+      "Filtrer par ID société (envoyé à l'API comme référence keywords CSOC<id>)"
+    ),
+    contactId: EntityIdSchema.optional().describe(
+      "Filtrer par ID contact (envoyé à l'API comme référence keywords CCON<id>)"
+    ),
+    productId: EntityIdSchema.optional().describe(
+      "Filtrer par ID produit (envoyé à l'API comme référence keywords PROD<id>)"
+    ),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
     fields: fieldsField,
@@ -1450,11 +1435,11 @@ export const PositioningSearchSchema = z
 export const PaymentSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    invoiceId: z.string().optional().describe("Filtrer par ID facture"),
-    purchaseId: z.string().optional().describe("Filtrer par ID achat"),
-    companyId: z.string().optional().describe("Filtrer par ID société"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
+    invoiceId: EntityIdSchema.optional().describe("Filtrer par ID facture"),
+    purchaseId: EntityIdSchema.optional().describe("Filtrer par ID achat"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
@@ -1468,7 +1453,7 @@ export const PaymentSearchSchema = z
 export const AdvantageSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
     fields: fieldsField,

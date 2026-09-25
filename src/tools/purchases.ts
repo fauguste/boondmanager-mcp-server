@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema, fieldsField } from "../schemas/index.js";
+import { EntityIdSchema, IdSchema, fieldsField } from "../schemas/index.js";
 import {
   apiRequest,
   apiSearch,
@@ -16,8 +16,8 @@ import { composeDescription, defaultDeleteDescription, defaultGetDescription } f
 const PurchaseSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
-    companyId: z.string().optional().describe("Filtrer par ID société"),
-    projectId: z.string().optional().describe("Filtrer par ID projet"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numéro de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Résultats par page"),
     fields: fieldsField,
@@ -27,9 +27,9 @@ const PurchaseSearchSchema = z
 const PurchaseCreateSchema = z
   .object({
     title: z.string().optional().describe("Titre de l'achat/sous-traitance"),
-    companyId: z.string().optional().describe("ID de la société fournisseur"),
-    contactId: z.string().optional().describe("ID du contact fournisseur"),
-    projectId: z.string().optional().describe("ID du projet associé"),
+    companyId: EntityIdSchema.optional().describe("ID de la société fournisseur"),
+    contactId: EntityIdSchema.optional().describe("ID du contact fournisseur"),
+    projectId: EntityIdSchema.optional().describe("ID du projet associé"),
     state: z.number().int().optional().describe("État de l'achat"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),

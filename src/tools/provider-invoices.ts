@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema, fieldsField } from "../schemas/index.js";
+import { EntityIdSchema, IdSchema, fieldsField } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
@@ -9,8 +9,8 @@ import { composeDescription, defaultGetDescription } from "./description-builder
 const ProviderInvoiceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-cles de recherche"),
-    companyId: z.string().optional().describe("Filtrer par ID societe fournisseur"),
-    resourceId: z.string().optional().describe("Filtrer par ID ressource via mot-cle COMP<id>"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID societe fournisseur"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource via mot-cle COMP<id>"),
     page: z.number().int().min(1).max(MAX_SEARCH_PAGE).default(1).describe(`Numero de page (max: ${MAX_SEARCH_PAGE})`),
     pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE).describe("Resultats par page"),
     fields: fieldsField,
@@ -20,9 +20,9 @@ const ProviderInvoiceSearchSchema = z
 const ProviderInvoiceCreateSchema = z
   .object({
     reference: z.string().min(1).describe("Reference de la facture fournisseur"),
-    resourceId: z.string().min(1).describe("ID de la ressource portee par la facture fournisseur"),
-    companyId: z.string().optional().describe("ID de la societe fournisseur, mappe vers providerCompany"),
-    contactId: z.string().optional().describe("ID du contact fournisseur, mappe vers providerContact"),
+    resourceId: EntityIdSchema.describe("ID de la ressource portee par la facture fournisseur"),
+    companyId: EntityIdSchema.optional().describe("ID de la societe fournisseur, mappe vers providerCompany"),
+    contactId: EntityIdSchema.optional().describe("ID du contact fournisseur, mappe vers providerContact"),
     invoiceDate: z.string().optional().describe("Date de facture (YYYY-MM-DD)"),
     startDate: z.string().min(1).describe("Date de debut de periode (YYYY-MM-DD)"),
     endDate: z.string().min(1).describe("Date de fin de periode (YYYY-MM-DD)"),

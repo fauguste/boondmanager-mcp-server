@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { IdSchema } from "../schemas/index.js";
+import { EntityIdSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
@@ -7,7 +7,7 @@ import { composeDescription, defaultGetDescription } from "./description-builder
 
 const ContractCreateSchema = z
   .object({
-    resourceId: z.string().optional().describe("ID de la ressource associée"),
+    resourceId: EntityIdSchema.optional().describe("ID de la ressource associée"),
     typeOf: z.string().optional().describe("Type de contrat (CDI, CDD, freelance...)"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),

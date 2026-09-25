@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { PaymentSearchSchema, IdSchema } from "../schemas/index.js";
+import { EntityIdSchema, IdSchema, PaymentSearchSchema } from "../schemas/index.js";
 import { apiRequest, buildSearchQuery, formatListResponse, formatDetailResponse } from "../services/boond-client.js";
 import { buildJsonApiBody } from "./crud-factory.js";
 import { z } from "zod";
@@ -7,7 +7,7 @@ import { composeDescription, defaultGetDescription } from "./description-builder
 
 const PaymentCreateSchema = z
   .object({
-    purchaseId: z.string().min(1).describe("ID de l'achat regle"),
+    purchaseId: EntityIdSchema.describe("ID de l'achat regle"),
     paymentDate: z.string().optional().describe("Date du paiement (YYYY-MM-DD), mappee vers date"),
     performedDate: z.string().optional().describe("Date de paiement effectif (YYYY-MM-DD)"),
     expectedDate: z.string().optional().describe("Date de paiement attendu (YYYY-MM-DD)"),
