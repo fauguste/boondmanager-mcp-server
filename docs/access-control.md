@@ -60,7 +60,7 @@ ces regroupements, prêts à l'emploi — définis dans
 | Profil | Domaines | Outils | Prompts |
 |--------|----------|--------|---------|
 | `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 88 | 9 |
-| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, application, workflows | 96 | 8 |
+| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, application, workflows | 105 | 8 |
 | `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 61 | 2 |
 | `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 53 | 5 |
 | `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |

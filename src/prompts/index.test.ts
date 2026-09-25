@@ -501,4 +501,64 @@ describe("registerAllPrompts", () => {
       expect(names).not.toContain("synthese_equipe");
     });
   });
+
+  describe("server-side dates (#260)", () => {
+    // Wednesday 2026-09-23 → ISO week Mon 21 → Sun 27.
+    const NOW = new Date(2026, 8, 23, 10, 0);
+    const build = (name: string, args: Record<string, string | undefined>) =>
+      PROMPTS.find((p) => p.name === name)!.build(args, NOW);
+
+    it("recap_hebdo injects the week's ISO bounds and months, and reads absences + CRA in one call each", () => {
+      const text = build("recap_hebdo", {});
+      expect(text).toContain("du 2026-09-21 au 2026-09-27");
+      expect(text).toContain('startDate: "2026-09-21"');
+      expect(text).toContain('endDate: "2026-09-27"');
+      expect(text).toContain('boond_absences_search` avec `startMonth: "2026-09"`, `endMonth: "2026-09"`');
+      expect(text).toContain("boond_timesheets_search");
+      expect(text).toContain("**CRA**");
+      expect(text).not.toContain("boond_resources_absences_reports");
+      expect(text).not.toContain("Pour chaque membre d'équipe : `boond");
+      expect(text).toContain("boond://dictionary/states/opportunities");
+    });
+
+    it("recap_hebdo resolves 'semaine prochaine' across a month boundary and keeps unknown wording with today's date", () => {
+      const next = build("recap_hebdo", { semaine: "la semaine prochaine" });
+      expect(next).toContain("du 2026-09-28 au 2026-10-04");
+      expect(next).toContain('startMonth: "2026-09"`, `endMonth: "2026-10"');
+      const unknown = build("recap_hebdo", { semaine: "depuis la rentrée" });
+      expect(unknown).toContain("« depuis la rentrée »");
+      expect(unknown).toContain("aujourd'hui (2026-09-23)");
+      expect(unknown).toContain("<DEBUT>");
+    });
+
+    it("synthese_equipe defaults to the current month and accepts 'avril 2026'", () => {
+      expect(build("synthese_equipe", {})).toContain("du 2026-09-01 au 2026-09-30");
+      const april = build("synthese_equipe", { periode: "avril 2026" });
+      expect(april).toContain("du 2026-04-01 au 2026-04-30");
+      expect(april).toContain("synthèse de l'équipe pour avril 2026");
+    });
+
+    it("fin_de_mission computes D and D+H itself, and falls back to 60 on a non-integer", () => {
+      const text = build("fin_de_mission", { horizon_jours: "30" });
+      expect(text).toContain("D = 2026-09-23 → D+H = 2026-10-23");
+      expect(text).toContain('startDate: "2026-09-23"`, `endDate: "2026-10-23"');
+      expect(text).not.toContain("Calculer la fenêtre");
+      expect(build("fin_de_mission", { horizon_jours: "bientôt" })).toContain("60 prochains jours");
+    });
+
+    it("factures_a_relancer states today's date, reads the states resource, and paginates to the end", () => {
+      const text = build("factures_a_relancer", {});
+      expect(text).toContain("aujourd'hui = 2026-09-23");
+      expect(text).toContain('endDate: "2026-09-23"');
+      expect(text).toContain("boond://dictionary/states/invoices");
+      expect(text).not.toContain("boond_application_dictionary");
+      expect(text).toContain("Paginer jusqu'au bout");
+      expect(text).toContain("antérieure au 2026-09-23");
+    });
+
+    it("build() defaults `now` to the wall clock", () => {
+      const text = PROMPTS.find((p) => p.name === "factures_a_relancer")!.build({});
+      expect(text).toMatch(/aujourd'hui = \d{4}-\d{2}-\d{2}/);
+    });
+  });
 });

@@ -350,7 +350,16 @@ in `src/index.ts` were already on stderr.
 **Prompts** (`src/prompts/index.ts`): pre-orchestrated workflows that
 resolve to a `user` message guiding the model through a fixed tool
 sequence with the correct filter names. Server-side we *only* assemble
-the runbook — the LLM still drives the calls. Includes
+the runbook — the LLM still drives the calls. Relative periods
+("cette semaine", "avril 2026", `2026-W14`, "D → D+H") are resolved to
+literal ISO dates **on the server** by `src/prompts/periods.ts` (issue
+#260) — `build(args, now?)` takes the reference date so tests pin the week
+and year boundaries; unknown wording keeps the caller's words and states
+today's date. `*_id` arguments carry a `completions/complete` completer
+(`completable()` from the SDK) that searches the entity and returns
+*labels* — the arguments accept labels, and `CompleteResult.values` is
+substituted verbatim. The mirror `boond_workflow_*` tools are unaffected:
+`completable()` attaches a non-enumerable symbol to the same Zod object. Includes
 `synthese_equipe`, `pipeline_commercial`, `factures_a_relancer`,
 `candidats_pour_opportunite`, `fiche_consultant`, `recap_hebdo`,
 `traiter_note_de_frais`, … — the full list lives in `TOOLS.md`.
