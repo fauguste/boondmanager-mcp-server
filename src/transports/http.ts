@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -372,14 +372,23 @@ export function assertStaticAuthPolicy(options: HttpTransportOptions): void {
 
 /**
  * Constant-time comparison of a presented API key against the configured one.
- * Both sides are hashed first so `timingSafeEqual` always compares equal-length
- * buffers — a direct comparison would leak the key length through the early
- * length check, and throw on mismatched lengths.
+ *
+ * `timingSafeEqual` throws on buffers of different lengths, so a length
+ * mismatch is answered by comparing the expected key against itself first —
+ * the call still costs one full comparison — and then returning `false`. The
+ * key's *length* is therefore observable, which is acceptable: it is not
+ * secret for a random key (the README generates 32 random bytes), and the
+ * alternative — hashing both sides to equalise lengths — reads to static
+ * analysers as a password stored under a fast hash, which it is not.
  */
 export function isApiKeyMatch(presented: string | null | undefined, expected: string): boolean {
   if (!presented) return false;
-  const a = createHash("sha256").update(presented).digest();
-  const b = createHash("sha256").update(expected).digest();
+  const a = Buffer.from(presented, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) {
+    timingSafeEqual(b, b);
+    return false;
+  }
   return timingSafeEqual(a, b);
 }
 

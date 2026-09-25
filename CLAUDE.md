@@ -1082,8 +1082,11 @@ image binds `0.0.0.0`). Meant for single-tenant self-hosted deployments, CI
 pipelines and internal gateways without an OAuth flow, **never** as a public
 endpoint. Three guards, each with a test in `http.test.ts`:
 
-- `MCP_HTTP_API_KEY` gates the MCP endpoint (`isApiKeyMatch`: sha256 both sides,
-  then `timingSafeEqual`, so a length mismatch neither throws nor leaks). The
+- `MCP_HTTP_API_KEY` gates the MCP endpoint (`isApiKeyMatch`: `timingSafeEqual`
+  on equal-length buffers; a length mismatch still pays one full comparison and
+  answers `false` — hashing both sides to equalise lengths trips CodeQL's
+  `js/insufficient-password-hash`, and the length of a random key is not
+  secret). The
   `401` carries `WWW-Authenticate: Bearer realm="…"` **without**
   `resource_metadata` — there is no authorization server to discover, and the
   RFC 9728 document is not served in this mode. `/healthz` stays open.

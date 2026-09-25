@@ -228,7 +228,7 @@ describe("static auth policy (#230)", () => {
     expect(() => assertStaticAuthPolicy({ ...base, host: "0.0.0.0", staticAuth: false })).not.toThrow();
   });
 
-  it("compares API keys in constant time on hashed values (length mismatch does not throw)", () => {
+  it("compares API keys in constant time (length mismatch does not throw)", () => {
     expect(isApiKeyMatch("secret", "secret")).toBe(true);
     expect(isApiKeyMatch("secre", "secret")).toBe(false);
     expect(isApiKeyMatch("secret-but-longer", "secret")).toBe(false);
