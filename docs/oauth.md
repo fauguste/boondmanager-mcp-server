@@ -122,6 +122,7 @@ bind. So:
 | Var | Purpose |
 |-----|---------|
 | `MCP_HTTP_API_KEY` | Shared secret clients must send as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Constant-time comparison; missing or wrong → `401` with `WWW-Authenticate: Bearer realm="…"` (no `resource_metadata`). **Required on a non-loopback bind** — the server refuses to start without it. |
+| `MCP_HTTP_VALIDATE_TOKEN` | `true` to validate every Bearer against BoondManager (`GET /application/current-user`, cached per token for `MCP_HTTP_TOKEN_VALIDATION_TTL_MS`, default 60 s) before dispatching. An expired or revoked token then gets HTTP `401` + `WWW-Authenticate: … error="invalid_token"`, which spec-compliant clients turn into a new authorization flow. Off by default (one BoondManager call per token per minute). BoondManager unreachable → the request goes through (fail open). |
 | `MCP_HTTP_INSECURE_STATIC_AUTH` | `1` to start anyway without a key off loopback, when the network itself is the boundary. |
 
 ```bash
@@ -254,7 +255,7 @@ integrators do their work.
 |---|---|
 | `401 Unauthorized` on every MCP request, no `WWW-Authenticate` advertised by the client | MCP client doesn't yet implement the [MCP Authorization spec][mcp-auth]. Configure the BoondManager OAuth endpoints manually. |
 | `401 Bearer realm=…` but the client's discovery fails | `MCP_HTTP_PUBLIC_URL` is unset behind a reverse proxy → the metadata advertises `http://0.0.0.0:3000/mcp`, which clients can't reach. Set it to the public HTTPS URL. |
-| MCP server logs `BoondManager API 401`, client gets `-32603` | The forwarded access token was rejected by Boond — the user needs to re-authorize. The MCP client should handle this and trigger a new OAuth flow. |
+| MCP server logs `BoondManager API 401`, the tool result says the token was rejected | The forwarded access token expired or was revoked. The tool error tells the model to have the user re-authorize; clients do not restart OAuth from a tool error. Set `MCP_HTTP_VALIDATE_TOKEN=true` so the server answers the *request* with `401` + `error="invalid_token"`, which spec-compliant clients turn into a new authorization automatically. |
 | MCP server logs `No OAuth access token in request context` | Either a stdio code path is being hit on the HTTP transport (bug — file an issue), or `oauthContext.run(...)` was skipped (custom transport modifications). |
 | `/.well-known/oauth-protected-resource` returns 404 | Wrong URL. The endpoint sits at the **root** of the public hostname (not under `/mcp`). |
 | `scopes_supported` is missing from the metadata | Expected when `BOOND_OAUTH_SCOPES` is empty — clients then negotiate scopes directly with Boond. |

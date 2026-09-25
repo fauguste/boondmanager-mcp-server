@@ -103,6 +103,7 @@ Documentation complète : [`docs/oauth.md`](https://github.com/silamir/boondmana
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only : fréquence du sweep des sessions idle |
 | `MCP_HTTP_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` (loopback) ou disabled (other) | Comma-separated allowlist de `Host` header hostnames (protection DNS rebinding CVE-2025-66414). `*` = opt-out explicite (reverse proxy only). |
 | `MCP_HTTP_ALLOWED_ORIGINS` | toute origine loopback + `MCP_HTTP_PUBLIC_URL` (loopback) ou disabled (other) | Comma-separated allowlist de valeurs `Origin` (scheme + host + port) ; `Origin` hors liste → `403` (exigence spec MCP 2025-11-25). Requête **sans** `Origin` toujours acceptée (curl, gateways) ; `/healthz` et `/.well-known/oauth-protected-resource` exemptés. `*` = opt-out explicite (une valeur vide n'en est pas une). Dans l'image Docker (`MCP_HTTP_HOST=0.0.0.0`), la validation est désactivée par défaut : la définir explicitement si le serveur est appelé depuis un navigateur. |
+| `MCP_HTTP_VALIDATE_TOKEN` | `false` | Mode OAuth : valide chaque Bearer auprès de BoondManager avant dispatch (cache par token, `MCP_HTTP_TOKEN_VALIDATION_TTL_MS` = 60 s) ; token expiré/révoqué → `401` + `error="invalid_token"`, que les clients conformes transforment en nouvelle autorisation. |
 
 ## Variables d'environnement – BoondManager API
 

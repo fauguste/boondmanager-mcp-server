@@ -1077,6 +1077,8 @@ HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
 | `MCP_HTTP_HEADERS_TIMEOUT_MS` | `66000` | Node `server.headersTimeout`. Node requires it above the keep-alive timeout; a lower value is raised to keep-alive + 1 s with a warning (`resolveServerTimeouts`). |
 | `MCP_HTTP_REQUEST_TIMEOUT_MS` | `300000` | Node `server.requestTimeout` (whole request, headers + body). Generous on purpose: reporting calls are long. |
 | `MCP_HTTP_SHUTDOWN_TIMEOUT_MS` | `10000` | Grace period `handle.close()` gives in-flight connections (open SSE stream, request mid-body) before `closeAllConnections()`. Idle keep-alive sockets are closed at once by Node's `close()`. `src/index.ts` adds a forced `process.exit(1)` 2 s after that in case something else wedges. |
+| `MCP_HTTP_VALIDATE_TOKEN` | `false` | OAuth mode only (issue #234): validate every Bearer with `GET /application/current-user` **before** dispatching, cached per `sha256(token)` for `MCP_HTTP_TOKEN_VALIDATION_TTL_MS`. A token BoondManager rejects with 401 gets HTTP `401` + `WWW-Authenticate: Bearer realm=…, resource_metadata=…, error="invalid_token"` (RFC 6750) — the signal a spec-compliant client turns into a fresh authorization. Without it the upstream 401 only shows inside a `tools/call` result, which no client re-authorizes from (the SDK turns every handler error into an `isError` result, so a protocol-level `-32001` cannot be raised from a tool). Any other upstream failure (5xx, network) fails **open** and is not cached. Ignored in static-auth mode. |
+| `MCP_HTTP_TOKEN_VALIDATION_TTL_MS` | `60000` | Lifetime of a cached token verdict, positive and negative (a client retrying a dead token costs no extra BoondManager call). LRU-bounded at `MAX_TOKEN_VALIDATION_ENTRIES` (500). |
 | `MCP_HTTP_ALLOWED_HOSTS` | (auto) | Comma-separated allow-list of `Host` header hostnames for DNS rebinding protection (CVE-2025-66414). Default = `localhost,127.0.0.1,[::1]` when bound to a loopback interface, otherwise validation is disabled. Set to exactly `*` (sole entry) to opt out explicitly when fronting the server with a reverse proxy that already validates hosts; a `*` mixed with real hostnames is ignored (validation stays on) with a warning. |
 | `BOOND_HTTP_STATIC_AUTH` | `false` | `true`/`1`/`yes`: use the env credentials (`BOOND_USER_TOKEN`+`BOOND_CLIENT_TOKEN`+`BOOND_CLIENT_KEY`, `BOOND_API_TOKEN` or BasicAuth) for every request instead of a per-request OAuth Bearer. See *Static auth* below — with no `MCP_HTTP_API_KEY` this is an **anonymous proxy** carrying the operator's rights. |
 | `MCP_HTTP_API_KEY` | (none) | Static auth only: shared secret the MCP client must present as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Constant-time comparison; missing/wrong → `401`. **Required** when `BOOND_HTTP_STATIC_AUTH=true` and the bind is not loopback (the server refuses to start otherwise). Blank / unresolved `${…}` = unconfigured. Ignored (with a warning) in OAuth mode. |
@@ -1220,7 +1222,13 @@ no `client_secret`, no refresh token, no per-user storage. The flow:
    reads the token out of the AsyncLocalStorage context and forwards it
    verbatim to BoondManager as `Authorization: Bearer <access_token>`.
 5. The MCP client refreshes its own tokens — the server never sees the
-   refresh flow.
+   refresh flow. When the access token expires or is revoked, BoondManager
+   answers 401 *inside* a tool call; the tool error says so and names
+   re-authorization as the remedy (`hintForUnauthorized`, issue #234 — the
+   historical hint named a `boondmanager-mcp-oauth-login` CLI that is no
+   longer shipped). To make the client re-authorize **on its own**, enable
+   `MCP_HTTP_VALIDATE_TOKEN=true`: the transport then answers the request
+   itself with `401` + `error="invalid_token"` (see *Transports*).
 
 Discovery: the server publishes RFC 9728 protected-resource metadata at
 `/.well-known/oauth-protected-resource` (and at the path-suffixed variant
