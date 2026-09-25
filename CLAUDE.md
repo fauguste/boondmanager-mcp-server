@@ -265,7 +265,12 @@ resource's entire `timesreport` (every daily row of the month) — data no expen
 payload references, and enough of it to eat the character budget.
 
 **List summaries** (`src/services/boond-client.ts::formatEntitySummary`): one
-line per search result. Rows are normally identified by name / `value` /
+line per search result. A tool whose rows need a bespoke line hands
+`formatListResponse` its own `summaryFn` (4th argument — `timesheetSummary`
+in `src/tools/timesheets.ts`, issue #243) rather than growing a private
+formatter: the private one cut mid-line without a count and crashed on
+`data: null`, which is also why `formatListResponse` now treats a null `data`
+as an empty page. Rows are normally identified by name / `value` /
 `title`. Rows that have none of those — `/invoices`, `/orders`, `/actions`,
 `/deliveries-groupments`, `/projects` are keyed on a reference, a number or a
 date — fall back to `fallbackIdentityParts()`, which appends `number`,
@@ -533,8 +538,8 @@ Common gotchas:
   is CV/full-text.
 - Pagination: `pageSize` is the input name, mapped to `maxResults` for
   the API; `MAX_PAGE_SIZE = 500`, `DEFAULT_PAGE_SIZE = 30`.
-- **`fields`** (every search tool except `boond_timesheets_search` and the
-  `boond_reporting_*` family, which render through their own formatters):
+- **`fields`** (every search tool except the `boond_reporting_*` family, which
+  renders through its own formatters):
   client-side projection — the listed attribute names replace the standard
   one-line summary in the output. It is **never** forwarded to the API
   (`buildSearchQuery` strips it); unknown names are skipped silently. Use it

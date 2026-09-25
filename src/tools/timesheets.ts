@@ -6,11 +6,16 @@ import {
   TimesheetSearchSchema,
 } from "../schemas/index.js";
 import type { ResourceTimesheetInput, TimesheetSearchInput, TimesheetGetInput } from "../schemas/index.js";
-import { apiRequest, apiSearch, buildSearchQuery, formatDetailResponse } from "../services/boond-client.js";
+import {
+  apiRequest,
+  apiSearch,
+  buildSearchQuery,
+  formatDetailResponse,
+  formatListResponse,
+} from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody } from "./crud-factory.js";
-import { CHARACTER_LIMIT } from "../constants.js";
-import type { JsonApiResponse } from "../types.js";
+import type { JsonApiResource } from "../types.js";
 import { z } from "zod";
 import { composeDescription } from "./description-builders.js";
 
@@ -31,38 +36,25 @@ const TimesheetCreateSchema = z
   })
   .strict();
 
-function formatTimesheetSummary(response: JsonApiResponse): string {
-  const data = Array.isArray(response.data) ? response.data : [response.data];
+/**
+ * One line per times report. The rows carry no name / title, so the generic
+ * summary would print a bare `[timesreport #id]`; this names the window, the
+ * state and the totals instead. Truncation, the `shown/total` banner and the
+ * `fields` projection come from `formatListResponse` (#243) — this file used
+ * to carry its own formatter that cut mid-line and crashed on `data: null`.
+ */
+export function timesheetSummary(item: JsonApiResource): string {
+  const attrs = item.attributes ?? {};
+  const parts: string[] = [`[timesreport #${item.id}]`];
 
-  if (data.length === 0) {
-    return "Aucune feuille de temps trouvée.";
-  }
+  if (attrs.term) parts.push(`Mois: ${attrs.term}`);
+  if (attrs.startDate) parts.push(`Du: ${attrs.startDate}`);
+  if (attrs.endDate) parts.push(`Au: ${attrs.endDate}`);
+  if (attrs.state !== undefined) parts.push(`Statut: ${attrs.state}`);
+  if (attrs.totalDays !== undefined) parts.push(`Jours: ${attrs.totalDays}`);
+  if (attrs.totalHours !== undefined) parts.push(`Heures: ${attrs.totalHours}`);
 
-  const lines = data.map((item) => {
-    const attrs = item.attributes;
-    const parts: string[] = [`[timesreport #${item.id}]`];
-
-    if (attrs.startDate) parts.push(`Du: ${attrs.startDate}`);
-    if (attrs.endDate) parts.push(`Au: ${attrs.endDate}`);
-    if (attrs.state !== undefined) parts.push(`Statut: ${attrs.state}`);
-    if (attrs.totalDays !== undefined) parts.push(`Jours: ${attrs.totalDays}`);
-    if (attrs.totalHours !== undefined) parts.push(`Heures: ${attrs.totalHours}`);
-
-    return parts.join(" | ");
-  });
-
-  const total = response.meta?.totals?.rows;
-  let result = lines.join("\n");
-
-  if (total !== undefined) {
-    result = `Total: ${total} feuille(s) de temps\n\n${result}`;
-  }
-
-  if (result.length > CHARACTER_LIMIT) {
-    result = result.substring(0, CHARACTER_LIMIT) + "\n\n[Résultats tronqués...]";
-  }
-
-  return result;
+  return parts.join(" | ");
 }
 
 export function registerTimesheetTools(server: McpServer): void {
@@ -136,7 +128,7 @@ Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut
       if (params.year !== undefined) queryParams["year"] = params.year;
 
       const response = await apiRequest(`/resources/${params.resourceId}/times-reports`, "GET", undefined, queryParams);
-      const text = formatTimesheetSummary(response);
+      const text = formatListResponse(response, "feuille de temps", undefined, timesheetSummary);
       return {
         content: [{ type: "text" as const, text }],
       };
@@ -156,10 +148,8 @@ Args:
   - startMonth (string, requis): Mois de début YYYY-MM (ex: '2025-01')
   - endMonth (string, requis): Mois de fin YYYY-MM (ex: '2025-03')
   - keywords (string, optional): Mots-clés
-  - page (number): Numéro de page (défaut: 1)
-  - pageSize (number): Résultats par page (défaut: 30)
 
-Returns: Liste des feuilles de temps correspondantes.`,
+Returns: Liste des feuilles de temps correspondantes (une ligne par CRA : mois, période, statut, totaux).`,
       inputSchema: TimesheetSearchSchema,
       annotations: {
         readOnlyHint: true,
@@ -171,7 +161,7 @@ Returns: Liste des feuilles de temps correspondantes.`,
     async (params: TimesheetSearchInput, extra: unknown) => {
       const query = buildSearchQuery(params);
       const response = await apiSearch("/times-reports", query, progressReporterFrom(extra));
-      const text = formatTimesheetSummary(response);
+      const text = formatListResponse(response, "feuille de temps", params.fields, timesheetSummary);
       return {
         content: [{ type: "text" as const, text }],
       };

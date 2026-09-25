@@ -1012,6 +1012,7 @@ export const TimesheetSearchSchema = z
       .max(MAX_PAGE_SIZE)
       .default(DEFAULT_PAGE_SIZE)
       .describe(`Nombre de résultats par page (max: ${MAX_PAGE_SIZE}, défaut: ${DEFAULT_PAGE_SIZE})`),
+    fields: fieldsField,
   })
   .strict();
 
