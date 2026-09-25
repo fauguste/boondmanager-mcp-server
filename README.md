@@ -530,6 +530,29 @@ export BOOND_USER="votre_login"
 export BOOND_PASSWORD="votre_mot_de_passe"
 ```
 
+### Transport HTTP en authentification statique (`BOOND_HTTP_STATIC_AUTH`)
+
+Par défaut, le transport HTTP (`MCP_TRANSPORT=http`) est une *ressource protégée OAuth2* : chaque requête MCP porte le token BoondManager de **son** utilisateur (voir [`docs/oauth.md`](docs/oauth.md)). `BOOND_HTTP_STATIC_AUTH=true` remplace ce modèle par les credentials d'environnement ci-dessus, partagés par toutes les requêtes — pour un déploiement mono-locataire auto-hébergé, un pipeline CI ou une passerelle interne sans flux OAuth.
+
+Dans ce mode, **plus rien n'authentifie le client MCP** : quiconque atteint le port agit avec les droits BoondManager de l'opérateur (lecture *et* écriture selon la politique d'accès). D'où :
+
+| Variable | Rôle |
+|----------|------|
+| `MCP_HTTP_API_KEY` | Secret partagé que le client doit présenter, en `Authorization: Bearer <clé>` ou `X-Api-Key: <clé>`. Comparaison en temps constant ; absente ou fausse → `401`. **Obligatoire** dès que le serveur n'écoute pas sur loopback (`0.0.0.0`, image Docker) : sinon il **refuse de démarrer**. |
+| `MCP_HTTP_INSECURE_STATIC_AUTH` | `1` pour accepter explicitement de démarrer sans clé hors loopback (réseau privé faisant office de frontière). Le nom dit ce qu'il fait. |
+
+```bash
+export MCP_TRANSPORT=http
+export MCP_HTTP_HOST=0.0.0.0
+export BOOND_HTTP_STATIC_AUTH=true
+export MCP_HTTP_API_KEY="$(openssl rand -hex 32)"
+export BOOND_USER_TOKEN=… BOOND_CLIENT_TOKEN=… BOOND_CLIENT_KEY=…
+npx boondmanager-mcp-server
+# côté client : Authorization: Bearer <MCP_HTTP_API_KEY>
+```
+
+`/healthz` reste accessible sans clé. En mode OAuth (défaut), `MCP_HTTP_API_KEY` est ignorée avec un avertissement : le Bearer y est le token BoondManager.
+
 ### URL personnalisee (si instance dediee)
 
 ```bash

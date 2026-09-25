@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { request as httpRequest } from "node:http";
 import {
   MAX_BODY_BYTES,
+  assertStaticAuthPolicy,
+  isApiKeyMatch,
   isDiscoveryPath,
   isOriginAllowed,
   resolveAllowedHosts,
@@ -67,6 +69,8 @@ const ENV_KEYS = [
   "BOOND_OAUTH_AUTHORIZATION_SERVER",
   "BOOND_OAUTH_SCOPES",
   "BOOND_HTTP_STATIC_AUTH",
+  "MCP_HTTP_API_KEY",
+  "MCP_HTTP_INSECURE_STATIC_AUTH",
 ];
 
 /** Shorthand for an authenticated MCP request body (OAuth Bearer required). */
@@ -181,6 +185,56 @@ describe("resolveHttpOptions", () => {
     expect(resolveHttpOptions().staticAuth).toBe(false);
     delete process.env["BOOND_HTTP_STATIC_AUTH"];
     expect(resolveHttpOptions().staticAuth).toBe(false);
+  });
+});
+
+describe("static auth policy (#230)", () => {
+  beforeEach(() => clearEnv());
+  afterEach(() => clearEnv());
+
+  it("reads MCP_HTTP_API_KEY and MCP_HTTP_INSECURE_STATIC_AUTH from env", () => {
+    process.env["MCP_HTTP_API_KEY"] = "  s3cret  ";
+    process.env["MCP_HTTP_INSECURE_STATIC_AUTH"] = "1";
+    const opts = resolveHttpOptions();
+    expect(opts.apiKey).toBe("s3cret");
+    expect(opts.insecureStaticAuth).toBe(true);
+  });
+
+  it("treats a blank or unresolved MCP_HTTP_API_KEY as unconfigured, never as an empty secret", () => {
+    for (const value of ["", "   ", "${user_config.api_key}"]) {
+      process.env["MCP_HTTP_API_KEY"] = value;
+      expect(resolveHttpOptions().apiKey).toBeUndefined();
+    }
+    expect(resolveHttpOptions().insecureStaticAuth).toBe(false);
+  });
+
+  const base = { port: 0, path: "/mcp", stateless: true, enableJsonResponse: true };
+
+  it("refuses static auth on a non-loopback bind without an API key", () => {
+    expect(() => assertStaticAuthPolicy({ ...base, host: "0.0.0.0", staticAuth: true })).toThrow(/MCP_HTTP_API_KEY/);
+    expect(() => assertStaticAuthPolicy({ ...base, host: "10.0.0.5", staticAuth: true })).toThrow(/MCP_HTTP_API_KEY/);
+  });
+
+  it("allows static auth without a key on loopback, with a key anywhere, or with the explicit insecure opt-out", () => {
+    expect(() => assertStaticAuthPolicy({ ...base, host: "127.0.0.1", staticAuth: true })).not.toThrow();
+    expect(() => assertStaticAuthPolicy({ ...base, host: "localhost", staticAuth: true })).not.toThrow();
+    expect(() => assertStaticAuthPolicy({ ...base, host: "0.0.0.0", staticAuth: true, apiKey: "k" })).not.toThrow();
+    expect(() =>
+      assertStaticAuthPolicy({ ...base, host: "0.0.0.0", staticAuth: true, insecureStaticAuth: true })
+    ).not.toThrow();
+  });
+
+  it("never applies to OAuth mode", () => {
+    expect(() => assertStaticAuthPolicy({ ...base, host: "0.0.0.0", staticAuth: false })).not.toThrow();
+  });
+
+  it("compares API keys in constant time on hashed values (length mismatch does not throw)", () => {
+    expect(isApiKeyMatch("secret", "secret")).toBe(true);
+    expect(isApiKeyMatch("secre", "secret")).toBe(false);
+    expect(isApiKeyMatch("secret-but-longer", "secret")).toBe(false);
+    expect(isApiKeyMatch("", "secret")).toBe(false);
+    expect(isApiKeyMatch(null, "secret")).toBe(false);
+    expect(isApiKeyMatch(undefined, "secret")).toBe(false);
   });
 });
 
@@ -1045,6 +1099,86 @@ describe("startHttpTransport (integration)", () => {
     expect(res.status).toBe(400);
     const json = (await res.json()) as { error?: { code?: number } };
     expect(json.error?.code).toBe(-32700);
+  });
+
+  it("refuses to start in static-auth mode on a non-loopback bind without an API key", async () => {
+    await expect(
+      startHttpTransport(createMcpServer, {
+        host: "0.0.0.0",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+        staticAuth: true,
+      })
+    ).rejects.toThrow(/MCP_HTTP_API_KEY/);
+  });
+
+  describe("static auth with MCP_HTTP_API_KEY", () => {
+    const API_KEY = "topsecret-key";
+    const start = async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+        staticAuth: true,
+        apiKey: API_KEY,
+      });
+      return `http://127.0.0.1:${handle.address.port}`;
+    };
+    const post = (base: string, headers: Record<string, string>) =>
+      fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...headers },
+        body: INIT_BODY,
+      });
+
+    it("answers 401 with a challenge when no key is presented", async () => {
+      const base = await start();
+      const res = await post(base, {});
+      expect(res.status).toBe(401);
+      expect(res.headers.get("www-authenticate")).toContain("Bearer realm=");
+      // No `resource_metadata`: there is no OAuth server to discover in this mode.
+      expect(res.headers.get("www-authenticate")).not.toContain("resource_metadata");
+      const json = (await res.json()) as { error?: { code?: number; message?: string } };
+      expect(json.error?.code).toBe(-32001);
+      expect(json.error?.message).toContain("MCP_HTTP_API_KEY");
+    });
+
+    it("answers 401 on a wrong key, via either header", async () => {
+      const base = await start();
+      expect((await post(base, { Authorization: "Bearer wrong" })).status).toBe(401);
+      expect((await post(base, { "X-Api-Key": "wrong" })).status).toBe(401);
+      expect((await post(base, { Authorization: `Bearer ${API_KEY}x` })).status).toBe(401);
+    });
+
+    it("serves the MCP endpoint with `Authorization: Bearer <key>`", async () => {
+      const base = await start();
+      const res = await post(base, { Authorization: `Bearer ${API_KEY}` });
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as { result?: { serverInfo?: { name?: string } } };
+      expect(json.result?.serverInfo?.name).toBe("boondmanager-mcp-server");
+    });
+
+    it("serves the MCP endpoint with `X-Api-Key: <key>`", async () => {
+      const base = await start();
+      const res = await post(base, { "X-Api-Key": API_KEY });
+      expect(res.status).toBe(200);
+    });
+
+    it("keeps /healthz unauthenticated", async () => {
+      const base = await start();
+      const res = await fetch(`${base}/healthz`);
+      expect(res.status).toBe(200);
+    });
+
+    it("does not serve the OAuth discovery document in static-auth mode", async () => {
+      const base = await start();
+      const res = await fetch(`${base}/.well-known/oauth-protected-resource`);
+      expect(res.status).toBe(404);
+    });
   });
 
   it("rejects new sessions with 503 once the session cap is reached", async () => {

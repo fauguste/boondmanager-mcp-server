@@ -83,6 +83,9 @@ L'image Docker fonctionne en mode **HTTP transport** uniquement. L'authentificat
 | `MCP_HTTP_PUBLIC_URL` | `http://<host>:<port><path>` | URL publique advertised dans le discovery metadata. **Obligatoire** derrière un reverse proxy. |
 | `BOOND_OAUTH_AUTHORIZATION_SERVER` | `https://ui.boondmanager.com` | Issuer URL de BoondManager, advertised dans `authorization_servers`. |
 | `BOOND_OAUTH_SCOPES` | (vide) | Scopes space/comma-separated advertised dans `scopes_supported`. Vide = négociation directe client-Boond. |
+| `BOOND_HTTP_STATIC_AUTH` | `false` | `true` : credentials d'environnement (`BOOND_USER_TOKEN`+`BOOND_CLIENT_TOKEN`+`BOOND_CLIENT_KEY` ou `BOOND_API_TOKEN`) pour toutes les requêtes, sans Bearer OAuth. **Plus aucune authentification client** : l'image bind `0.0.0.0`, donc `MCP_HTTP_API_KEY` est obligatoire (le conteneur refuse de démarrer sans). |
+| `MCP_HTTP_API_KEY` | (vide) | Static auth : secret que le client envoie en `Authorization: Bearer <clé>` ou `X-Api-Key: <clé>`. Absent/faux → `401`. |
+| `MCP_HTTP_INSECURE_STATIC_AUTH` | `false` | `1` pour démarrer en static auth sans clé hors loopback (réseau privé = frontière). Explicitement nommé « insecure ». |
 
 Documentation complète : [`docs/oauth.md`](https://github.com/silamir/boondmanager-mcp-server/blob/main/docs/oauth.md) sur GitHub.
 
