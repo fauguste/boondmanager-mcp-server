@@ -11,7 +11,7 @@ import { progressReporterFrom } from "../services/progress.js";
 import { buildJsonApiBody, registerDeleteTool } from "./crud-factory.js";
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_SEARCH_PAGE } from "../constants.js";
-import { composeDescription, defaultDeleteDescription, defaultGetDescription } from "./description-builders.js";
+import { composeDescription, defaultGetDescription } from "./description-builders.js";
 
 const PurchaseSearchSchema = z
   .object({
@@ -142,10 +142,18 @@ Returns: Liste des achats correspondants.`,
     { entityName: "achat", entityNamePlural: "achats", apiPath: "/purchases", prefix: "boond_purchases" },
     {
       title: "Supprimer un achat/sous-traitance",
-      description: defaultDeleteDescription({
-        entityName: "achat",
-        entityNamePlural: "achats",
-        prefix: "boond_purchases",
+      // Not `defaultDeleteDescription`: its "Plutôt que" names `${prefix}_update`,
+      // and this domain has no update tool (#229).
+      description: composeDescription({
+        purpose: "Supprime définitivement un achat / sous-traitance de BoondManager.",
+        when: "uniquement sur demande explicite de l'utilisateur, et après avoir vérifié l'ID avec `boond_purchases_get`.",
+        instead:
+          "aucun outil de mise à jour n'existe pour les achats : corriger un montant ou une période passe par cette suppression puis `boond_purchases_create` — vérifier avec `boond_payments_search` (`purchaseId`) qu'aucun règlement n'y est adossé avant de détruire.",
+        behaviour: [
+          "⚠️ Irréversible, sans corbeille côté API.",
+          "Si le client MCP annonce la capacité `elicitation`, une confirmation est demandée à l'utilisateur final et un refus annule l'appel (`structuredContent.deleted: false` + `reason`) ; sinon la suppression part directement.",
+        ],
+        returns: "`{ id, deleted, reason? }` — vérifier `deleted`, qui vaut `false` en cas de refus utilisateur.",
       }),
     }
   );
