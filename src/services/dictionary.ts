@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 import { apiRequest } from "./boond-client.js";
-import { oauthContext } from "./oauth.js";
+import { currentAuthIdentity } from "./oauth.js";
 import type { JsonApiResponse } from "../types.js";
 
 /**
@@ -58,21 +57,8 @@ function resolveTtlMs(): number {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_TTL_MS;
 }
 
-/**
- * Identity half of the cache key.
- *
- * - OAuth (HTTP transport): the request's Bearer token, hashed so the raw
- *   credential never sits in a long-lived structure. Two users of the same
- *   tenant get two entries — a small over-fetch that is the price of not
- *   having to decode an opaque token to find its tenant.
- * - Everything else (stdio, HTTP static auth): the credentials are process
- *   wide, so a single constant identity is exact.
- */
-export function currentAuthIdentity(): string {
-  const ctx = oauthContext.getStore();
-  if (!ctx) return "env";
-  return `oauth:${createHash("sha256").update(ctx.accessToken).digest("hex")}`;
-}
+/** Identity half of the cache key — see `currentAuthIdentity` in `oauth.ts`. */
+export { currentAuthIdentity };
 
 function cacheKey(language: DictionaryLanguage): string {
   return `${currentAuthIdentity()}|${language}`;

@@ -113,7 +113,7 @@ Documentation complète : [`docs/oauth.md`](https://github.com/silamir/boondmana
 | `BOOND_HTTP_MAX_RETRIES` | `2` | Nombre de tentatives supplémentaires après échec. `0` = désactiver retries. |
 | `BOOND_HTTP_RETRY_BASE_MS` | `200` | Backoff exponentiel avec full-jitter : base (ms) |
 | `BOOND_HTTP_RETRY_MAX_MS` | `5000` | Backoff max (ms) |
-| `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Client-side token bucket : requêtes/sec. `0` = désactiver. |
+| `BOOND_HTTP_RATE_LIMIT_RPS` | `10` | Client-side token bucket : requêtes/sec, **par utilisateur** (identité dérivée du Bearer OAuth). `0` = désactiver. |
 | `BOOND_HTTP_RATE_LIMIT_BURST` | `20` | Taille du burst autorisé |
 
 ## Variables d'environnement – Logging

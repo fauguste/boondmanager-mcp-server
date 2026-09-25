@@ -1181,6 +1181,101 @@ describe("startHttpTransport (integration)", () => {
     });
   });
 
+  describe("session ownership (#232)", () => {
+    const TOKEN_A = { Authorization: "Bearer token-A" };
+    const TOKEN_B = { Authorization: "Bearer token-B" };
+    const PING = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "ping" });
+    const jsonHeaders = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+
+    async function openSession(): Promise<{ base: string; sessionId: string }> {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: false,
+        enableJsonResponse: true,
+        sessionTtlMs: 60_000,
+        sessionSweepIntervalMs: 60_000,
+      });
+      const base = `http://127.0.0.1:${handle.address.port}`;
+      const init = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...TOKEN_A },
+        body: INIT_BODY,
+      });
+      expect(init.status).toBe(200);
+      await init.text();
+      const sessionId = init.headers.get("mcp-session-id");
+      expect(sessionId).toBeTruthy();
+      return { base, sessionId: sessionId! };
+    }
+
+    it("answers 404 to a POST on the session with another Bearer, exactly like an unknown session", async () => {
+      const { base, sessionId } = await openSession();
+      const asB = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...TOKEN_B, "Mcp-Session-Id": sessionId },
+        body: PING,
+      });
+      expect(asB.status).toBe(404);
+      const jsonB = (await asB.json()) as { error?: { code?: number; message?: string } };
+
+      const unknown = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...TOKEN_B, "Mcp-Session-Id": "00000000-0000-4000-8000-000000000000" },
+        body: PING,
+      });
+      expect(unknown.status).toBe(404);
+      const jsonUnknown = (await unknown.json()) as { error?: { code?: number; message?: string } };
+      // Same status, same body: the probe cannot tell "exists, not yours" from "does not exist".
+      expect(jsonB).toEqual(jsonUnknown);
+      expect(jsonB.error?.code).toBe(-32001);
+
+      // The owner is unaffected.
+      const asA = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...TOKEN_A, "Mcp-Session-Id": sessionId },
+        body: PING,
+      });
+      expect(asA.status).toBe(200);
+      expect(handle!.sessionCount()).toBe(1);
+    });
+
+    it("refuses another Bearer's GET (SSE stream) and DELETE on the session", async () => {
+      const { base, sessionId } = await openSession();
+      const getAsB = await fetch(`${base}/mcp`, {
+        method: "GET",
+        headers: { Accept: "text/event-stream", ...TOKEN_B, "Mcp-Session-Id": sessionId },
+      });
+      expect(getAsB.status).toBe(404);
+      const delAsB = await fetch(`${base}/mcp`, {
+        method: "DELETE",
+        headers: { ...TOKEN_B, "Mcp-Session-Id": sessionId },
+      });
+      expect(delAsB.status).toBe(404);
+      expect(handle!.sessionCount()).toBe(1);
+
+      const delAsA = await fetch(`${base}/mcp`, {
+        method: "DELETE",
+        headers: { ...TOKEN_A, "Mcp-Session-Id": sessionId },
+      });
+      expect(delAsA.status).toBe(200);
+      expect(handle!.sessionCount()).toBe(0);
+    });
+
+    it("still lets a POST initialize carrying a stale session id open a new session", async () => {
+      const { base } = await openSession();
+      const init = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...TOKEN_B, "Mcp-Session-Id": "00000000-0000-4000-8000-000000000000" },
+        body: INIT_BODY,
+      });
+      expect(init.status).toBe(200);
+      await init.text();
+      expect(handle!.sessionCount()).toBe(2);
+    });
+  });
+
   it("rejects new sessions with 503 once the session cap is reached", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",

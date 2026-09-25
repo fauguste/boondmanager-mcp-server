@@ -1114,7 +1114,20 @@ validation so Docker/Kubernetes probes always pass) returns
 `{ status, version, mode, sessions }`. The Docker image's `HEALTHCHECK`
 uses it.
 
-Stateless mode spins up a fresh `McpServer`+`StreamableHTTPServerTransport` per POST. Stateful mode keeps a `sessionId → { transport, server, lastActivityAt }` map; a periodic sweep closes idle sessions (transport + McpServer) so a buggy client that disconnects without `onsessionclosed` cannot leak resources. The sweep timer is `unref()`'d so it never blocks shutdown. The handle exposes `sessionCount()` and `sweepIdleSessions()` for observability/tests.
+**Session ownership** (issue #232): a stateful `SessionEntry` records the
+`currentAuthIdentity()` of the `initialize` that opened it, and every later
+request naming that session is checked against the caller's identity. A
+mismatch is answered **exactly like an unknown session** — `404` /
+`-32001 Session not found`, same body — so a leaked `Mcp-Session-Id` (log,
+proxy) plus any Bearer can neither attach to another user's GET stream, read
+their progress notifications, nor answer their delete elicitations, and the
+probe does not learn whether the id exists. An unknown id on a non-initialize
+request also gets that `404` now (it used to be `400`); a POST `initialize`
+carrying a stale id still opens a new session. In static-auth mode every
+caller shares the `env` identity, which collapses to the previous behaviour.
+Pinned in `http.test.ts` (POST / GET / DELETE with another Bearer).
+
+Stateless mode spins up a fresh `McpServer`+`StreamableHTTPServerTransport` per POST. Stateful mode keeps a `sessionId → { transport, server, lastActivityAt, ownerIdentity }` map; a periodic sweep closes idle sessions (transport + McpServer) so a buggy client that disconnects without `onsessionclosed` cannot leak resources. The sweep timer is `unref()`'d so it never blocks shutdown. The handle exposes `sessionCount()` and `sweepIdleSessions()` for observability/tests.
 
 ## Authentication
 
@@ -1185,7 +1198,7 @@ extraction + discovery endpoint + 401 challenge), `src/services/boond-client.ts`
 - `BOOND_HTTP_TIMEOUT_MS` (optional, defaults to `30000`) — per-request timeout for the BoondManager HTTP client. Non-numeric / non-positive values fall back to the default. A timeout surfaces as an `Error` whose message includes the configured value and the failing endpoint.
 - `BOOND_HTTP_MAX_RETRIES` (optional, defaults to `2`) — number of additional attempts after the first failure. Set to `0` to disable retries. Retry policy: GET retries on 5xx / 429 / network / timeout; non-GET retries only on 429 (idempotency safety). `Retry-After` is honoured.
 - `BOOND_HTTP_RETRY_BASE_MS` / `BOOND_HTTP_RETRY_MAX_MS` (optional, defaults `200` / `5000`) — full-jitter exponential backoff: `random(0, min(maxMs, baseMs * 2^attempt))`.
-- `BOOND_HTTP_RATE_LIMIT_RPS` / `BOOND_HTTP_RATE_LIMIT_BURST` (optional, defaults `10` / `20`) — client-side token bucket guarding the BoondManager API. Each attempt (including retries) consumes one token. Set RPS to `0` to disable. Implementation in `src/services/rate-limiter.ts`; tests can swap the bucket via the exported `resetRateLimiterForTests()`.
+- `BOOND_HTTP_RATE_LIMIT_RPS` / `BOOND_HTTP_RATE_LIMIT_BURST` (optional, defaults `10` / `20`) — client-side token bucket guarding the BoondManager API. Each attempt (including retries) consumes one token. Set RPS to `0` to disable. Implementation in `src/services/rate-limiter.ts`; tests can swap the bucket via the exported `resetRateLimiterForTests()`. **One bucket per caller identity** (`currentAuthIdentity()` in `oauth.ts`, issue #232): `sha256(Bearer)` under the HTTP OAuth transport, so one user's burst never throttles another and one buggy client cannot hold the deployment at the limit; the constant `env` identity on stdio / static auth, so those keep exactly one bucket. The map is LRU-bounded at `MAX_RATE_LIMIT_BUCKETS` (500). The limit is therefore *per identity*, not per process — fairness between users, not a lower ceiling towards BoondManager.
 
 ## Update Notification
 

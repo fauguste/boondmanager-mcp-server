@@ -14,7 +14,7 @@ import {
 } from "../constants.js";
 import type { BoondAuthProvider, BoondConfig, JsonApiResource, JsonApiResponse, SearchParams } from "../types.js";
 import { TokenBucket } from "./rate-limiter.js";
-import { oauthContext } from "./oauth.js";
+import { currentAuthIdentity, oauthContext } from "./oauth.js";
 import type { ProgressReporter } from "./progress.js";
 
 let config: BoondConfig | null = null;
@@ -396,24 +396,68 @@ export function resolveRateLimitConfig(): RateLimitConfig | null {
   return { rps, burst };
 }
 
-let rateLimiter: TokenBucket | null = null;
-let rateLimiterInitialised = false;
+/**
+ * Upper bound on live per-identity buckets. A bucket is a few numbers, so
+ * 500 idle users cost nothing measurable; the cap exists so an attacker
+ * cycling tokens cannot grow the map without bound. Eviction is LRU: an
+ * evicted identity simply starts again with a full bucket.
+ */
+export const MAX_RATE_LIMIT_BUCKETS = 500;
 
-function getRateLimiter(): TokenBucket | null {
-  if (rateLimiterInitialised) return rateLimiter;
-  const config = resolveRateLimitConfig();
-  rateLimiter = config ? new TokenBucket(config.burst, config.rps) : null;
-  rateLimiterInitialised = true;
-  return rateLimiter;
+let rateLimitConfig: RateLimitConfig | null = null;
+let rateLimitConfigResolved = false;
+/** Insertion-ordered map used as an LRU: a hit re-inserts, an insert past the cap evicts the oldest. */
+const rateLimiters = new Map<string, TokenBucket>();
+
+/**
+ * The token bucket for the *current* caller (issue #232).
+ *
+ * One bucket per process was right for stdio (one user) and wrong for the
+ * HTTP OAuth transport, where every request may belong to a different user:
+ * a single client's burst throttled everyone else, and one buggy client
+ * could hold the whole deployment at the rate limit. Buckets are keyed by
+ * `currentAuthIdentity()` — `sha256(token)` in OAuth, the constant `env`
+ * identity on stdio / static auth, so those keep exactly one bucket.
+ *
+ * Note this is fairness *between* users of the same server, not a change to
+ * the ceiling BoondManager sees: `BOOND_HTTP_RATE_LIMIT_RPS` is per identity.
+ */
+export function getRateLimiter(): TokenBucket | null {
+  if (!rateLimitConfigResolved) {
+    rateLimitConfig = resolveRateLimitConfig();
+    rateLimitConfigResolved = true;
+  }
+  if (!rateLimitConfig) return null;
+  const key = currentAuthIdentity();
+  const existing = rateLimiters.get(key);
+  if (existing) {
+    rateLimiters.delete(key);
+    rateLimiters.set(key, existing);
+    return existing;
+  }
+  const bucket = new TokenBucket(rateLimitConfig.burst, rateLimitConfig.rps);
+  rateLimiters.set(key, bucket);
+  while (rateLimiters.size > MAX_RATE_LIMIT_BUCKETS) {
+    const oldest = rateLimiters.keys().next().value;
+    if (oldest === undefined) break;
+    rateLimiters.delete(oldest);
+  }
+  return bucket;
+}
+
+/** Number of live per-identity buckets. Exposed for tests. */
+export function rateLimiterBucketCountForTests(): number {
+  return rateLimiters.size;
 }
 
 /**
- * Reset the cached rate limiter so the next request re-reads env vars.
+ * Reset the rate limiters so the next request re-reads env vars.
  * Intended for tests that toggle `BOOND_HTTP_RATE_LIMIT_*` between cases.
  */
 export function resetRateLimiterForTests(): void {
-  rateLimiter = null;
-  rateLimiterInitialised = false;
+  rateLimiters.clear();
+  rateLimitConfig = null;
+  rateLimitConfigResolved = false;
 }
 
 /** Status-specific hint to help the LLM (or human) recover from common failures. */
