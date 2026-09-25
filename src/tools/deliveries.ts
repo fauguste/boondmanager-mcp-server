@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { DeliverySearchSchema, IdSchema } from "../schemas/index.js";
+import { DeliverySearchSchema, EntityIdSchema, IdSchema } from "../schemas/index.js";
 import {
   apiRequest,
   apiSearch,
@@ -14,8 +14,8 @@ import { composeDescription, defaultGetDescription } from "./description-builder
 
 const DeliveryCreateSchema = z
   .object({
-    projectId: z.string().min(1).describe("ID du projet"),
-    resourceId: z.string().min(1).describe("ID de la ressource portee par la prestation"),
+    projectId: EntityIdSchema.describe("ID du projet"),
+    resourceId: EntityIdSchema.describe("ID de la ressource portee par la prestation"),
     title: z.string().optional().describe("Titre de la prestation/livraison"),
     typeOf: z.number().int().optional().describe("Type de prestation"),
     state: z.number().int().optional().describe("Etat"),

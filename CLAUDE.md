@@ -182,7 +182,15 @@ halves of that exception have to stay together (issue #186):
 
 - Relations expose them **suffixed** — `{"resumes":{"data":[{"id":"123_resume"}]}}`
   — so `boond_documents_get` validates with `DocumentIdSchema`
-  (`/^\d+(_[A-Za-z]+)?$/`), not `IdSchema`. Every other tool keeps `IdSchema`.
+  (`/^\d+(_[A-Za-z]+)?$/`), not `IdSchema`. **Every other id-shaped input —
+  `id` and every `*Id`, required or optional, top-level or nested — is
+  `EntityIdSchema`** (`/^\d+$/`), whether the value ends up in a path segment,
+  a `keywords` prefix (`COMP<id>`) or a JSON:API relationship. Fifteen update /
+  get schemas used to be `z.string().min(1)` (issue #228): `assertSafeApiPath`
+  allows `/`, so `id: "5/information"` produced `PUT /candidates/5/information`.
+  `src/tools/id-schemas.test.ts` walks every advertised `inputSchema` over a
+  real client and fails by tool name on any id without the numeric pattern —
+  add a new id field with `EntityIdSchema`, not a fresh `z.string()`.
   The suffix alphabet stays letters-only so the id still can't smuggle a path
   segment / `..` / `?` / `#` into the API path; both cases are allowed because
   Boond derives the suffix from camelCase parent types (`administrativeFile`).

@@ -1,5 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ResourceTimesheetSchema, TimesheetSearchSchema, TimesheetGetSchema } from "../schemas/index.js";
+import {
+  EntityIdSchema,
+  ResourceTimesheetSchema,
+  TimesheetGetSchema,
+  TimesheetSearchSchema,
+} from "../schemas/index.js";
 import type { ResourceTimesheetInput, TimesheetSearchInput, TimesheetGetInput } from "../schemas/index.js";
 import { apiRequest, apiSearch, buildSearchQuery, formatDetailResponse } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
@@ -11,8 +16,8 @@ import { composeDescription } from "./description-builders.js";
 
 const TimesheetCreateSchema = z
   .object({
-    resourceId: z.string().min(1).describe("ID de la ressource"),
-    projectId: z.string().optional().describe("ID du projet"),
+    resourceId: EntityIdSchema.describe("ID de la ressource"),
+    projectId: EntityIdSchema.optional().describe("ID du projet"),
     term: z
       .string()
       .regex(/^\d{4}-\d{2}$/)
