@@ -1058,6 +1058,10 @@ HTTP env vars (see `src/transports/http.ts::resolveHttpOptions`):
 | `MCP_HTTP_SESSION_TTL_MS` | `1800000` (30 min) | Stateful only: idle window before a session is closed |
 | `MCP_HTTP_SESSION_SWEEP_INTERVAL_MS` | `300000` (5 min) | Stateful only: how often to scan for idle sessions |
 | `MCP_HTTP_MAX_SESSIONS` | `1000` | Stateful only: max concurrent sessions. New `initialize` requests beyond the cap get `503` (after an idle sweep). Guards against memory exhaustion via unbounded session creation. |
+| `MCP_HTTP_KEEP_ALIVE_TIMEOUT_MS` | `65000` | Node `server.keepAliveTimeout`. Must exceed the idle timeout of any load balancer in front (60 s AWS ALB, 75 s nginx): Node's 5 s default is below both, so the LB reused a connection Node had just closed and answered intermittent `502`s (issue #237). |
+| `MCP_HTTP_HEADERS_TIMEOUT_MS` | `66000` | Node `server.headersTimeout`. Node requires it above the keep-alive timeout; a lower value is raised to keep-alive + 1 s with a warning (`resolveServerTimeouts`). |
+| `MCP_HTTP_REQUEST_TIMEOUT_MS` | `300000` | Node `server.requestTimeout` (whole request, headers + body). Generous on purpose: reporting calls are long. |
+| `MCP_HTTP_SHUTDOWN_TIMEOUT_MS` | `10000` | Grace period `handle.close()` gives in-flight connections (open SSE stream, request mid-body) before `closeAllConnections()`. Idle keep-alive sockets are closed at once by Node's `close()`. `src/index.ts` adds a forced `process.exit(1)` 2 s after that in case something else wedges. |
 | `MCP_HTTP_ALLOWED_HOSTS` | (auto) | Comma-separated allow-list of `Host` header hostnames for DNS rebinding protection (CVE-2025-66414). Default = `localhost,127.0.0.1,[::1]` when bound to a loopback interface, otherwise validation is disabled. Set to exactly `*` (sole entry) to opt out explicitly when fronting the server with a reverse proxy that already validates hosts; a `*` mixed with real hostnames is ignored (validation stays on) with a warning. |
 | `BOOND_HTTP_STATIC_AUTH` | `false` | `true`/`1`/`yes`: use the env credentials (`BOOND_USER_TOKEN`+`BOOND_CLIENT_TOKEN`+`BOOND_CLIENT_KEY`, `BOOND_API_TOKEN` or BasicAuth) for every request instead of a per-request OAuth Bearer. See *Static auth* below — with no `MCP_HTTP_API_KEY` this is an **anonymous proxy** carrying the operator's rights. |
 | `MCP_HTTP_API_KEY` | (none) | Static auth only: shared secret the MCP client must present as `Authorization: Bearer <key>` or `X-Api-Key: <key>`. Constant-time comparison; missing/wrong → `401`. **Required** when `BOOND_HTTP_STATIC_AUTH=true` and the bind is not loopback (the server refuses to start otherwise). Blank / unresolved `${…}` = unconfigured. Ignored (with a warning) in OAuth mode. |
@@ -1139,6 +1143,23 @@ request also gets that `404` now (it used to be `400`); a POST `initialize`
 carrying a stale id still opens a new session. In static-auth mode every
 caller shares the `env` identity, which collapses to the previous behaviour.
 Pinned in `http.test.ts` (POST / GET / DELETE with another Bearer).
+
+**Shutdown** (issue #237): `handle.close()` is memoised — a second call (a
+second SIGTERM, Kubernetes retrying, an operator's Ctrl-C after Docker's
+signal) returns the same in-flight promise instead of calling `server.close()`
+on a closed server and leaving an unhandled `ERR_SERVER_NOT_RUNNING`. The
+signal handler in `src/index.ts` is idempotent for the same reason and arms a
+forced exit at `shutdownTimeoutMs + 2 s`. Node's `close()` reaps idle
+keep-alive sockets **once**; a socket still draining a body at that instant
+(the 413 precheck answers before the 2 MiB body is consumed) is never
+re-checked and, with a 65 s keep-alive, would hold the close for the whole
+grace period — so `close()` repeats `closeIdleConnections()` every 100 ms
+until the server is closed. The 413 precheck stays a plain 413 without
+`Connection: close`: Node drains the announced body itself, and closing early
+makes a client still uploading see a reset instead of the 413 (undici's
+`fetch` rejects). Pinned end-to-end in `src/http-shutdown.test.ts`, which spawns
+`dist/index.js`, opens a request that never completes, sends SIGTERM twice and
+asserts exit code 0 within the grace period.
 
 Stateless mode spins up a fresh `McpServer`+`StreamableHTTPServerTransport` per POST. Stateful mode keeps a `sessionId → { transport, server, lastActivityAt, ownerIdentity }` map; a periodic sweep closes idle sessions (transport + McpServer) so a buggy client that disconnects without `onsessionclosed` cannot leak resources. The sweep timer is `unref()`'d so it never blocks shutdown. The handle exposes `sessionCount()` and `sweepIdleSessions()` for observability/tests.
 

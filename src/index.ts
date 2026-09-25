@@ -84,13 +84,38 @@ async function main(): Promise<void> {
     }
     console.error(`📦 Domains: ${REGISTERED_DOMAINS.join(", ")}`);
 
-    const shutdown = async (signal: string): Promise<void> => {
+    // Idempotent: a second signal (Docker sends SIGTERM, then the operator
+    // hits Ctrl-C; Kubernetes retries) must not call close() on a closed
+    // server and leave an unhandled rejection. The forced exit covers a
+    // close() that never resolves (issue #237); handle.close() already
+    // destroys lingering connections after `shutdownTimeoutMs`, so this only
+    // fires if something else wedges.
+    let shutdownStarted = false;
+    const shutdown = (signal: string): void => {
+      if (shutdownStarted) {
+        console.error(`🛑 ${signal} received again — shutdown already in progress`);
+        return;
+      }
+      shutdownStarted = true;
       console.error(`\n🛑 Received ${signal}, shutting down...`);
-      await handle.close();
-      process.exit(0);
+      const forceExit = setTimeout(
+        () => {
+          console.error("⏱️  Shutdown did not complete in time, exiting");
+          process.exit(1);
+        },
+        (options.shutdownTimeoutMs ?? 10_000) + 2_000
+      );
+      forceExit.unref();
+      handle.close().then(
+        () => process.exit(0),
+        (error: unknown) => {
+          console.error("Shutdown error:", error instanceof Error ? error.message : error);
+          process.exit(1);
+        }
+      );
     };
-    process.on("SIGINT", () => void shutdown("SIGINT"));
-    process.on("SIGTERM", () => void shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
     scheduleUpdateCheck();
     return;
   }
