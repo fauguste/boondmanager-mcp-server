@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { request as httpRequest } from "node:http";
 import {
+  MAX_BODY_BYTES,
   isDiscoveryPath,
   isOriginAllowed,
   resolveAllowedHosts,
@@ -885,6 +886,165 @@ describe("startHttpTransport (integration)", () => {
       body: big,
     });
     expect(res.status).toBe(413);
+  });
+
+  /**
+   * Streams a POST body in chunks **without** a `Content-Length` header, so
+   * Node sends it `Transfer-Encoding: chunked` — the shape a reverse proxy that
+   * re-encodes produces, and the one the `Content-Length` precheck cannot see.
+   * The client tolerates a socket reset after the server's early answer: a
+   * `413` is written before the upload finishes, and the server then closes
+   * the connection rather than draining the rest.
+   */
+  function postChunked(
+    port: number,
+    path: string,
+    chunks: string[],
+    extraHeaders: Record<string, string> = {}
+  ): Promise<{ status: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = httpRequest(
+        {
+          hostname: "127.0.0.1",
+          port,
+          path,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            ...extraHeaders,
+          },
+        },
+        (res) => {
+          const parts: Buffer[] = [];
+          res.on("data", (chunk) => parts.push(chunk as Buffer));
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(parts).toString("utf8") }));
+          res.on("error", reject);
+        }
+      );
+      let settled = false;
+      req.on("response", () => {
+        settled = true;
+      });
+      // Once the server has answered, a write error on the request side is
+      // expected (it stopped reading); only a failure *before* any response
+      // is a real error.
+      req.on("error", (err) => {
+        if (!settled) reject(err);
+      });
+      let i = 0;
+      const pump = (): void => {
+        while (i < chunks.length) {
+          const ok = req.write(chunks[i++]!);
+          if (!ok) {
+            req.once("drain", pump);
+            return;
+          }
+        }
+        req.end();
+      };
+      pump();
+    });
+  }
+
+  /** `MAX_BODY_BYTES + 64 KiB` as a JSON-looking chunked payload. */
+  const OVERSIZED_CHUNKS = (() => {
+    const chunk = "x".repeat(64 * 1024);
+    const count = Math.ceil((MAX_BODY_BYTES + 64 * 1024) / chunk.length);
+    return ['{"jsonrpc":"2.0","id":1,"method":"ping","params":{"pad":"', ...Array(count).fill(chunk), '"}}'];
+  })();
+
+  it("rejects an oversized chunked body (no Content-Length) with 413 in stateless mode", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+    const res = await postChunked(handle.address.port, "/mcp", OVERSIZED_CHUNKS, AUTH_HEADER);
+    expect(res.status).toBe(413);
+    expect(JSON.parse(res.body)).toMatchObject({ error: { message: "Request body too large" } });
+  });
+
+  it("rejects an oversized chunked body on an existing stateful session with 413, and keeps the session usable", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: false,
+      enableJsonResponse: true,
+      sessionTtlMs: 60_000,
+      sessionSweepIntervalMs: 60_000,
+    });
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...AUTH_HEADER,
+    };
+    const init = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers,
+      body: INIT_BODY,
+    });
+    expect(init.status).toBe(200);
+    await init.text();
+    const sessionId = init.headers.get("mcp-session-id");
+    expect(sessionId).toBeTruthy();
+
+    const big = await postChunked(handle.address.port, "/mcp", OVERSIZED_CHUNKS, {
+      ...AUTH_HEADER,
+      "Mcp-Session-Id": sessionId!,
+    });
+    expect(big.status).toBe(413);
+
+    // The session survived the rejected request.
+    const ping = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers: { ...headers, "Mcp-Session-Id": sessionId! },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "ping" }),
+    });
+    expect(ping.status).toBe(200);
+    expect(handle.sessionCount()).toBe(1);
+  });
+
+  it("still serves a valid chunked body under the cap", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+    // Split the initialize payload into several chunks so the request is
+    // genuinely `Transfer-Encoding: chunked`.
+    const chunks = INIT_BODY.match(/.{1,16}/g) ?? [INIT_BODY];
+    const res = await postChunked(handle.address.port, "/mcp", chunks, AUTH_HEADER);
+    expect(res.status).toBe(200);
+    const json = JSON.parse(res.body) as { result?: { serverInfo?: { name?: string } } };
+    expect(json.result?.serverInfo?.name).toBe("boondmanager-mcp-server");
+  });
+
+  it("answers an unparseable JSON body with 400 / -32700 instead of handing the drained stream to the SDK", async () => {
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+    const res = await fetch(`http://127.0.0.1:${handle.address.port}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        ...AUTH_HEADER,
+      },
+      body: "{not json",
+    });
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error?: { code?: number } };
+    expect(json.error?.code).toBe(-32700);
   });
 
   it("rejects new sessions with 503 once the session cap is reached", async () => {

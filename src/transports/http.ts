@@ -330,7 +330,7 @@ function resolveResourceUrl(options: HttpTransportOptions): string {
 
 /** Max accepted request body size (1 MiB). MCP initialize payloads are tiny;
  *  this caps the memory a single authenticated request can force us to buffer. */
-const MAX_BODY_BYTES = 1024 * 1024;
+export const MAX_BODY_BYTES = 1024 * 1024;
 
 class PayloadTooLargeError extends Error {
   constructor() {
@@ -339,37 +339,78 @@ class PayloadTooLargeError extends Error {
   }
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+/** Outcome of `readJsonBody`: the SDK must never be left to re-read a stream we drained. */
+type ReadBody = { kind: "json"; value: unknown } | { kind: "invalid" };
+
+/**
+ * Buffer a request body under `MAX_BODY_BYTES`, then parse it as JSON.
+ *
+ * This is the **only** body reader on the MCP endpoint (issue #227). Every
+ * POST — stateless, existing stateful session, or `initialize` — goes through
+ * it and the parsed value is handed to `transport.handleRequest(req, res,
+ * parsedBody)`, so the SDK (which reads without a ceiling) never touches the
+ * stream. The `Content-Length` precheck upstream only covers clients that
+ * announce their size; a chunked transfer (no `Content-Length`, which is also
+ * what a reverse proxy that re-encodes produces) is caught here, by counting
+ * bytes as they arrive.
+ *
+ * On overflow the loop stops without `req.destroy()`: destroying the socket
+ * would tear down the response along with the request, and the client would
+ * see a reset instead of the `413` (the caller answers with `Connection:
+ * close`, and Node closes the socket once that response is flushed).
+ *
+ * An unparseable body is reported as `invalid` rather than `undefined`: a
+ * `parsedBody` of `undefined` makes the SDK fall back to `req.json()` on a
+ * stream that has already been consumed.
+ */
+async function readJsonBody(req: IncomingMessage): Promise<ReadBody> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of req) {
     const buf = chunk as Buffer;
     total += buf.length;
     if (total > MAX_BODY_BYTES) {
-      req.destroy();
       throw new PayloadTooLargeError();
     }
     chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return undefined;
   try {
-    return JSON.parse(raw);
+    return { kind: "json", value: JSON.parse(raw) as unknown };
   } catch {
-    return undefined;
+    return { kind: "invalid" };
   }
 }
 
-function writeJsonRpcError(res: ServerResponse, status: number, message: string): void {
+/** JSON-RPC 2.0 reserved code for a body that is not parseable JSON. */
+const JSON_RPC_PARSE_ERROR = -32700;
+
+function writeJsonRpcError(res: ServerResponse, status: number, message: string, code = -32000): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
   res.end(
     JSON.stringify({
       jsonrpc: "2.0",
-      error: { code: -32000, message },
+      error: { code, message },
       id: null,
     })
   );
+}
+
+/**
+ * `413` for a body that blew through `MAX_BODY_BYTES` mid-stream. The request
+ * stream is left unread past the overflow point, so the response must not be
+ * reused on a keep-alive connection: `Connection: close` makes Node destroy
+ * the socket right after this response is flushed, instead of draining (and
+ * therefore fully receiving) whatever the client still has to send.
+ */
+function writePayloadTooLarge(res: ServerResponse): void {
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.setHeader("Connection", "close");
+  writeJsonRpcError(res, 413, "Request body too large");
 }
 
 interface SessionEntry {
@@ -552,11 +593,27 @@ export async function startHttpTransport(
 
       // Core MCP dispatch — shared between OAuth and static-auth paths.
       const dispatchMcpRequest = async (): Promise<void> => {
-        if (options.stateless) {
-          if (req.method !== "POST") {
-            writeJsonRpcError(res, 405, "Only POST is supported in stateless mode");
+        if (options.stateless && req.method !== "POST") {
+          writeJsonRpcError(res, 405, "Only POST is supported in stateless mode");
+          return;
+        }
+
+        // The body is read *here*, once, under the 1 MiB streaming cap, and
+        // handed to the SDK pre-parsed on every path below — the SDK's own
+        // reader has no ceiling, so letting it read on any path would leave
+        // that path uncapped (#227). GET (SSE stream) and DELETE carry no body
+        // and the SDK never reads one for them.
+        let parsedBody: unknown;
+        if (req.method === "POST") {
+          const read = await readJsonBody(req);
+          if (read.kind === "invalid") {
+            writeJsonRpcError(res, 400, "Parse error: Invalid JSON", JSON_RPC_PARSE_ERROR);
             return;
           }
+          parsedBody = read.value;
+        }
+
+        if (options.stateless) {
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
             enableJsonResponse: options.enableJsonResponse,
@@ -567,7 +624,7 @@ export async function startHttpTransport(
             void server.close();
           });
           await server.connect(transport);
-          await transport.handleRequest(req, res);
+          await transport.handleRequest(req, res, parsedBody);
           return;
         }
 
@@ -578,7 +635,7 @@ export async function startHttpTransport(
         if (sessionId && sessions.has(sessionId)) {
           const entry = sessions.get(sessionId)!;
           entry.lastActivityAt = Date.now();
-          await entry.transport.handleRequest(req, res);
+          await entry.transport.handleRequest(req, res, parsedBody);
           return;
         }
 
@@ -587,8 +644,8 @@ export async function startHttpTransport(
           return;
         }
 
-        // Parse body to detect initialization
-        const body = await readJsonBody(req);
+        // First request of a session must be `initialize`
+        const body = parsedBody;
         if (!isInitializeRequest(body)) {
           writeJsonRpcError(res, 400, "First request must be an MCP initialize message");
           return;
@@ -664,11 +721,7 @@ export async function startHttpTransport(
       }
     } catch (error) {
       if (error instanceof PayloadTooLargeError) {
-        if (!res.headersSent) {
-          writeJsonRpcError(res, 413, "Request body too large");
-        } else {
-          res.end();
-        }
+        writePayloadTooLarge(res);
         return;
       }
       reqLogger.error({ err: error }, "HTTP transport error");

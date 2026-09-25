@@ -1063,7 +1063,17 @@ or only commas) counts as *unconfigured* and falls back to the default — a bla
 env var must never silently switch a security control off. `*` is the explicit
 opt-out.
 
-Request bodies are capped at 1 MiB (`Content-Length` precheck + streaming guard); oversized requests get `413`.
+Request bodies are capped at 1 MiB (`MAX_BODY_BYTES`): a `Content-Length`
+precheck, then a streaming guard in `readJsonBody`, which is the **only** body
+reader on the MCP endpoint — every POST (stateless, existing stateful session,
+`initialize`) is buffered there and handed to the SDK as `parsedBody`, because
+the SDK's own reader has no ceiling (issue #227: before, only the `initialize`
+path was capped, and a chunked transfer without `Content-Length` bypassed the
+precheck on the other two). Oversized requests get `413` with
+`Connection: close` (the stream is left unread past the overflow, so the
+connection must not be reused); an unparseable body gets `400` / `-32700`
+rather than `undefined`, which would send the SDK back to a drained stream.
+Pinned end-to-end in `http.test.ts` with chunked bodies on both paths.
 
 **Liveness probe**: `GET /healthz` (unauthenticated, exempt from Host
 validation so Docker/Kubernetes probes always pass) returns
