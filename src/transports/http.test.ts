@@ -1276,6 +1276,103 @@ describe("startHttpTransport (integration)", () => {
     });
   });
 
+  describe("unknown or expired session ids (#233)", () => {
+    const PING = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "ping" });
+    const jsonHeaders = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+
+    it("answers 404 / -32001 on a session reaped by the TTL sweep, for POST and GET, and lets initialize reopen one", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: false,
+        enableJsonResponse: true,
+        // Same budget as the sweep test above: wide enough that `initialize`
+        // itself cannot age the session past the TTL under load.
+        sessionTtlMs: 1_000,
+        sessionSweepIntervalMs: 60_000,
+      });
+      const base = `http://127.0.0.1:${handle.address.port}`;
+      const init = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...AUTH_HEADER },
+        body: INIT_BODY,
+      });
+      expect(init.status).toBe(200);
+      await init.text();
+      const sessionId = init.headers.get("mcp-session-id")!;
+      expect(sessionId).toBeTruthy();
+
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      expect(await handle.sweepIdleSessions()).toBe(1);
+
+      // The Streamable HTTP spec reserves 404 for "this session is gone,
+      // re-initialize"; a 400 reads as a malformed request and makes a client
+      // give up instead of reconnecting.
+      const post = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...AUTH_HEADER, "Mcp-Session-Id": sessionId },
+        body: PING,
+      });
+      expect(post.status).toBe(404);
+      const postJson = (await post.json()) as { error?: { code?: number; message?: string } };
+      expect(postJson.error?.code).toBe(-32001);
+      expect(postJson.error?.message).toBe("Session not found");
+
+      const get = await fetch(`${base}/mcp`, {
+        method: "GET",
+        headers: { Accept: "text/event-stream", ...AUTH_HEADER, "Mcp-Session-Id": sessionId },
+      });
+      expect(get.status).toBe(404);
+      await get.text();
+
+      const del = await fetch(`${base}/mcp`, {
+        method: "DELETE",
+        headers: { ...AUTH_HEADER, "Mcp-Session-Id": sessionId },
+      });
+      expect(del.status).toBe(404);
+      await del.text();
+
+      // What the 404 is for: the client re-initializes, stale id and all.
+      const reinit = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...AUTH_HEADER, "Mcp-Session-Id": sessionId },
+        body: INIT_BODY,
+      });
+      expect(reinit.status).toBe(200);
+      await reinit.text();
+      expect(reinit.headers.get("mcp-session-id")).toBeTruthy();
+      expect(reinit.headers.get("mcp-session-id")).not.toBe(sessionId);
+      expect(handle.sessionCount()).toBe(1);
+    });
+
+    it("keeps 400 for a request that names no session and is not an initialize", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: false,
+        enableJsonResponse: true,
+      });
+      const base = `http://127.0.0.1:${handle.address.port}`;
+      // No id at all: nothing to look up, so this is a malformed request, not
+      // a vanished session — 400 is the right answer and must not become 404.
+      const post = await fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { ...jsonHeaders, ...AUTH_HEADER },
+        body: PING,
+      });
+      expect(post.status).toBe(400);
+      await post.text();
+      const get = await fetch(`${base}/mcp`, {
+        method: "GET",
+        headers: { Accept: "text/event-stream", ...AUTH_HEADER },
+      });
+      expect(get.status).toBe(400);
+      await get.text();
+    });
+  });
+
   it("rejects new sessions with 503 once the session cap is reached", async () => {
     handle = await startHttpTransport(createMcpServer, {
       host: "127.0.0.1",
