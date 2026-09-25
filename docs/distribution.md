@@ -129,7 +129,7 @@ Open a PR adding the entry to the **Community Plugins → Tools & Integrations**
 section, in alphabetical order (between `Bitbucket CLI` and `Cadence Code`):
 
 ```markdown
-- [BoondManager MCP Server](https://github.com/silamir/boondmanager-mcp-server) - MCP server for the BoondManager staffing ERP/CRM exposing 182 tools, 12 prompts and 22 resources over candidates, resources, opportunities, projects, invoices and expense reports, with stdio and OAuth-protected HTTP transports.
+- [BoondManager MCP Server](https://github.com/silamir/boondmanager-mcp-server) - MCP server for the BoondManager staffing ERP/CRM exposing 185 tools, 13 prompts and 22 resources over candidates, resources, opportunities, projects, invoices and expense reports, with stdio and OAuth-protected HTTP transports.
 ```
 
 **Do not add their scanner CI.** `CONTRIBUTING.md` recommends a workflow that

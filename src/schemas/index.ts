@@ -958,6 +958,104 @@ export const TimesheetSearchSchema = z
   })
   .strict();
 
+// ---- Timesheet (CRA) write schemas (issue #249) ----
+//
+// A times report is a monthly container per resource (`term` + `resource`)
+// whose lines live in `regularTimes[]` / `exceptionalTimes[]` — the exact
+// twin of the expenses report (#179). The line shape below is the one the API
+// *returns* (`GET /times-reports/{id}`, `models.time` in the dictionary, and
+// the `plannedTimes` of `/times-reports/default`): `startDate`, `duration`,
+// `workUnitType.reference`, `project`, `delivery`, `batch`. `state` is moved by
+// the validation workflow (`validated`, `waitingForValidation`…) and is not a
+// write field. See CLAUDE.md → *Timesheets* for what was and was not verified
+// against the live API.
+export const TimesheetLineSchema = z
+  .object({
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe("Jour saisi (YYYY-MM-DD). Doit tomber dans le mois `term` du CRA."),
+    duration: z
+      .number()
+      .positive()
+      .default(1)
+      .describe("Durée en unités d'œuvre (jour par défaut : 1 = journée, 0.5 = demi-journée)."),
+    workUnitTypeReference: z
+      .number()
+      .int()
+      .default(1)
+      .describe(
+        "Code `reference` du type d'unité d'œuvre — voir `boond_timesheets_default` (`workUnitTypesAllowed` de la ressource). " +
+          "1 = « Normale » (production) sur les tenants observés ; les absences (congés, RTT, maladie…) ont leurs propres codes."
+      ),
+    projectId: EntityIdSchema.optional().describe(
+      "ID du projet imputé. Requis pour une activité de production ; absent pour une absence. Couples autorisés : `boond_timesheets_default`."
+    ),
+    deliveryId: EntityIdSchema.optional().describe(
+      "ID de la prestation (delivery) imputée. Requis avec `projectId` pour la production — voir `boond_timesheets_default`."
+    ),
+    batchId: EntityIdSchema.optional().describe("ID du lot. Absent = aucun lot."),
+  })
+  .strict();
+
+export const TimesheetCreateSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe("ID de la ressource (le collaborateur dont c'est le CRA)."),
+    agencyId: EntityIdSchema.optional().describe(
+      "ID de l'agence — voir `boond_timesheets_default`. Déduite de la ressource si omise."
+    ),
+    term: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .describe("Mois du CRA (YYYY-MM). Un CRA = un mois × une ressource ; l'API ne déduplique pas."),
+    informationComments: z.string().optional().describe("Commentaires du CRA."),
+    regularTimes: z
+      .array(TimesheetLineSchema)
+      .optional()
+      .describe("Lignes d'activité normale (production et absences). Omettre pour créer un CRA vide."),
+    exceptionalTimes: z
+      .array(TimesheetLineSchema)
+      .optional()
+      .describe(
+        "Lignes d'activité exceptionnelle (interventions, astreintes) — types `exceptionalTime` / `exceptionalCalendar`."
+      ),
+  })
+  .strict();
+
+export const TimesheetUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID du CRA à modifier"),
+    informationComments: z.string().optional().describe("Commentaires"),
+    closed: z.boolean().optional().describe("Clôturer le CRA"),
+    regularTimes: z
+      .array(TimesheetLineSchema)
+      .optional()
+      .describe(
+        "⚠️ Remplace TOUTES les lignes d'activité normale — envoyer la liste complète (relire le CRA avec `boond_timesheets_get` et fusionner), pas seulement les ajouts."
+      ),
+    exceptionalTimes: z
+      .array(TimesheetLineSchema)
+      .optional()
+      .describe("⚠️ Remplace TOUTES les lignes d'activité exceptionnelle — même règle que `regularTimes`."),
+  })
+  .strict();
+
+export const TimesheetDefaultSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe("ID de la ressource"),
+    term: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .describe("Mois du CRA (YYYY-MM)"),
+    agencyId: EntityIdSchema.optional().describe("ID de l'agence, si la ressource en a plusieurs"),
+  })
+  .strict();
+
+export type TimesheetLineInput = z.infer<typeof TimesheetLineSchema>;
+export type TimesheetCreateInput = z.infer<typeof TimesheetCreateSchema>;
+export type TimesheetUpdateInput = z.infer<typeof TimesheetUpdateSchema>;
+export type TimesheetDefaultInput = z.infer<typeof TimesheetDefaultSchema>;
+
 export const TimesheetGetSchema = z
   .object({
     id: EntityIdSchema.describe("Identifiant unique de la feuille de temps"),

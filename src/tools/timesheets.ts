@@ -1,11 +1,21 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
-  EntityIdSchema,
   ResourceTimesheetSchema,
+  TimesheetCreateSchema,
+  TimesheetDefaultSchema,
   TimesheetGetSchema,
   TimesheetSearchSchema,
+  TimesheetUpdateSchema,
 } from "../schemas/index.js";
-import type { ResourceTimesheetInput, TimesheetSearchInput, TimesheetGetInput } from "../schemas/index.js";
+import type {
+  ResourceTimesheetInput,
+  TimesheetCreateInput,
+  TimesheetDefaultInput,
+  TimesheetLineInput,
+  TimesheetSearchInput,
+  TimesheetGetInput,
+  TimesheetUpdateInput,
+} from "../schemas/index.js";
 import {
   apiRequest,
   apiSearch,
@@ -14,27 +24,150 @@ import {
   formatListResponse,
 } from "../services/boond-client.js";
 import { progressReporterFrom } from "../services/progress.js";
-import { buildJsonApiBody } from "./crud-factory.js";
-import type { JsonApiResource } from "../types.js";
-import { z } from "zod";
+import { buildJsonApiBody, MutationOutputSchema, entityRef } from "./crud-factory.js";
+import type { JsonApiResource, JsonApiResponse } from "../types.js";
 import { composeDescription } from "./description-builders.js";
 
-const TimesheetCreateSchema = z
-  .object({
-    resourceId: EntityIdSchema.describe("ID de la ressource"),
-    projectId: EntityIdSchema.optional().describe("ID du projet"),
-    term: z
-      .string()
-      .regex(/^\d{4}-\d{2}$/)
-      .describe("Mois au format YYYY-MM"),
-    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    totalDays: z.number().optional().describe("Total jours"),
-    totalHours: z.number().optional().describe("Total heures"),
-    state: z.string().optional().describe("État de la feuille de temps"),
-    note: z.string().optional().describe("Notes"),
-  })
-  .strict();
+/**
+ * One CRA line, as the API stores it: nested `workUnitType`, `project`,
+ * `delivery`, `batch` objects around the flat ids the schema takes. A missing
+ * project / delivery / batch is sent as `null`, which is how the API itself
+ * represents an absence line (`GET /times-reports/{id}` → `"project": null`).
+ */
+export function buildTimeLine(line: TimesheetLineInput): Record<string, unknown> {
+  const { workUnitTypeReference, projectId, deliveryId, batchId, ...rest } = line;
+  return {
+    ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+    workUnitType: { reference: workUnitTypeReference },
+    project: projectId === undefined ? null : { id: projectId },
+    delivery: deliveryId === undefined ? null : { id: deliveryId },
+    batch: batchId === undefined ? null : { id: batchId },
+  };
+}
+
+/** Build the `/times-reports` payload: convenience ids → relationships, lines → nested objects. */
+export function buildTimesheetBody(params: Record<string, unknown>): unknown {
+  const { id, resourceId, agencyId, regularTimes, exceptionalTimes, ...attrs } = params;
+  const attributes: Record<string, unknown> = { ...attrs };
+  if (regularTimes !== undefined) attributes.regularTimes = (regularTimes as TimesheetLineInput[]).map(buildTimeLine);
+  if (exceptionalTimes !== undefined) {
+    attributes.exceptionalTimes = (exceptionalTimes as TimesheetLineInput[]).map(buildTimeLine);
+  }
+  return buildJsonApiBody("timesreport", attributes, id as string | undefined, {
+    resource: resourceId ? { id: String(resourceId), type: "resource" } : undefined,
+    agency: agencyId ? { id: String(agencyId), type: "agency" } : undefined,
+  });
+}
+
+interface WorkUnitType {
+  reference?: number;
+  activityType?: string;
+  name?: string;
+}
+
+interface PlannedTime {
+  startDate?: string;
+  duration?: number;
+  workUnitType?: WorkUnitType;
+  project?: { id?: string; reference?: string } | null;
+  delivery?: { id?: string } | null;
+}
+
+/**
+ * Render `/times-reports/default` down to what a caller needs to write lines.
+ *
+ * The response is the only place the work-unit-type codes are published — on
+ * the included **resource** (`workUnitTypesAllowed`), not on the agency and not
+ * in `/application/dictionary` — together with the (project, delivery) pairs
+ * chargeable that month and the `plannedTimes` derived from the deliveries'
+ * planning, which are the lines a filled CRA usually repeats.
+ */
+export function formatTimesheetDefaults(response: JsonApiResponse): string {
+  const entity = (Array.isArray(response.data) ? response.data[0] : response.data) as JsonApiResource | undefined;
+  if (!entity) return "Aucune donnée par défaut retournée pour cette ressource / ce mois.";
+  const attrs = entity.attributes ?? {};
+  const included = response.included ?? [];
+  const byType = (type: string) => included.filter((i) => i.type === type);
+  const resourceRef = entity.relationships?.resource?.data as { id?: string } | undefined;
+  const agencyRef = entity.relationships?.agency?.data as { id?: string } | undefined;
+  const resource = byType("resource").find((r) => r.id === resourceRef?.id) ?? byType("resource")[0];
+  const agency = byType("agency").find((a) => a.id === agencyRef?.id) ?? byType("agency")[0];
+  const resourceAttrs = resource?.attributes ?? {};
+  const agencyAttrs = agency?.attributes ?? {};
+
+  const lines: string[] = [
+    `CRA — ressource #${resource?.id ?? resourceRef?.id ?? "?"}${resourceAttrs.firstName || resourceAttrs.lastName ? ` (${[resourceAttrs.firstName, resourceAttrs.lastName].filter(Boolean).join(" ")})` : ""}, mois ${String(attrs.term ?? "?")}`,
+    `Agence: #${agency?.id ?? "?"}${agencyAttrs.name ? ` (${String(agencyAttrs.name)})` : ""} | Unité d'œuvre: ${String(attrs.workUnitRate ?? agencyAttrs.workUnitRate ?? "?")} | Calendrier: ${String(agencyAttrs.calendar ?? "?")}`,
+  ];
+
+  const types = (resourceAttrs.workUnitTypesAllowed as WorkUnitType[] | undefined) ?? [];
+  lines.push(
+    "",
+    `Types d'unité d'œuvre autorisés (${types.length}) — utiliser \`reference\` comme \`workUnitTypeReference\` :`
+  );
+  lines.push(
+    ...(types.length
+      ? types.map((t) => `  reference=${t.reference} | ${t.name ?? ""} | ${t.activityType ?? ""}`)
+      : ["  (aucun type publié pour cette ressource)"])
+  );
+
+  const projects = byType("project");
+  lines.push("", `Imputations possibles (${projects.length}) — \`projectId\` / \`deliveryId\` :`);
+  if (projects.length === 0) {
+    lines.push(
+      "  (aucune imputation disponible pour cette ressource sur ce mois — seules des absences peuvent être saisies)"
+    );
+  } else {
+    for (const p of projects) {
+      const ref = p.attributes?.reference ?? p.attributes?.title ?? "";
+      const refs = (name: string): string[] =>
+        ((p.relationships?.[name]?.data ?? []) as { id?: string }[]).map((d) => `#${d.id}`);
+      const deliveryIds = refs("deliveries");
+      const batchIds = refs("batches");
+      const parts = [
+        `  projectId=${p.id}`,
+        String(ref),
+        `deliveryId ∈ ${deliveryIds.length ? deliveryIds.join(", ") : "(aucune prestation — imputation impossible)"}`,
+      ];
+      if (batchIds.length) parts.push(`batchId ∈ ${batchIds.join(", ")}`);
+      lines.push(parts.join(" | "));
+    }
+  }
+
+  const planned = (attrs.plannedTimes as PlannedTime[] | undefined) ?? [];
+  const totalPlanned = planned.reduce((n, t) => n + (Number(t.duration) || 0), 0);
+  lines.push(
+    "",
+    `Planning prévu (${planned.length} ligne(s), ${totalPlanned} unité(s)) — base de saisie à confirmer jour par jour :`
+  );
+  if (planned.length === 0) {
+    lines.push("  (aucune ligne planifiée)");
+  } else {
+    const byKey = new Map<string, { count: number; duration: number; first: string; last: string }>();
+    for (const t of planned) {
+      const key = `projectId=${t.project?.id ?? "-"} | deliveryId=${t.delivery?.id ?? "-"} | workUnitTypeReference=${t.workUnitType?.reference ?? "-"} (${t.workUnitType?.name ?? ""})`;
+      const day = t.startDate ?? "";
+      const cur = byKey.get(key) ?? { count: 0, duration: 0, first: day, last: day };
+      cur.count += 1;
+      cur.duration += Number(t.duration) || 0;
+      if (day && (cur.first === "" || day < cur.first)) cur.first = day;
+      if (day && day > cur.last) cur.last = day;
+      byKey.set(key, cur);
+    }
+    for (const [key, v] of byKey)
+      lines.push(`  ${key} : ${v.count} jour(s), ${v.duration} unité(s), du ${v.first} au ${v.last}`);
+  }
+
+  const absences = (attrs.absencesTimes as PlannedTime[] | undefined) ?? [];
+  if (absences.length) {
+    lines.push("", `Absences déjà posées sur le mois (${absences.length}) — ne pas les ressaisir :`);
+    for (const t of absences)
+      lines.push(
+        `  ${t.startDate ?? "?"} | ${t.duration ?? "?"} | ${t.workUnitType?.name ?? ""} (reference=${t.workUnitType?.reference ?? "?"})`
+      );
+  }
+  return lines.join("\n");
+}
 
 /**
  * One line per times report. The rows carry no name / title, so the generic
@@ -59,21 +192,55 @@ export function timesheetSummary(item: JsonApiResource): string {
 
 export function registerTimesheetTools(server: McpServer): void {
   server.registerTool(
+    "boond_timesheets_default",
+    {
+      title: "Référentiels de saisie d'un CRA",
+      description: composeDescription({
+        purpose:
+          "Renvoie ce qu'il faut savoir avant d'écrire le CRA d'une ressource sur un mois : types d'unité d'œuvre autorisés, couples projet/prestation imputables, planning prévu et absences déjà posées.",
+        when: "AVANT `boond_timesheets_create` / `boond_timesheets_update` — les codes `workUnitTypeReference` ne sont publiés nulle part ailleurs (ni dans `boond_application_dictionary`, ni sur `boond_agencies_get`).",
+        instead: "aucun autre outil ne donne ces codes ; `boond_timesheets_get` pour relire un CRA existant.",
+        behaviour: [
+          "Lecture seule (`GET /times-reports/default`). La réponse brute est réduite : les types viennent de la ressource incluse (`workUnitTypesAllowed`), les imputations des projets inclus, le planning de `plannedTimes`.",
+          "Une ressource sans imputation ce mois-là ne peut saisir que des absences.",
+        ],
+        returns:
+          "texte : agence, types d'unité d'œuvre (reference | libellé | activityType), imputations `projectId` / `deliveryId` (et `batchId`), planning prévu agrégé par imputation, absences déjà posées.",
+      }),
+      inputSchema: TimesheetDefaultSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params: TimesheetDefaultInput) => {
+      const query: Record<string, string | number | undefined> = { resource: params.resourceId, term: params.term };
+      if (params.agencyId) query.agency = params.agencyId;
+      const response = await apiRequest("/times-reports/default", "GET", undefined, query);
+      return { content: [{ type: "text" as const, text: formatTimesheetDefaults(response) }] };
+    }
+  );
+
+  server.registerTool(
     "boond_timesheets_create",
     {
       title: "Créer une feuille de temps",
       description: composeDescription({
-        purpose: "Crée la feuille de temps (CRA) d'un mois pour une ressource.",
-        when: "pour ouvrir le CRA d'un couple (ressource, mois) qui n'existe pas encore.",
+        purpose: "Crée la feuille de temps (CRA) d'un mois pour une ressource, avec ses lignes jour par jour.",
+        when: "pour ouvrir le CRA d'un couple (ressource, mois) qui n'existe pas encore, après `boond_timesheets_default`.",
         instead:
-          "`boond_timesheets_search` d'abord : l'API ne déduplique pas, et deux CRA peuvent coexister sur le même mois.",
+          "`boond_timesheets_search` (`startMonth`/`endMonth` + `resourceId`) d'abord : l'API ne déduplique pas, deux CRA peuvent coexister sur le même mois ; `boond_timesheets_update` si le CRA existe déjà.",
         behaviour: [
-          "`term` est le mois au format `YYYY-MM` — un CRA couvre un mois entier, pas une journée.",
-          "Écriture non idempotente.",
+          "Un CRA est un conteneur mensuel (`term` + `resource`) ; les lignes vont dans `regularTimes[]` (production et absences) et `exceptionalTimes[]` — chaque ligne = un jour, une durée, un type d'unité d'œuvre, et pour la production un couple `projectId` / `deliveryId` imputable.",
+          "`state` n'est pas un champ d'écriture : il est piloté par le workflow de validation (`boond_validations_search`).",
+          "Écriture non idempotente. Modèle d'écriture établi en lecture depuis l'API (forme des CRA existants et de `/times-reports/default`), pas encore éprouvé en écriture sur un tenant de test — voir CLAUDE.md.",
         ],
-        returns: "confirmation et fiche du CRA créé.",
+        returns: "confirmation, ID créé (`structuredContent.id`) et fiche du CRA.",
       }),
       inputSchema: TimesheetCreateSchema,
+      outputSchema: MutationOutputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -81,15 +248,8 @@ export function registerTimesheetTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async (params) => {
-      const { resourceId, projectId, ...attrs } = params;
-      const body = buildJsonApiBody("timesreport", attrs);
-      const relationships: Record<string, unknown> = {};
-      if (resourceId) relationships.resource = { data: { id: resourceId, type: "resource" } };
-      if (projectId) relationships.project = { data: { id: projectId, type: "project" } };
-      if (Object.keys(relationships).length > 0) {
-        (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
-      }
+    async (params: TimesheetCreateInput) => {
+      const body = buildTimesheetBody(params as Record<string, unknown>);
       const response = await apiRequest("/times-reports", "POST", body);
       const text = formatDetailResponse(response);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
@@ -97,6 +257,45 @@ export function registerTimesheetTools(server: McpServer): void {
         content: [
           { type: "text" as const, text: `✅ Feuille de temps créée avec succès.\nID: ${entity?.id}\n\n${text}` },
         ],
+        structuredContent: entityRef(response),
+      };
+    }
+  );
+
+  server.registerTool(
+    "boond_timesheets_update",
+    {
+      title: "Modifier une feuille de temps",
+      description: composeDescription({
+        purpose: "Met à jour un CRA existant : commentaires, clôture, ou remplacement complet de ses lignes.",
+        when: "pour compléter ou corriger le CRA d'un mois déjà ouvert (trouvé via `boond_timesheets_search`).",
+        instead: "`boond_timesheets_create` si aucun CRA n'existe encore pour ce couple (ressource, mois).",
+        behaviour: [
+          "Mise à jour partielle sur les champs simples, MAIS `regularTimes` / `exceptionalTimes` **remplacent le tableau entier** : relire le CRA (`boond_timesheets_get`), fusionner, renvoyer la liste complète — envoyer une seule ligne efface le mois.",
+          "`state` n'est pas un champ d'écriture (workflow de validation).",
+        ],
+        returns: "confirmation et fiche du CRA mis à jour.",
+      }),
+      inputSchema: TimesheetUpdateSchema,
+      outputSchema: MutationOutputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (params: TimesheetUpdateInput) => {
+      const body = buildTimesheetBody(params as Record<string, unknown>);
+      const response = await apiRequest(`/times-reports/${params.id}`, "PUT", body);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `✅ Feuille de temps #${params.id} mise à jour.\n\n${formatDetailResponse(response)}`,
+          },
+        ],
+        structuredContent: { id: params.id, ...entityRef(response) },
       };
     }
   );

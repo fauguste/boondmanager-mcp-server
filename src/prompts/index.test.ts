@@ -561,4 +561,37 @@ describe("registerAllPrompts", () => {
       expect(text).toMatch(/aujourd'hui = \d{4}-\d{2}-\d{2}/);
     });
   });
+
+  describe("saisir_cra (#249)", () => {
+    const NOW = new Date(2026, 9, 7);
+    const build = (args: Record<string, string | undefined>) =>
+      PROMPTS.find((p) => p.name === "saisir_cra")!.build(args, NOW);
+
+    it("drives default → search → get/update or create, in that order, with the month resolved server-side", () => {
+      const text = build({});
+      const order = [
+        "boond_timesheets_default",
+        "boond_timesheets_search",
+        "boond_timesheets_get",
+        "boond_timesheets_update",
+        "boond_timesheets_create",
+      ];
+      const positions = order.map((t) => text.indexOf(t));
+      expect(positions.every((p) => p >= 0)).toBe(true);
+      expect(text.indexOf("boond_timesheets_default")).toBeLessThan(text.indexOf("boond_timesheets_search"));
+      expect(text).toContain('term = "2026-10"');
+      expect(text).toContain('startMonth: "2026-10"');
+      expect(build({ term: "2026-08" })).toContain('term = "2026-08"');
+    });
+
+    it("waits for the user, warns that update replaces every line, and does not promise a state change", () => {
+      const text = build({ resource_id: "30888", consignes: "RTT le 12" });
+      expect(text).toContain("ATTENDRE la validation de l'utilisateur");
+      expect(text).toContain("remplace tout le tableau");
+      expect(text).toContain("`state` n'est pas modifiable ici");
+      expect(text).toContain("Consignes de l'utilisateur : « RTT le 12 »");
+      expect(text).toContain('resourceId: "30888"');
+      expect(text).not.toContain("boond_application_dictionary` pour les types");
+    });
+  });
 });

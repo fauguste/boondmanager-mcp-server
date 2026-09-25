@@ -2,7 +2,7 @@
   "name": "boondmanager-mcp",
   "displayName": "BoondManager MCP Server",
   "version": "2.16.0",
-  "description": "MCP Server for BoondManager API - 182 tools, 12 prompts, 22 resources (ERP/CRM)",
+  "description": "MCP Server for BoondManager API - 185 tools, 13 prompts, 22 resources (ERP/CRM)",
   "author": {
     "name": "Silamir",
     "url": "https://www.silamir.com"

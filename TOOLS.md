@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**182 tools** across **38 domains** · **12 prompts** · **22 resources** · **6 resource templates**.
+**185 tools** across **38 domains** · **13 prompts** · **22 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -335,13 +335,15 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_threads_get` | Détails d'un(e) fil de discussion | read · idempotent |
 | `boond_threads_search` | Rechercher des fils de discussion | read · idempotent · open-world |
 
-### timesheets (3)
+### timesheets (5)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_timesheets_create` | Créer une feuille de temps | write |
+| `boond_timesheets_default` | Référentiels de saisie d'un CRA | read · idempotent |
 | `boond_timesheets_get` | Détails d'une feuille de temps | read · idempotent |
 | `boond_timesheets_search` | Rechercher des feuilles de temps | read · idempotent · open-world |
+| `boond_timesheets_update` | Modifier une feuille de temps | write · idempotent |
 
 ### todolists (2)
 
@@ -364,7 +366,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_webhooks_get` | Détails d'un(e) webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
-### workflow (12)
+### workflow (13)
 
 | Tool | Title | Hints |
 |---|---|---|
@@ -377,11 +379,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_workflow_pipeline_commercial` | Pipeline commercial sur une période | read · idempotent |
 | `boond_workflow_recap_hebdo` | Récap hebdomadaire (moi + mon équipe) | read · idempotent |
 | `boond_workflow_recherche_profil_competences` | Recherche multi-source d'un profil par compétences | read · idempotent |
+| `boond_workflow_saisir_cra` | Saisir ou compléter un CRA | read · idempotent |
 | `boond_workflow_staffing_disponible` | Consultants disponibles pour un staffing | read · idempotent |
 | `boond_workflow_synthese_equipe` | Synthèse d'une équipe | read · idempotent |
 | `boond_workflow_traiter_note_de_frais` | Traiter un justificatif en note de frais | read · idempotent |
 
-## Prompts (12)
+## Prompts (13)
 
 Pre-orchestrated workflows surfaced via the MCP prompts API.
 
@@ -396,6 +399,7 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `pipeline_commercial` | Pipeline commercial sur une période | `date_debut` `date_fin` `manager_id?` |
 | `recap_hebdo` | Récap hebdomadaire (moi + mon équipe) | `semaine?` |
 | `recherche_profil_competences` | Recherche multi-source d'un profil par compétences | `competences` `experience_min?` `dispo_avant?` `inclure_candidats?` `manager_id?` |
+| `saisir_cra` | Saisir ou compléter un CRA | `resource_id?` `term?` `consignes?` |
 | `staffing_disponible` | Consultants disponibles pour un staffing | `start_date` `end_date` `competences?` `manager_id?` |
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |
 | `traiter_note_de_frais` | Traiter un justificatif en note de frais | `resource_id?` `project_id?` `term?` `contexte?` |

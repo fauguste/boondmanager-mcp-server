@@ -847,6 +847,71 @@ export const PROMPTS: PromptDefinition[] = [
       return lines.filter(Boolean).join("\n");
     },
   },
+
+  {
+    name: "saisir_cra",
+    title: "Saisir ou compléter un CRA",
+    description:
+      "Saisit la feuille de temps (CRA) d'un collaborateur pour un mois : référentiels de saisie, planning prévu, " +
+      "vérification d'un CRA existant, récapitulatif validé par l'utilisateur, puis création ou mise à jour.",
+    argsSchema: {
+      resource_id: z
+        .string()
+        .optional()
+        .describe(
+          "Collaborateur concerné. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, `boond_application_current_user` est appelé pour le récupérer."
+        ),
+      term: z.string().optional().describe("Mois du CRA (YYYY-MM). Défaut : mois en cours."),
+      consignes: z
+        .string()
+        .optional()
+        .describe("Précisions libres (ex: « 2 jours de RTT les 12 et 13 », « demi-journée le 20 sur le projet X »)."),
+    },
+    domains: ["timesheets", "application"],
+    build: ({ resource_id, term, consignes }, now = new Date()) => {
+      const bounds = periodBounds(term, now, "month");
+      const month = bounds ? bounds.startMonth : (term ?? "").trim();
+      const lines: string[] = [`Saisis le CRA du mois ${month || "<YYYY-MM>"} dans BoondManager.`, ""];
+      let resourceLit = "<RESOURCE_ID>";
+      let resourceStep: string;
+      if (resource_id) {
+        const r = resolveEntity(resource_id, "resource", "<RESOURCE_ID>");
+        if (r.preamble) lines.push(r.preamble);
+        resourceLit = r.idForFilter;
+        resourceStep = `Le collaborateur concerné a pour ID \`${resourceLit}\`.`;
+      } else {
+        resourceStep = "Appeler `boond_application_current_user` pour obtenir mon ID → ce sera `<RESOURCE_ID>`.";
+      }
+      lines.push(
+        consignes ? `Consignes de l'utilisateur : « ${consignes} ».` : "",
+        consignes ? "" : "",
+        "Étapes :",
+        "",
+        `**1. Identifier le collaborateur et le mois.** ${resourceStep} Le mois est \`term = "${month || "<YYYY-MM>"}"\`${bounds ? ` (du ${bounds.startDate} au ${bounds.endDate})` : ""}.`,
+        "",
+        `**2. Récupérer les référentiels de saisie** : \`boond_timesheets_default\` avec \`resourceId: "${resourceLit}"\` et ce \`term\`. Il retourne :`,
+        "   - les **types d'unité d'œuvre** autorisés pour cette ressource (`reference` + libellé + `activityType` : production / absence / exceptionalTime) — ils ne sont **pas** dans `boond_application_dictionary` ;",
+        "   - les couples `projectId` / `deliveryId` imputables ce mois-là — obligatoires sur chaque ligne de production ;",
+        "   - le **planning prévu** (jours et imputations issus des prestations) et les absences déjà posées.",
+        "   - Aucune imputation disponible → seules des absences peuvent être saisies ; le signaler.",
+        "",
+        `**3. Vérifier si un CRA existe déjà** : \`boond_timesheets_search\` avec \`startMonth: "${month || "<YYYY-MM>"}"\`, \`endMonth: "${month || "<YYYY-MM>"}"\`, \`resourceId: "${resourceLit}"\`.`,
+        "   - ⚠️ L'API **ne déduplique pas** : vérifier, pas supposer. CRA existant → le relire avec `boond_timesheets_get` (ses lignes actuelles) et le compléter à l'étape 5 via `boond_timesheets_update` ; aucun → `boond_timesheets_create`.",
+        "",
+        "**4. Construire les lignes et ATTENDRE la validation de l'utilisateur.** Partir du planning prévu, appliquer les consignes (absences, demi-journées, jours non travaillés), une ligne par jour : `startDate`, `duration` (1 = journée, 0.5 = demi-journée), `workUnitTypeReference`, et pour la production `projectId` + `deliveryId`.",
+        "   - Présenter un tableau : jour | durée | type (libellé + `reference`) | projet / prestation. Puis le total du mois. Ne pas écrire avant un « oui » explicite.",
+        "   - Ne jamais inventer une imputation : un couple hors de la liste de l'étape 2 est refusé par l'API.",
+        "",
+        "**5. Écrire.** Nouveau CRA → `boond_timesheets_create` (`resourceId`, `term`, `regularTimes[]`). CRA existant → `boond_timesheets_update` avec la liste **complète** des lignes (les lignes existantes fusionnées avec les nouvelles) : `regularTimes` remplace tout le tableau, une liste partielle efface le reste du mois.",
+        "   - `state` n'est pas modifiable ici : la validation passe par le workflow BoondManager (`boond_validations_search` pour suivre).",
+        "",
+        "**6. Confirmer** : ID du CRA, nombre de jours saisis par imputation, et rappeler que le CRA reste à soumettre / valider dans BoondManager."
+      );
+      return lines.filter(Boolean).join("\n");
+    },
+  },
 ];
 
 // ---- Assisted entry of entity arguments (`completions/complete`, issue #260) --
