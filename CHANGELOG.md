@@ -3,6 +3,26 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.16.0] - 2026-09-25
+
+Le projet passe sous la bannière **[Silamir](https://www.silamir.com)** : le dépôt a été transféré de `fauguste/boondmanager-mcp-server` vers `silamir/boondmanager-mcp-server`. **Aucun changement de code serveur** — le catalogue (182 outils, 12 prompts, 22 ressources, 6 templates), les schémas annoncés et le comportement d'exécution sont identiques à la 2.15.2. Ce qui change relève de l'identité et de la distribution.
+
+**Le nom du package npm est inchangé** (`boondmanager-mcp-server`) : tous les pins `npx`, les boutons d'installation 1-clic (Cursor, VS Code), le `.mcp.json` du plugin Claude Code et les configurations existantes continuent de fonctionner sans rien modifier.
+
+### Changed
+
+- **Identifiants indexés sur le propriétaire du dépôt.** GitHub sert des redirections permanentes depuis l'ancien chemin, mais trois canaux sont indexés sur le *owner* et ne redirigent pas : les URLs `github.com` / `raw.githubusercontent.com` sont repointées, les images de conteneur passent à `ghcr.io/silamir/boondmanager-mcp-server`, et le plugin Claude Code s'installe désormais avec `/plugin marketplace add silamir/boondmanager-mcp-server`.
+- **Nouvelle entrée au MCP Registry : `io.github.silamir/boondmanager-mcp-server`.** Le namespace `io.github.<owner>` est vérifié par OIDC contre le propriétaire du dépôt, il n'existe donc pas de renommage : cette version crée une **nouvelle entrée**, et l'ancienne (`io.github.fauguste/...`) reste figée en 2.15.2 puis sera dépréciée. Un client qui référence l'ancien identifiant doit basculer sur le nouveau ; celui qui installe via npm n'a rien à faire.
+- **Copyright et licence.** `LICENSE` et `NOTICE` portent désormais « Copyright 2025-2026 Silamir ». La licence reste **Apache-2.0**, inchangée, et la paternité d'origine est créditée dans `NOTICE`. Les champs author/owner de `package.json`, `manifest.json`, `marketplace.json` et du `plugin.json` généré désignent Silamir.
+- **Icône du serveur.** `icon.png` devient la marque Silamir (blanc sur le bleu `#1959FF`). Elle remplace le logo BoondManager, qui était la marque d'un tiers employée par un connecteur tiers ; l'icône attribue maintenant correctement l'éditeur du serveur. Elle est visible dans Claude Desktop et sur la fiche du MCP Registry.
+- **Mention de non-affiliation.** `NOTICE` et le README précisent que BoondManager est une marque de BoondManager SAS et que ce projet est un client indépendant et non officiel de son API publique.
+
+### Notes de distribution
+
+- **Docker Hub reste publié sous `fauguste/boondmanager-mcp-server`** : il n'existe pas encore d'organisation Silamir sur ce registre. C'est le seul endroit où les deux espaces de noms divergent légitimement, d'où les badges README pointant vers deux propriétaires différents.
+- **Les fiches Glama, Smithery et LobeHub** conservent leur ancien slug jusqu'au prochain ré-indexage de ces services, qu'ils déclenchent eux-mêmes. Les modifier par avance produirait des liens morts ; `docs/distribution.md` documente les slugs attendus et le moment de les vérifier.
+- **Les images publiées avant le transfert restent sur `ghcr.io/fauguste/...`** et ne sont pas redirigées — les références correspondantes dans les entrées antérieures de ce changelog sont donc exactes et laissées telles quelles.
+
 ## [2.15.2] - 2026-09-20
 
 Correction du **pipeline de release** ; aucun changement de code serveur depuis la 2.15.1 (catalogue, schémas et comportement identiques). Cette version existe parce que la 2.15.1 n'a pas pu être publiée entièrement et qu'elle n'était pas rejouable — deux défauts distincts, tous deux corrigés ici.
