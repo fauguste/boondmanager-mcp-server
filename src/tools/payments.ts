@@ -77,15 +77,16 @@ export function registerPaymentTools(server: McpServer): void {
     "boond_payments_search",
     {
       title: "Rechercher des paiements",
-      description: `Recherche des paiements / reglements dans BoondManager.
-
-Args:
-  - keywords (string, optional): Termes de recherche. Utiliser ACH<id>, CSOC<id>, PRJ<id> selon la doc Boond pour filtrer par achat, societe ou projet.
-  - invoiceId, companyId (string, optional): Conserves pour compatibilite, transmis comme query params si fournis.
-  - startDate, endDate (string, optional): Periode (YYYY-MM-DD)
-  - page, pageSize: Pagination
-
-Returns: Liste des paiements correspondants.`,
+      description: composeDescription({
+        purpose: "Recherche des paiements / règlements fournisseur dans BoondManager.",
+        when: "pour retrouver les règlements adossés à un achat, une société, un projet ou une ressource, ou ceux d'une période.",
+        instead:
+          "`boond_purchases_search` pour les achats eux-mêmes, `boond_provider_invoices_search` pour les factures fournisseur.",
+        behaviour: [
+          "`purchaseId`, `companyId`, `projectId` et `resourceId` sont convertis en préfixes `keywords` (`ACH<id>`, `CSOC<id>`, `PRJ<id>`, `COMP<id>`) et concaténés aux `keywords` fournis ; `invoiceId`, `startDate` et `endDate` sont transmis tels quels en paramètres de requête.",
+        ],
+        returns: "page de résumés des paiements (ID + libellé principal). Lecture seule.",
+      }),
       inputSchema: PaymentSearchSchema,
       annotations: {
         readOnlyHint: true,

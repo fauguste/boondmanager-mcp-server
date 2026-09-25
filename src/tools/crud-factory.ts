@@ -102,7 +102,7 @@ export function buildListStructured(response: JsonApiResponse, fields?: string[]
   };
 }
 
-function entityRef(response: JsonApiResponse): z.infer<typeof MutationOutputSchema> {
+export function entityRef(response: JsonApiResponse): z.infer<typeof MutationOutputSchema> {
   const entity = Array.isArray(response.data) ? response.data[0] : response.data;
   const ref: z.infer<typeof MutationOutputSchema> = {};
   if (entity?.id !== undefined) ref.id = String(entity.id);

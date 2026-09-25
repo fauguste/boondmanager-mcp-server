@@ -39,7 +39,7 @@ import {
   registerPlanningAbsenceTools,
   registerWorkflowTools,
 } from "./index.js";
-import { registerAllPrompts } from "../prompts/index.js";
+import { registerAllPrompts, PROMPTS } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
 import { SERVER_INSTRUCTIONS } from "../instructions.js";
 import { connectMcpClient, useDefaultServerSurface } from "./test-helpers.js";
@@ -226,6 +226,70 @@ describe("advertised tool descriptions", () => {
     const legacy = "  - pageSize (number): Résultats par page (défaut: 20, max: 100)";
     const claimed = [...legacy.matchAll(/pageSize[^.\n]*?(\d{2,4})/g)].map((m) => Number(m[1]));
     expect(claimed.some((n) => n !== MAX_PAGE_SIZE && n !== DEFAULT_PAGE_SIZE)).toBe(true);
+  });
+});
+
+/**
+ * Every `boond_*` token the model can read must name a tool that exists.
+ *
+ * A description whose "Plutôt que" sends the model to `boond_contracts_search`
+ * — a tool that was never registered — costs one failed call and, in the case
+ * that motivated this (#229), skips the duplicate check the description asked
+ * for. The description contract says an `instead` names a real sibling; this
+ * is the half of it that can be verified. The surfaces scanned are the ones a
+ * client actually receives: tool descriptions and schemas, prompt descriptions
+ * and the runbook each prompt builds (the `boond_workflow_*` mirrors return the
+ * same text), resource and template descriptions, and the server instructions.
+ *
+ * A token ending in `_` (`boond_reporting_`, `boond_resources_reference_`) is a
+ * family reference and must match at least one registered tool.
+ */
+describe("tool names cited across the catalogue", () => {
+  useDefaultServerSurface();
+
+  it("resolve to registered tools — no phantom `boond_*` reference anywhere the model can read", async () => {
+    const { client, close } = await connectMcpClient();
+    const surfaces: Array<{ where: string; text: string }> = [];
+    let registered: Set<string>;
+    try {
+      const tools = (await client.listTools()).tools;
+      registered = new Set(tools.map((t) => t.name));
+      for (const t of tools) {
+        surfaces.push({
+          where: `tool ${t.name}`,
+          text: `${t.description ?? ""} ${JSON.stringify(t.inputSchema)} ${JSON.stringify(t.outputSchema ?? {})}`,
+        });
+      }
+      for (const p of (await client.listPrompts()).prompts) {
+        surfaces.push({ where: `prompt ${p.name}`, text: p.description ?? "" });
+      }
+      for (const r of (await client.listResources()).resources) {
+        surfaces.push({ where: `resource ${r.uri}`, text: r.description ?? "" });
+      }
+      for (const r of (await client.listResourceTemplates()).resourceTemplates) {
+        surfaces.push({ where: `template ${r.uriTemplate}`, text: r.description ?? "" });
+      }
+    } finally {
+      await close();
+    }
+    surfaces.push({ where: "SERVER_INSTRUCTIONS", text: SERVER_INSTRUCTIONS });
+    for (const p of PROMPTS) {
+      // Every prompt argument is a string; "1" satisfies ids, periods and counts alike.
+      const args = Object.fromEntries(Object.keys(p.argsSchema).map((k) => [k, "1"]));
+      surfaces.push({ where: `prompt ${p.name} runbook`, text: p.build(args) });
+    }
+
+    const phantoms: string[] = [];
+    for (const { where, text } of surfaces) {
+      for (const [token] of text.matchAll(/boond_[a-z0-9_]+/g)) {
+        const isFamily = token.endsWith("_");
+        const known = isFamily ? [...registered!].some((name) => name.startsWith(token)) : registered!.has(token);
+        if (!known) phantoms.push(`${where}: ${token}`);
+      }
+    }
+    expect([...new Set(phantoms)]).toEqual([]);
+    // Guards against the assertion passing because nothing was scanned.
+    expect(surfaces.length).toBeGreaterThan(200);
   });
 });
 

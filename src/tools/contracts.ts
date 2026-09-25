@@ -1,14 +1,20 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { EntityIdSchema, IdSchema } from "../schemas/index.js";
 import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
-import { buildJsonApiBody } from "./crud-factory.js";
+import { buildJsonApiBody, entityRef, MutationOutputSchema } from "./crud-factory.js";
 import { z } from "zod";
-import { composeDescription, defaultGetDescription } from "./description-builders.js";
+import { composeDescription } from "./description-builders.js";
 
 const ContractCreateSchema = z
   .object({
     resourceId: EntityIdSchema.optional().describe("ID de la ressource associée"),
-    typeOf: z.string().optional().describe("Type de contrat (CDI, CDD, freelance...)"),
+    typeOf: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Type de contrat : ID entier du dictionnaire `setting.typeOf.contract` (CDI, CDD, freelance…), via `boond_application_dictionary`"
+      ),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes / commentaires"),
@@ -20,9 +26,18 @@ export function registerContractTools(server: McpServer): void {
     "boond_contracts_get",
     {
       title: "Détails d'un contrat",
-      description: defaultGetDescription({
-        ...{ entityName: "contrat", entityNamePlural: "contrats", prefix: "boond_contracts" },
-        withTab: false,
+      // Hand-written rather than `defaultGetDescription`: that template names
+      // `${prefix}_search` as the id source, and this domain has no search tool
+      // (#229). Contract ids come from the resource's administrative tab.
+      description: composeDescription({
+        purpose: "Récupère la fiche complète d'un contrat de travail par son ID numérique.",
+        when: "après `boond_resources_administrative`, dont la relation `contracts` liste les contrats d'une ressource avec leurs IDs.",
+        instead:
+          "`boond_resources_administrative` pour lister les contrats d'une ressource — il n'existe pas d'outil de recherche de contrats, et cet outil n'accepte pas de nom.",
+        behaviour: [
+          "Un ID inconnu remonte l'erreur BoondManager telle quelle — l'ID doit venir de la relation `contracts` d'une ressource, jamais d'une supposition.",
+        ],
+        returns: "JSON du contrat (attributs + relations) tel que renvoyé par l'API. Lecture seule.",
       }),
       inputSchema: IdSchema,
       annotations: {
@@ -48,14 +63,15 @@ export function registerContractTools(server: McpServer): void {
         purpose: "Crée un contrat de travail rattaché à une ressource.",
         when: "pour enregistrer un nouveau contrat (embauche, avenant, renouvellement).",
         instead:
-          "`boond_contracts_search` d'abord, pour vérifier qu'un contrat couvrant la même période n'existe pas déjà.",
+          "`boond_resources_administrative` d'abord (relation `contracts`), pour vérifier qu'un contrat couvrant la même période n'existe pas déjà — il n'existe pas d'outil de recherche de contrats.",
         behaviour: [
           "Écriture non idempotente : deux appels identiques créent deux contrats.",
-          "Le type de contrat est un ID entier du dictionnaire (`boond://dictionary/typeOf/contracts`), pas un libellé.",
+          "`typeOf` est un ID entier du dictionnaire `setting.typeOf.contract` (`boond_application_dictionary`), pas un libellé.",
         ],
         returns: "confirmation et fiche du contrat créé, avec son ID dans `structuredContent.id`.",
       }),
       inputSchema: ContractCreateSchema,
+      outputSchema: MutationOutputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -80,6 +96,7 @@ export function registerContractTools(server: McpServer): void {
             text: `✅ Contrat créé avec succès.\nID: ${entity?.id}\n\n${formatDetailResponse(response)}`,
           },
         ],
+        structuredContent: entityRef(response),
       };
     }
   );
