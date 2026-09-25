@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as boondClient from "./boond-client.js";
-import { getDictionary, resolveDictionaryPath, resetDictionaryCacheForTests } from "./dictionary.js";
+import { oauthContext } from "./oauth.js";
+import {
+  MAX_DICTIONARY_CACHE_ENTRIES,
+  currentAuthIdentity,
+  dictionaryCacheSizeForTests,
+  getDictionary,
+  resolveDictionaryPath,
+  resetDictionaryCacheForTests,
+} from "./dictionary.js";
 
 describe("dictionary service", () => {
   beforeEach(() => {
@@ -101,6 +109,133 @@ describe("dictionary service", () => {
       await new Promise((r) => setTimeout(r, 5));
       await getDictionary();
       expect(apiSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("cache isolation by auth identity and language (#226)", () => {
+    const fr = { data: { setting: { lang: "fr" } } };
+    const en = { data: { setting: { lang: "en" } } };
+
+    function mockByLanguage() {
+      return vi
+        .spyOn(boondClient, "apiRequest")
+        .mockImplementation(
+          async (_path, _method, _body, query) =>
+            ((query as { language?: string } | undefined)?.language === "en" ? en : fr) as never
+        );
+    }
+
+    it("reports a constant identity outside an OAuth request context (stdio / static auth)", () => {
+      expect(currentAuthIdentity()).toBe("env");
+    });
+
+    it("derives the identity from a hash of the OAuth token, never the token itself", () => {
+      const id = oauthContext.run({ accessToken: "secret-token-A" }, () => currentAuthIdentity());
+      expect(id).toMatch(/^oauth:[0-9a-f]{64}$/);
+      expect(id).not.toContain("secret-token-A");
+      const again = oauthContext.run({ accessToken: "secret-token-A" }, () => currentAuthIdentity());
+      expect(again).toBe(id);
+      const other = oauthContext.run({ accessToken: "secret-token-B" }, () => currentAuthIdentity());
+      expect(other).not.toBe(id);
+    });
+
+    it("does not serve tenant A's dictionary to a request carrying tenant B's token", async () => {
+      const apiSpy = vi
+        .spyOn(boondClient, "apiRequest")
+        .mockResolvedValueOnce({ data: { setting: { tenant: "A" } } } as never)
+        .mockResolvedValueOnce({ data: { setting: { tenant: "B" } } } as never);
+
+      const a = await oauthContext.run({ accessToken: "token-A" }, () => getDictionary());
+      const b = await oauthContext.run({ accessToken: "token-B" }, () => getDictionary());
+
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      expect(a.payload).toEqual({ data: { setting: { tenant: "A" } } });
+      expect(b.payload).toEqual({ data: { setting: { tenant: "B" } } });
+
+      // Each identity keeps its own entry: a second read for A is a hit on A's payload.
+      const aAgain = await oauthContext.run({ accessToken: "token-A" }, () => getDictionary());
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      expect(aAgain).toBe(a);
+    });
+
+    it("isolates the OAuth entries from the env identity", async () => {
+      const apiSpy = vi
+        .spyOn(boondClient, "apiRequest")
+        .mockResolvedValueOnce({ data: { setting: { who: "env" } } } as never)
+        .mockResolvedValueOnce({ data: { setting: { who: "oauth" } } } as never);
+      const env = await getDictionary();
+      const oauth = await oauthContext.run({ accessToken: "token" }, () => getDictionary());
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      expect(env.payload).not.toEqual(oauth.payload);
+    });
+
+    it("keeps one entry per language for the same identity instead of thrashing", async () => {
+      const apiSpy = mockByLanguage();
+      await getDictionary({ language: "fr" });
+      await getDictionary({ language: "en" });
+      const fr2 = await getDictionary({ language: "fr" });
+      const en2 = await getDictionary({ language: "en" });
+      // Two languages, two fetches — the fr entry survived the en fetch.
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      expect(fr2.payload).toEqual(fr);
+      expect(en2.payload).toEqual(en);
+    });
+
+    it("does not answer a concurrent `en` request with the `fr` payload still in flight", async () => {
+      const resolvers: Array<{ language: string; resolve: (v: unknown) => void }> = [];
+      const apiSpy = vi.spyOn(boondClient, "apiRequest").mockImplementation(
+        (_path, _method, _body, query) =>
+          new Promise((resolve) => {
+            resolvers.push({ language: (query as { language: string }).language, resolve });
+          })
+      );
+      const pFr = getDictionary({ language: "fr" });
+      const pEn = getDictionary({ language: "en" });
+      expect(apiSpy).toHaveBeenCalledTimes(2);
+      expect(resolvers.map((r) => r.language)).toEqual(["fr", "en"]);
+      resolvers[0]!.resolve(fr);
+      resolvers[1]!.resolve(en);
+      const [rFr, rEn] = await Promise.all([pFr, pEn]);
+      expect(rFr.language).toBe("fr");
+      expect(rFr.payload).toEqual(fr);
+      expect(rEn.language).toBe("en");
+      expect(rEn.payload).toEqual(en);
+    });
+
+    it("still deduplicates concurrent fetches for the same identity and language", async () => {
+      let resolve!: (v: unknown) => void;
+      const apiSpy = vi.spyOn(boondClient, "apiRequest").mockImplementation(
+        () =>
+          new Promise((res) => {
+            resolve = res;
+          })
+      );
+      const run = () => oauthContext.run({ accessToken: "token-A" }, () => getDictionary());
+      const p1 = run();
+      const p2 = run();
+      resolve(fr);
+      const [r1, r2] = await Promise.all([p1, p2]);
+      expect(apiSpy).toHaveBeenCalledTimes(1);
+      expect(r1).toBe(r2);
+    });
+
+    it("bounds the cache to MAX_DICTIONARY_CACHE_ENTRIES, evicting the least recently used", async () => {
+      const apiSpy = vi.spyOn(boondClient, "apiRequest").mockResolvedValue(fr as never);
+      const read = (n: number) => oauthContext.run({ accessToken: `token-${n}` }, () => getDictionary());
+
+      for (let i = 0; i < MAX_DICTIONARY_CACHE_ENTRIES; i++) await read(i);
+      expect(dictionaryCacheSizeForTests()).toBe(MAX_DICTIONARY_CACHE_ENTRIES);
+
+      // Touch entry 0 so it becomes the most recently used, then overflow by one.
+      await read(0);
+      await read(MAX_DICTIONARY_CACHE_ENTRIES);
+      expect(dictionaryCacheSizeForTests()).toBe(MAX_DICTIONARY_CACHE_ENTRIES);
+
+      const before = apiSpy.mock.calls.length;
+      await read(0); // survived (recently used) → hit
+      expect(apiSpy.mock.calls.length).toBe(before);
+      await read(1); // oldest untouched → evicted → refetch
+      expect(apiSpy.mock.calls.length).toBe(before + 1);
     });
   });
 
