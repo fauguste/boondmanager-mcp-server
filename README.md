@@ -31,7 +31,7 @@
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager, permettant a Claude (Desktop, Cowork, Code) de rechercher, consulter, creer et modifier des enregistrements dans votre instance BoondManager.
 
-**182 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
+**185 outils** couvrant **38 domaines** de l'API BoondManager. Voir [TOOLS.md](./TOOLS.md) pour le catalogue auto-généré (outils + prompts + ressources).
 
 > **Sorties structurées.** En plus du texte lisible, les outils `search`, `create`, `update` et `delete` renvoient un `structuredContent` conforme à un `outputSchema` MCP : `search` → `{ total?, count, items[] }` (résumés compacts, pas les ressources JSON:API complètes), `create`/`update` → `{ id?, type? }`, `delete` → `{ id, deleted, reason? }`. Les clients MCP qui exploitent les sorties structurées obtiennent une référence d'entité fiable pour chaîner les appels. Les outils `get` restent en texte seul (leur texte est déjà du JSON exploitable).
 
@@ -928,7 +928,7 @@ sur leurs schemas (le SDK MCP convertit les schemas Zod avec `target: 'draft-7'`
 qui valide avec un validateur **2020-12 uniquement** refuse de compiler un tel schema.
 
 **Correctif : mettre a jour vers >= 2.12.2.** Depuis cette version le serveur n'annonce plus
-aucun dialecte (`src/schema-dialect.ts`), ce que la suite de tests verifie sur les 182 outils
+aucun dialecte (`src/schema-dialect.ts`), ce que la suite de tests verifie sur les 185 outils
 a travers un vrai client, sous validateur 2020-12 **et** draft-07.
 
 **Redemarrer le connecteur ne suffit pas** : un redemarrage relance le binaire installe, il ne le

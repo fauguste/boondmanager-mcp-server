@@ -60,9 +60,9 @@ ces regroupements, prêts à l'emploi — définis dans
 | Profil | Domaines | Outils | Prompts |
 |--------|----------|--------|---------|
 | `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 88 | 9 |
-| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, application, workflows | 105 | 8 |
+| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, application, workflows | 108 | 9 |
 | `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 61 | 2 |
-| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 53 | 5 |
+| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 56 | 6 |
 | `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |
 | *(aucun)* | tous | 182 | 12 |
 
@@ -80,7 +80,7 @@ Notes :
   `finance` ni `admin`. Il n'y a pas de règle « `resources` partout » : la règle
   est **par profil, en comptant les prompts qu'il conserve**. Un prompt est coupé
   dès qu'**un** des domaines de son runbook manque (règle détaillée plus bas), et
-  8 des 12 prompts orchestrent `resources` : sans lui, `recruiting` tombait à 2
+  8 des 13 prompts orchestrent `resources` : sans lui, `recruiting` tombait à 2
   prompts et `sales` à 1, soit ~10 outils gagnés contre la quasi-totalité des
   runbooks — mauvais échange pour une couche dont le but est l'ergonomie. C'est
   aussi ce que ces métiers utilisent réellement (un recruteur compare candidats
