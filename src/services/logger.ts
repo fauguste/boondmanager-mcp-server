@@ -1,4 +1,5 @@
 import pino from "pino";
+import { readString } from "../config/env.js";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -44,14 +45,14 @@ const VALID_LEVELS: readonly pino.Level[] = ["trace", "debug", "info", "warn", "
  * in production. Pino's level hierarchy: trace < debug < info < warn < error < fatal.
  */
 export function resolveLogLevel(env: NodeJS.ProcessEnv = process.env): pino.Level {
-  const raw = env.LOG_LEVEL?.toLowerCase();
+  const raw = readString("LOG_LEVEL", env)?.trim().toLowerCase();
   if (raw && VALID_LEVELS.includes(raw as pino.Level)) return raw as pino.Level;
   return "info";
 }
 
 /** Human-readable (pretty) output in dev, JSON in prod. Override via LOG_FORMAT. */
 export function usePrettyOutput(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.LOG_FORMAT !== "json" && env.NODE_ENV !== "production";
+  return readString("LOG_FORMAT", env)?.trim() !== "json" && readString("NODE_ENV", env)?.trim() !== "production";
 }
 
 export type LoggerConfig =

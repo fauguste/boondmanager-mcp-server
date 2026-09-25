@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import { readBool } from "../config/env.js";
 
 const NPM_REGISTRY_URL = "https://registry.npmjs.org";
 const DEFAULT_TIMEOUT_MS = 3000;
@@ -62,8 +63,7 @@ export async function checkForUpdate(opts: {
 }
 
 export function isUpdateCheckDisabled(): boolean {
-  const raw = (process.env["BOOND_DISABLE_UPDATE_CHECK"] ?? "").toLowerCase().trim();
-  return raw === "1" || raw === "true" || raw === "yes";
+  return readBool("BOOND_DISABLE_UPDATE_CHECK", false);
 }
 
 export async function runUpdateNotification(opts: {

@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { readBool, readString } from "./env.js";
 import { REGISTERED_DOMAINS } from "../constants.js";
 import { logger } from "../services/logger.js";
 import { PROFILE_NAMES, resolveProfile } from "./profiles.js";
@@ -55,14 +56,6 @@ export interface AccessPolicy {
 // --- Env parsing helpers (mirroring the patterns already used across the
 // codebase: see transports/http.ts, services/oauth.ts, services/update-checker.ts) ---
 
-function readEnv(env: NodeJS.ProcessEnv, key: string): string | undefined {
-  const raw = env[key];
-  if (raw === undefined) return undefined;
-  // Ignore unresolved placeholders like "${SOMETHING}" (same guard as http.ts).
-  if (raw.startsWith("${")) return undefined;
-  return raw;
-}
-
 /** Split a CSV / whitespace-separated env value into trimmed, non-empty tokens. */
 function parseList(raw: string | undefined): string[] {
   if (!raw) return [];
@@ -70,11 +63,6 @@ function parseList(raw: string | undefined): string[] {
     .split(/[\s,]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-}
-
-function parseBoolean(raw: string | undefined): boolean {
-  const v = (raw ?? "").toLowerCase().trim();
-  return v === "1" || v === "true" || v === "yes";
 }
 
 /** Normalise a user-supplied domain to the canonical (dash, lowercase) form. */
@@ -162,9 +150,9 @@ export function resolveAccessPolicy(env: NodeJS.ProcessEnv = process.env): Acces
   const known = new Set<string>(REGISTERED_DOMAINS);
 
   // --- Domains ---
-  const allowItems = parseList(readEnv(env, "BOOND_MCP_DOMAINS"));
-  const profileItems = parseList(readEnv(env, "BOOND_MCP_PROFILE"));
-  const excludeItems = parseList(readEnv(env, "BOOND_MCP_EXCLUDE_DOMAINS"));
+  const allowItems = parseList(readString("BOOND_MCP_DOMAINS", env));
+  const profileItems = parseList(readString("BOOND_MCP_PROFILE", env));
+  const excludeItems = parseList(readString("BOOND_MCP_EXCLUDE_DOMAINS", env));
 
   // Explicit domains win over a profile bundle: the operator who listed
   // domains by hand is the one who knows exactly what they want exposed.
@@ -177,8 +165,8 @@ export function resolveAccessPolicy(env: NodeJS.ProcessEnv = process.env): Acces
   const excludedDomains = normalizeAndValidateDomains(excludeItems, known, "BOOND_MCP_EXCLUDE_DOMAINS", log);
 
   // --- Operations ---
-  const opItems = parseList(readEnv(env, "BOOND_MCP_OPERATIONS"));
-  const readOnlyShortcut = parseBoolean(readEnv(env, "BOOND_MCP_READ_ONLY"));
+  const opItems = parseList(readString("BOOND_MCP_OPERATIONS", env));
+  const readOnlyShortcut = readBool("BOOND_MCP_READ_ONLY", false, env);
 
   let operations: Set<Operation>;
   if (opItems.length > 0) {

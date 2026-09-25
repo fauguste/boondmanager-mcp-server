@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { readPositiveInt, readString, readUrl } from "../config/env.js";
 import {
   DEFAULT_BASE_URL,
   CHARACTER_LIMIT,
@@ -85,12 +86,6 @@ export function buildJwt(
  * All three must read as "not configured" so the defaults apply. Same rule as
  * `readEnv` in `config/access-policy.ts` and `config/dictionary-overrides.ts`.
  */
-function envOrUndefined(key: string): string | undefined {
-  const v = process.env[key];
-  if (!v || v.startsWith("${") || v.trim().length === 0) return undefined;
-  return v;
-}
-
 export const JWT_HEADER_NAME = "X-Jwt-Client-Boondmanager";
 
 /**
@@ -124,7 +119,7 @@ function jwtAuth(
 }
 
 export function initClient(): void {
-  const baseUrl = envOrUndefined("BOOND_BASE_URL") || DEFAULT_BASE_URL;
+  const baseUrl = readUrl("BOOND_BASE_URL") ?? DEFAULT_BASE_URL;
 
   // Auth priority (stdio transport):
   // 1. Build JWT from components (userToken + clientToken + clientKey)
@@ -137,17 +132,17 @@ export function initClient(): void {
   // BasicAuth, on the other hand, uses the standard `Authorization` header.
   //
   // HTTP transport uses OAuth2 exclusively — see `initClientWithAuth`.
-  const userToken = envOrUndefined("BOOND_USER_TOKEN");
-  const clientToken = envOrUndefined("BOOND_CLIENT_TOKEN");
-  const clientKey = envOrUndefined("BOOND_CLIENT_KEY");
-  const token = envOrUndefined("BOOND_API_TOKEN");
-  const user = envOrUndefined("BOOND_USER");
-  const password = envOrUndefined("BOOND_PASSWORD");
+  const userToken = readString("BOOND_USER_TOKEN");
+  const clientToken = readString("BOOND_CLIENT_TOKEN");
+  const clientKey = readString("BOOND_CLIENT_KEY");
+  const token = readString("BOOND_API_TOKEN");
+  const user = readString("BOOND_USER");
+  const password = readString("BOOND_PASSWORD");
 
   let auth: BoondAuthProvider;
 
   if (userToken && clientToken && clientKey) {
-    const ttlRaw = envOrUndefined("BOOND_JWT_TTL_SECONDS");
+    const ttlRaw = readString("BOOND_JWT_TTL_SECONDS");
     const ttlSeconds = ttlRaw ? Number(ttlRaw) : undefined;
     auth = jwtAuth(userToken, clientToken, clientKey, Number.isFinite(ttlSeconds) ? ttlSeconds : undefined);
   } else if (token) {
@@ -165,16 +160,16 @@ export function initClient(): void {
 
 /**
  * True when env-based credentials (JWT components, API token, or BasicAuth) are
- * configured. Used by the HTTP transport to decide whether static-auth mode is
- * possible without attempting a full `initClient()` call.
+ * configured. Used by the HTTP transport in static-auth mode
+ * (`BOOND_HTTP_STATIC_AUTH=true`) to fail fast with a readable message before
+ * `initClient()` throws; the default HTTP mode is an OAuth2 protected resource
+ * and never reads these variables.
  */
 export function hasEnvCredentials(): boolean {
   return !!(
-    (envOrUndefined("BOOND_USER_TOKEN") &&
-      envOrUndefined("BOOND_CLIENT_TOKEN") &&
-      envOrUndefined("BOOND_CLIENT_KEY")) ||
-    envOrUndefined("BOOND_API_TOKEN") ||
-    (envOrUndefined("BOOND_USER") && envOrUndefined("BOOND_PASSWORD"))
+    (readString("BOOND_USER_TOKEN") && readString("BOOND_CLIENT_TOKEN") && readString("BOOND_CLIENT_KEY")) ||
+    readString("BOOND_API_TOKEN") ||
+    (readString("BOOND_USER") && readString("BOOND_PASSWORD"))
   );
 }
 
@@ -185,7 +180,7 @@ export function hasEnvCredentials(): boolean {
  */
 export function initClientWithAuth(auth: BoondAuthProvider, baseUrl?: string): void {
   config = {
-    baseUrl: baseUrl ?? envOrUndefined("BOOND_BASE_URL") ?? DEFAULT_BASE_URL,
+    baseUrl: baseUrl ?? readUrl("BOOND_BASE_URL") ?? DEFAULT_BASE_URL,
     auth,
   };
 }
@@ -261,11 +256,7 @@ export function parseBoondErrorBody(body: string): string | null {
  * Exported for unit testing.
  */
 export function resolveTimeoutMs(): number {
-  const raw = envOrUndefined("BOOND_HTTP_TIMEOUT_MS");
-  if (!raw) return DEFAULT_HTTP_TIMEOUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_HTTP_TIMEOUT_MS;
-  return Math.floor(parsed);
+  return readPositiveInt("BOOND_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS);
 }
 
 /** True when an error from fetch() came from an AbortSignal firing. */
@@ -283,20 +274,10 @@ export interface RetryConfig {
   maxDelayMs: number;
 }
 
-function readPositiveInt(name: string, fallback: number, allowZero = false): number {
-  const raw = envOrUndefined(name);
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return fallback;
-  if (parsed < 0) return fallback;
-  if (parsed === 0 && !allowZero) return fallback;
-  return Math.floor(parsed);
-}
-
 /** Resolve retry configuration from env, with safe fallbacks. Exported for tests. */
 export function resolveRetryConfig(): RetryConfig {
   return {
-    maxRetries: readPositiveInt("BOOND_HTTP_MAX_RETRIES", DEFAULT_HTTP_MAX_RETRIES, true),
+    maxRetries: readPositiveInt("BOOND_HTTP_MAX_RETRIES", DEFAULT_HTTP_MAX_RETRIES, process.env, { allowZero: true }),
     baseDelayMs: readPositiveInt("BOOND_HTTP_RETRY_BASE_MS", DEFAULT_HTTP_RETRY_BASE_MS),
     maxDelayMs: readPositiveInt("BOOND_HTTP_RETRY_MAX_MS", DEFAULT_HTTP_RETRY_MAX_MS),
   };
@@ -382,10 +363,10 @@ export interface RateLimitConfig {
  * the documented default behaviour. Exported for unit testing.
  */
 export function resolveRateLimitConfig(): RateLimitConfig | null {
-  const rpsRaw = envOrUndefined("BOOND_HTTP_RATE_LIMIT_RPS");
+  const rpsRaw = readString("BOOND_HTTP_RATE_LIMIT_RPS");
   const rps = rpsRaw === undefined ? DEFAULT_HTTP_RATE_LIMIT_RPS : Number(rpsRaw);
   if (!Number.isFinite(rps) || rps <= 0) return null;
-  const burstRaw = envOrUndefined("BOOND_HTTP_RATE_LIMIT_BURST");
+  const burstRaw = readString("BOOND_HTTP_RATE_LIMIT_BURST");
   let burst: number;
   if (burstRaw === undefined) {
     burst = rpsRaw === undefined ? DEFAULT_HTTP_RATE_LIMIT_BURST : Math.max(1, Math.ceil(rps));

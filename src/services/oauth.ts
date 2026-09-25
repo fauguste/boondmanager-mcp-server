@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { readString, readUrl } from "../config/env.js";
 import { createHash } from "node:crypto";
 
 /**
@@ -112,19 +113,13 @@ export function buildProtectedResourceMetadata(opts: ProtectedResourceMetadataOp
   return doc;
 }
 
-function envOrUndefined(key: string): string | undefined {
-  const v = process.env[key];
-  if (!v || v.startsWith("${")) return undefined;
-  return v;
-}
-
 /**
  * Resolve the authorization server URL surfaced in the discovery metadata.
  * Configurable so dedicated BoondManager instances (custom hostnames) can
  * advertise the right issuer.
  */
 export function resolveAuthorizationServer(): string {
-  return envOrUndefined("BOOND_OAUTH_AUTHORIZATION_SERVER") ?? DEFAULT_AUTHORIZATION_SERVER;
+  return readUrl("BOOND_OAUTH_AUTHORIZATION_SERVER") ?? DEFAULT_AUTHORIZATION_SERVER;
 }
 
 /**
@@ -132,7 +127,7 @@ export function resolveAuthorizationServer(): string {
  * client request appropriate scopes when initiating the OAuth flow.
  */
 export function resolveAdvertisedScopes(): string[] {
-  const raw = envOrUndefined("BOOND_OAUTH_SCOPES");
+  const raw = readString("BOOND_OAUTH_SCOPES");
   if (!raw) return [];
   return raw.split(/[\s,]+/).filter((s) => s.length > 0);
 }
