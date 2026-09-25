@@ -49,7 +49,13 @@ const PROFILE_TABLE = {
     "application",
     "workflows",
   ],
-  /** Avant-vente / commerce : pipeline, comptes, commandes. */
+  /**
+   * Avant-vente / commerce : pipeline, comptes, commandes. `absences` and
+   * `timesheets` are here for `recap_hebdo` (issue #260): its runbook reads the
+   * team's absences and CRA in one call each, and a prompt is cut as soon as
+   * one of its domains is filtered — without them the profile would keep the
+   * tools and lose the runbook, the trade this file's header argues against.
+   */
   sales: [
     "opportunities",
     "companies",
@@ -60,6 +66,8 @@ const PROFILE_TABLE = {
     "products",
     "reporting",
     "resources",
+    "absences",
+    "timesheets",
     "application",
     "workflows",
   ],

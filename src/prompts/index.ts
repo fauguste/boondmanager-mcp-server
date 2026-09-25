@@ -1,7 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { completable } from "@modelcontextprotocol/sdk/server/completable.js";
 import { z } from "zod";
 import type { DomainName } from "../constants.js";
 import { isDomainAllowed, type AccessPolicy } from "../config/access-policy.js";
+import { apiRequest } from "../services/boond-client.js";
+import { addDays, periodBounds, toIsoDate, type PeriodBounds } from "./periods.js";
 
 /**
  * Pre-orchestrated MCP prompts for the most common Boond workflows.
@@ -38,7 +41,24 @@ export interface PromptDefinition {
    * is filtered, the user simply passes a numeric id instead.
    */
   domains: readonly DomainName[];
-  build: (args: Record<string, string | undefined>) => string;
+  /**
+   * Render the runbook. `now` is the reference date for relative periods
+   * ("cette semaine", "D → D+H"): the server resolves them to literal ISO
+   * dates (issue #260, `./periods.ts`) instead of leaving the arithmetic to
+   * the model. Injected by tests; defaults to the wall clock.
+   */
+  build: (args: Record<string, string | undefined>, now?: Date) => string;
+}
+
+/**
+ * One line telling the model the resolved bounds, or — when the caller's
+ * wording was not understood — today's date so it at least has an anchor.
+ */
+function periodLine(bounds: PeriodBounds | null, rawArg: string | undefined, now: Date): string {
+  if (bounds) {
+    return `Période : ${bounds.label} — du ${bounds.startDate} au ${bounds.endDate} (mois ${bounds.startMonth}${bounds.endMonth !== bounds.startMonth ? ` à ${bounds.endMonth}` : ""}). Utiliser ces dates telles quelles.`;
+  }
+  return `Période : « ${rawArg?.trim()} » — à interpréter à partir d'aujourd'hui (${toIsoDate(now)}) en dates YYYY-MM-DD avant tout appel.`;
 }
 
 /**
@@ -121,11 +141,14 @@ export const PROMPTS: PromptDefinition[] = [
       periode: z
         .string()
         .optional()
-        .describe("Période d'analyse libre (ex: 'cette semaine', 'avril 2026'). Défaut: mois en cours."),
+        .describe(
+          "Période d'analyse (ex: 'cette semaine', 'mois dernier', '2026-04', 'avril 2026', '2026-W14'). Défaut: mois en cours. Résolue en dates ISO côté serveur."
+        ),
     },
     domains: ["resources", "application"],
-    build: ({ manager_id, periode }) => {
-      const periodeText = periode || "le mois en cours";
+    build: ({ manager_id, periode }, now = new Date()) => {
+      const bounds = periodBounds(periode, now, "month");
+      const periodeText = bounds ? bounds.label : periode!.trim();
       let preamble = "";
       let managerStep: string;
       let managerIdLit: string;
@@ -143,13 +166,14 @@ export const PROMPTS: PromptDefinition[] = [
       if (preamble) lines.push(preamble);
       lines.push(
         managerStep,
+        periodLine(bounds, periode, now),
         "",
         "Étapes :",
         `1. Lister les membres de l'équipe : \`boond_resources_search\` avec \`perimeterManagers: [${managerIdLit}]\` et \`resourceStates\` pour ne garder que les actifs (récupère les états valides via \`boond_application_dictionary\` avec \`setting.state.resource\` si besoin).`,
         "2. Pour chaque ressource retournée, récupérer en parallèle :",
         "   - `boond_resources_positionings` (qui est sur quel projet)",
-        "   - `boond_resources_absences_reports` (absences validées/à venir)",
-        "   - `boond_resources_times_reports` (CRA récent, pour confirmer l'occupation)",
+        "   - `boond_resources_absences_reports` (absences validées/à venir — ne retenir que celles qui recoupent la période ci-dessus)",
+        "   - `boond_resources_times_reports` (CRA de la période, pour confirmer l'occupation)",
         "3. Synthétiser un tableau par personne : nom, projet courant, % occupation, absences sur la période, disponibilité.",
         "4. Conclure par les signaux faibles (sur-/sous-charge, absences non couvertes, ressources sans positionnement)."
       );
@@ -222,7 +246,8 @@ export const PROMPTS: PromptDefinition[] = [
         .describe("Société ciblée pour la relance. " + ID_OR_NAME_HINT_SOCIETY),
     },
     domains: ["invoices", "application"],
-    build: ({ society_id }) => {
+    build: ({ society_id }, now = new Date()) => {
+      const today = toIsoDate(now);
       let preamble = "";
       let filterLine: string;
       if (society_id) {
@@ -232,15 +257,24 @@ export const PROMPTS: PromptDefinition[] = [
       } else {
         filterLine = "   - sans filtre société (toutes les factures du périmètre courant)";
       }
-      const lines: string[] = ["Identifie les factures à relancer (impayées dont l'échéance est dépassée).", ""];
+      const lines: string[] = [
+        `Identifie les factures à relancer (impayées dont l'échéance est dépassée au ${today}).`,
+        "",
+      ];
       if (preamble) lines.push(preamble);
       lines.push(
+        `Date de référence : aujourd'hui = ${today}.`,
+        "",
         "Étapes :",
         "1. Appeler `boond_invoices_search` :",
         filterLine,
-        "   - `pageSize: 100`",
-        "2. Récupérer le dictionnaire `setting.state.invoice` via `boond_application_dictionary` pour identifier les états « payée » / « partiellement payée » / etc.",
-        "3. Filtrer côté agent : ne conserver que les factures dont l'état n'est PAS « payée » ET dont la `dueDate` est strictement antérieure à aujourd'hui.",
+        '   - `period: "expectedPayment"`, `endDate: "' +
+          today +
+          "\"` — échéance de paiement attendue avant aujourd'hui",
+        "   - `pageSize: 100`, `fields: ['reference', 'state', 'dueDate', 'amountExcludingTax', 'company']`",
+        "   - **Paginer jusqu'au bout** : tant que `structuredContent.count` vaut 100, rappeler avec `page: 2`, `page: 3`… Ne pas s'arrêter à la première page.",
+        "2. Lire la ressource `boond://dictionary/states/invoices` (pas d'appel d'outil) pour identifier les IDs d'état « payée » / « partiellement payée » / etc.",
+        `3. Filtrer côté agent : ne conserver que les factures dont l'état n'est PAS « payée » ET dont la \`dueDate\` est strictement antérieure au ${today}.`,
         "4. Pour chaque facture retenue, récupérer le détail via `boond_invoices_get` si nécessaire pour obtenir le contact/email de relance.",
         "5. Restituer un tableau groupé par société : société | nombre de factures impayées | total HT impayé | facture la plus ancienne (référence + jours de retard) | contact à relancer.",
         "6. Ajouter une ligne « Total » en bas."
@@ -388,7 +422,9 @@ export const PROMPTS: PromptDefinition[] = [
       horizon_jours: z
         .string()
         .optional()
-        .describe("Nombre de jours à anticiper (défaut: 60). Ex: '30' pour ne voir que les fins très proches."),
+        .describe(
+          "Nombre de jours à anticiper — entier (défaut: 60). Ex: '30' pour ne voir que les fins très proches."
+        ),
       manager_id: z
         .string()
         .optional()
@@ -399,8 +435,12 @@ export const PROMPTS: PromptDefinition[] = [
         ),
     },
     domains: ["resources", "application"],
-    build: ({ horizon_jours, manager_id }) => {
-      const horizon = horizon_jours || "60";
+    build: ({ horizon_jours, manager_id }, now = new Date()) => {
+      const parsedHorizon = Number.parseInt(horizon_jours ?? "", 10);
+      const horizonDays = Number.isFinite(parsedHorizon) && parsedHorizon > 0 ? parsedHorizon : 60;
+      const horizon = String(horizonDays);
+      const startDate = toIsoDate(now);
+      const endDate = toIsoDate(addDays(now, horizonDays));
       let preamble = "";
       let scope: string;
       if (manager_id) {
@@ -419,9 +459,9 @@ export const PROMPTS: PromptDefinition[] = [
         `Périmètre : ${scope}.`,
         "",
         "Étapes :",
-        `1. Calculer la fenêtre : aujourd'hui (D) → D + ${horizon} jours (D+H). Conserver ces deux dates au format YYYY-MM-DD.`,
+        `1. Fenêtre (calculée côté serveur) : D = ${startDate} → D+H = ${endDate}. Utiliser ces dates telles quelles.`,
         "2. Appeler `boond_resources_search` avec :",
-        '   - `period: "available"`, `startDate: D`, `endDate: D+H`',
+        `   - \`period: "available"\`, \`startDate: "${startDate}"\`, \`endDate: "${endDate}"\``,
         `   - ${scope}`,
         "   - `resourceStates` filtrés sur les états « actif » (consulter `setting.state.resource`)",
         '   - `pageSize: 100`, `sort: "availability"`, `order: "asc"`',
@@ -458,7 +498,10 @@ export const PROMPTS: PromptDefinition[] = [
         .string()
         .optional()
         .describe("Agence pour cartographier toute une agence (alternatif à `manager_id`). " + ID_OR_NAME_HINT_AGENCY),
-      top_n: z.string().optional().describe("Nombre de compétences à mettre en avant dans le top (défaut: 20)."),
+      top_n: z
+        .string()
+        .optional()
+        .describe("Nombre de compétences à mettre en avant dans le top — entier (défaut: 20)."),
     },
     domains: ["resources", "opportunities", "application"],
     build: ({ manager_id, agency_id, top_n }) => {
@@ -514,7 +557,9 @@ export const PROMPTS: PromptDefinition[] = [
       seuil_mois: z
         .string()
         .optional()
-        .describe("Un dossier technique non touché depuis plus de N mois est considéré obsolète (défaut: 12)."),
+        .describe(
+          "Un dossier technique non touché depuis plus de N mois est considéré obsolète — entier (défaut: 12)."
+        ),
       manager_id: z
         .string()
         .optional()
@@ -665,25 +710,36 @@ export const PROMPTS: PromptDefinition[] = [
       semaine: z
         .string()
         .optional()
-        .describe("Semaine ciblée (ex: 'cette semaine', 'la semaine prochaine'). Défaut: cette semaine."),
+        .describe(
+          "Semaine ciblée (ex: 'cette semaine', 'semaine dernière', 'semaine prochaine', '2026-W14'). Défaut: cette semaine. Résolue en dates ISO côté serveur."
+        ),
     },
-    domains: ["resources", "opportunities", "projects", "application"],
-    build: ({ semaine }) => {
-      const semaineText = semaine || "cette semaine";
+    domains: ["resources", "opportunities", "projects", "absences", "timesheets", "application"],
+    build: ({ semaine }, now = new Date()) => {
+      const bounds = periodBounds(semaine, now, "week");
+      const semaineText = bounds ? bounds.label : semaine!.trim();
+      const start = bounds ? `"${bounds.startDate}"` : "<DEBUT>";
+      const end = bounds ? `"${bounds.endDate}"` : "<FIN>";
+      const startMonth = bounds ? `"${bounds.startMonth}"` : "<MOIS_DEBUT>";
+      const endMonth = bounds ? `"${bounds.endMonth}"` : "<MOIS_FIN>";
       return [
         `Produis mon récap pour ${semaineText}.`,
         "",
+        periodLine(bounds, semaine, now),
+        "",
         "Étapes :",
         "1. `boond_application_current_user` pour récupérer mon ID.",
-        "2. En parallèle :",
-        "   a. `boond_opportunities_search` avec `perimeterDynamic: ['data']`, `period: 'updated'` + dates de la semaine — opportunités touchées cette semaine.",
-        "   b. `boond_resources_search` avec `perimeterDynamic: ['managers']` — mon équipe (mes N-1).",
-        "   c. Pour chaque membre d'équipe : `boond_resources_absences_reports` filtré sur la semaine.",
-        "   d. `boond_projects_search` avec `perimeterDynamic: ['data']` et `period: 'running'` + dates de la semaine — mes projets actifs.",
-        "3. Récupérer `setting.state.opportunity` et `setting.state.project` via `boond_application_dictionary` pour libeller les états.",
-        "4. Restituer en 4 sections :",
+        "2. `boond_resources_search` avec `perimeterDynamic: ['managers']`, `pageSize: 100`, `fields: ['firstName', 'lastName']` — mon équipe (mes N-1). Conserver la liste des IDs.",
+        "3. En parallèle, un seul appel par source (pas un appel par membre) :",
+        `   a. \`boond_opportunities_search\` avec \`perimeterDynamic: ['data']\`, \`period: 'updated'\`, \`startDate: ${start}\`, \`endDate: ${end}\` — opportunités touchées sur la semaine.`,
+        `   b. \`boond_absences_search\` avec \`startMonth: ${startMonth}\`, \`endMonth: ${endMonth}\`, \`pageSize: 200\` — toutes les absences du périmètre sur ce(s) mois ; ne retenir que celles dont la ressource est dans l'équipe de l'étape 2 et qui recoupent la semaine.`,
+        `   c. \`boond_timesheets_search\` avec \`startMonth: ${startMonth}\`, \`endMonth: ${endMonth}\`, \`pageSize: 200\` — les CRA du périmètre sur ce(s) mois. Pour chaque membre de l'équipe : signaler un CRA **absent** sur le mois ; sinon reporter son \`state\` tel quel (le dictionnaire n'a pas de table d'états CRA — ne pas inventer de libellé).`,
+        `   d. \`boond_projects_search\` avec \`perimeterDynamic: ['data']\`, \`period: 'running'\`, \`startDate: ${start}\`, \`endDate: ${end}\` — mes projets actifs.`,
+        "4. Lire `boond://dictionary/states/opportunities` et `boond://dictionary/states/projects` pour libeller les états.",
+        "5. Restituer en 5 sections :",
         "   - **Pipeline** : opps qui ont bougé (nouvelles, état changé, closing imminent)",
         "   - **Équipe** : qui est absent cette semaine, qui termine sa mission",
+        "   - **CRA** : membres dont le CRA du mois est absent ou non validé (à relancer)",
         "   - **Projets** : projets actifs, dont ceux qui s'arrêtent ou démarrent dans la semaine",
         "   - **Actions à mener** : 3-5 puces concrètes (relances, validations, repositionnements)",
       ].join("\n");
@@ -792,6 +848,71 @@ export const PROMPTS: PromptDefinition[] = [
     },
   },
 ];
+
+// ---- Assisted entry of entity arguments (`completions/complete`, issue #260) --
+//
+// Every `*_id` argument accepts an id or a label (see `resolveEntity`), so the
+// completer returns *labels* — "Prénom Nom", a company name — which the user
+// can pick and which the runbook then resolves; `CompleteResult.values` is
+// substituted verbatim, so ids would be opaque in the picker. Keyed by
+// argument name: `manager_id` / `resource_id` → resources, `society_id` →
+// companies, and so on. `completable()` attaches the completer to the same
+// Zod object (a non-enumerable symbol), so the mirror workflow tools keep
+// advertising the unchanged JSON Schema.
+const COMPLETION_KIND_BY_ARG: Record<string, EntityKind> = {
+  manager_id: "resource",
+  resource_id: "resource",
+  society_id: "society",
+  opportunity_id: "opportunity",
+  agency_id: "agency",
+  project_id: "project",
+};
+
+const SEARCH_PATH_BY_KIND: Record<EntityKind, string> = {
+  resource: "/resources",
+  society: "/companies",
+  opportunity: "/opportunities",
+  agency: "/agencies",
+  project: "/projects",
+};
+
+const MAX_COMPLETIONS = 8;
+
+function labelOf(attrs: Record<string, unknown>): string | undefined {
+  const person = [attrs.firstName, attrs.lastName].filter((v) => typeof v === "string" && v.length > 0).join(" ");
+  if (person) return person;
+  for (const key of ["name", "title", "reference"]) {
+    const v = attrs[key];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  return undefined;
+}
+
+/** Search the entity by the typed prefix; empty on any failure (no credentials, API down). */
+export async function completeEntityArgument(kind: EntityKind, value: string): Promise<string[]> {
+  const needle = value.trim();
+  if (needle.length === 0) return [];
+  try {
+    const response = await apiRequest(SEARCH_PATH_BY_KIND[kind], "GET", undefined, {
+      keywords: needle,
+      maxResults: MAX_COMPLETIONS,
+    });
+    const rows = Array.isArray(response.data) ? response.data : response.data ? [response.data] : [];
+    const labels = rows
+      .map((r) => labelOf((r?.attributes ?? {}) as Record<string, unknown>))
+      .filter((l): l is string => !!l);
+    return [...new Set(labels)].slice(0, MAX_COMPLETIONS);
+  } catch {
+    return [];
+  }
+}
+
+for (const p of PROMPTS) {
+  for (const [arg, schema] of Object.entries(p.argsSchema)) {
+    const kind = COMPLETION_KIND_BY_ARG[arg];
+    if (kind) completable(schema, (value: unknown) => completeEntityArgument(kind, String(value ?? "")));
+  }
+}
 
 export function registerAllPrompts(server: McpServer, policy?: AccessPolicy): void {
   for (const p of PROMPTS) {
