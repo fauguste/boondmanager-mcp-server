@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { createServer, IncomingMessage, ServerResponse, type Server } from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -78,11 +78,47 @@ export interface HttpTransportOptions {
    * private gateway). Set via `MCP_HTTP_INSECURE_STATIC_AUTH=1`.
    */
   insecureStaticAuth?: boolean;
+  /**
+   * Node `server.keepAliveTimeout`: how long an idle keep-alive connection is
+   * kept open. Must exceed the idle timeout of any load balancer in front
+   * (60 s AWS ALB, 75 s nginx by default) — Node's 5 s default is below both,
+   * which is how a LB reuses a connection Node just closed and answers `502`
+   * (issue #237). Default 65 s; env `MCP_HTTP_KEEP_ALIVE_TIMEOUT_MS`.
+   */
+  keepAliveTimeoutMs?: number;
+  /**
+   * Node `server.headersTimeout`: budget to receive a request's headers. Node
+   * requires it above `keepAliveTimeout`; a lower value is bumped to
+   * `keepAliveTimeoutMs + 1000` with a warning. Default 66 s; env
+   * `MCP_HTTP_HEADERS_TIMEOUT_MS`.
+   */
+  headersTimeoutMs?: number;
+  /**
+   * Node `server.requestTimeout`: budget to receive a whole request (headers +
+   * body). Generous because it also bounds slow clients on long tool calls.
+   * Default 5 min; env `MCP_HTTP_REQUEST_TIMEOUT_MS`.
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Grace period `close()` gives in-flight connections (an open SSE stream, a
+   * request mid-body) before destroying them with `closeAllConnections()`.
+   * Idle keep-alive connections are closed immediately. Default 10 s; env
+   * `MCP_HTTP_SHUTDOWN_TIMEOUT_MS`.
+   */
+  shutdownTimeoutMs?: number;
 }
 
 export interface HttpServerHandle {
+  /**
+   * Stop accepting connections, close idle ones now and in-flight ones after
+   * `shutdownTimeoutMs`, then resolve. Idempotent: a second call (a second
+   * SIGTERM) returns the same promise instead of failing on an already-closed
+   * server (issue #237).
+   */
   close: () => Promise<void>;
   address: { host: string; port: number; path: string };
+  /** The underlying Node server — for observability (applied timeouts) and tests. */
+  server: Server;
   /** Current count of live stateful sessions (always 0 in stateless mode). */
   sessionCount: () => number;
   /** Manually trigger an idle sweep; returns the number of sessions reaped. */
@@ -97,6 +133,16 @@ const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 5 * 60_000;
 // McpServer + transport until its TTL sweep, so without a cap an authenticated
 // client could spin up unbounded `initialize` requests and exhaust memory.
 const DEFAULT_MAX_SESSIONS = 1000;
+// Server socket timeouts (issue #237). Keep-alive above the usual load-balancer
+// idle timeouts (60 s ALB, 75 s nginx) so the LB never reuses a connection Node
+// has just closed; headers a second above keep-alive (Node's own requirement);
+// request generous because reporting calls are long.
+export const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 65_000;
+export const DEFAULT_HEADERS_TIMEOUT_MS = 66_000;
+export const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
+export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+/** How often `close()` re-reaps idle keep-alive sockets while draining. */
+const IDLE_REAP_INTERVAL_MS = 100;
 
 // Loopback addresses that should default to the localhost host allow-list.
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -338,7 +384,29 @@ export function resolveHttpOptions(): HttpTransportOptions {
     staticAuth,
     apiKey,
     insecureStaticAuth,
+    keepAliveTimeoutMs: readPositiveInt("MCP_HTTP_KEEP_ALIVE_TIMEOUT_MS", DEFAULT_KEEP_ALIVE_TIMEOUT_MS),
+    headersTimeoutMs: readPositiveInt("MCP_HTTP_HEADERS_TIMEOUT_MS", DEFAULT_HEADERS_TIMEOUT_MS),
+    requestTimeoutMs: readPositiveInt("MCP_HTTP_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS),
+    shutdownTimeoutMs: readPositiveInt("MCP_HTTP_SHUTDOWN_TIMEOUT_MS", DEFAULT_SHUTDOWN_TIMEOUT_MS),
   };
+}
+
+/**
+ * The socket timeouts applied to the Node server, with the one invariant Node
+ * itself enforces made explicit: `headersTimeout` must be strictly greater
+ * than `keepAliveTimeout`, otherwise a kept-alive connection can be timed out
+ * while waiting for its next request's headers. A configuration that breaks it
+ * is repaired (headers = keep-alive + 1 s) and logged rather than refused.
+ */
+export function resolveServerTimeouts(
+  options: Pick<HttpTransportOptions, "keepAliveTimeoutMs" | "headersTimeoutMs" | "requestTimeoutMs">
+): { keepAliveTimeout: number; headersTimeout: number; requestTimeout: number; coerced: boolean } {
+  const keepAliveTimeout = options.keepAliveTimeoutMs ?? DEFAULT_KEEP_ALIVE_TIMEOUT_MS;
+  const requestedHeaders = options.headersTimeoutMs ?? DEFAULT_HEADERS_TIMEOUT_MS;
+  const coerced = requestedHeaders <= keepAliveTimeout;
+  const headersTimeout = coerced ? keepAliveTimeout + 1_000 : requestedHeaders;
+  const requestTimeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  return { keepAliveTimeout, headersTimeout, requestTimeout, coerced };
 }
 
 function readBoolEnv(key: string): boolean {
@@ -630,7 +698,7 @@ export async function startHttpTransport(
     );
   };
 
-  const httpServer = createServer(async (req, res) => {
+  const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const corrId = generateCorrelationId();
     const reqLogger = logger.child({ corrId, method: req.method, path: req.url });
 
@@ -689,6 +757,11 @@ export async function startHttpTransport(
       // readJsonBody still covers chunked / lying Content-Length cases.
       const contentLength = Number(req.headers["content-length"]);
       if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+        // Plain 413, deliberately *without* `Connection: close`: Node drains
+        // the announced body itself (`req._dump()`), so the connection is
+        // reusable — and closing it early makes a client still uploading see
+        // a reset instead of the 413 (undici's fetch rejects). The mid-stream
+        // overflow below is different: its stream is left unread.
         writeJsonRpcError(res, 413, "Request body too large");
         return;
       }
@@ -874,7 +947,33 @@ export async function startHttpTransport(
         res.end();
       }
     }
+  };
+
+  // `createServer` takes a sync listener: an async callback's rejection would
+  // be an unhandled promise, invisible to the client (issue #237). The handler
+  // catches everything it can above; this is the last net.
+  const httpServer = createServer((req, res) => {
+    void handleRequest(req, res).catch((error: unknown) => {
+      logger.error({ err: error }, "Unhandled HTTP transport error");
+      if (!res.headersSent) {
+        writeJsonRpcError(res, 500, "Internal server error");
+      } else {
+        res.end();
+      }
+    });
   });
+
+  const timeouts = resolveServerTimeouts(options);
+  if (timeouts.coerced) {
+    logger.warn(
+      { requested: options.headersTimeoutMs, applied: timeouts.headersTimeout, keepAlive: timeouts.keepAliveTimeout },
+      "MCP_HTTP_HEADERS_TIMEOUT_MS must exceed the keep-alive timeout; raised to keep-alive + 1 s"
+    );
+  }
+  httpServer.keepAliveTimeout = timeouts.keepAliveTimeout;
+  httpServer.headersTimeout = timeouts.headersTimeout;
+  httpServer.requestTimeout = timeouts.requestTimeout;
+  const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
 
   await new Promise<void>((resolve, reject) => {
     httpServer.once("error", reject);
@@ -889,18 +988,50 @@ export async function startHttpTransport(
   const bound = httpServer.address();
   const boundPort = bound && typeof bound === "object" ? bound.port : options.port;
 
-  return {
-    address: { host: options.host, port: boundPort, path: options.path },
-    sessionCount: () => sessions.size,
-    sweepIdleSessions,
-    close: async () => {
+  // Memoised so a second close() — a second SIGTERM, or a caller's cleanup
+  // racing the signal handler — waits on the same shutdown instead of calling
+  // `server.close()` on a closed server (ERR_SERVER_NOT_RUNNING, unhandled).
+  let closing: Promise<void> | undefined;
+  const close = (): Promise<void> => {
+    if (closing) return closing;
+    closing = (async () => {
       if (sweepTimer) clearInterval(sweepTimer);
       const entries = Array.from(sessions.values());
       sessions.clear();
       await Promise.all(entries.map((e) => destroySession(e)));
       await new Promise<void>((resolve, reject) => {
-        httpServer.close((err) => (err ? reject(err) : resolve()));
+        // `server.close()` stops accepting, reaps idle keep-alive sockets once
+        // (Node's `httpServerPreClose` → `closeIdleConnections()`), and
+        // resolves when every remaining connection has ended. Two things
+        // never end on their own: an open SSE stream / a request stuck
+        // mid-headers (destroyed after the grace period), and a keep-alive
+        // socket that was still draining a body at that single reap — Node
+        // never re-checks it, and with a 65 s keep-alive it would hold the
+        // close for the whole grace period. So idle reaping is repeated until
+        // the server is closed.
+        const force = setTimeout(() => {
+          logger.warn({ shutdownTimeoutMs }, "Shutdown grace period elapsed; destroying remaining connections");
+          httpServer.closeAllConnections();
+        }, shutdownTimeoutMs);
+        force.unref();
+        const reapIdle = setInterval(() => httpServer.closeIdleConnections(), IDLE_REAP_INTERVAL_MS);
+        reapIdle.unref();
+        httpServer.close((err) => {
+          clearTimeout(force);
+          clearInterval(reapIdle);
+          if (err) reject(err);
+          else resolve();
+        });
       });
-    },
+    })();
+    return closing;
+  };
+
+  return {
+    address: { host: options.host, port: boundPort, path: options.path },
+    server: httpServer,
+    sessionCount: () => sessions.size,
+    sweepIdleSessions,
+    close,
   };
 }

@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { request as httpRequest } from "node:http";
+import { connect as netConnect } from "node:net";
 import {
   MAX_BODY_BYTES,
   assertStaticAuthPolicy,
@@ -11,6 +12,11 @@ import {
   resolveOriginPolicy,
   startHttpTransport,
   type HttpServerHandle,
+  resolveServerTimeouts,
+  DEFAULT_KEEP_ALIVE_TIMEOUT_MS,
+  DEFAULT_HEADERS_TIMEOUT_MS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
 } from "./http.js";
 import { createMcpServer } from "../server.js";
 
@@ -62,6 +68,10 @@ const ENV_KEYS = [
   "MCP_HTTP_STATEFUL",
   "MCP_HTTP_JSON_RESPONSE",
   "MCP_HTTP_SESSION_TTL_MS",
+  "MCP_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+  "MCP_HTTP_HEADERS_TIMEOUT_MS",
+  "MCP_HTTP_REQUEST_TIMEOUT_MS",
+  "MCP_HTTP_SHUTDOWN_TIMEOUT_MS",
   "MCP_HTTP_SESSION_SWEEP_INTERVAL_MS",
   "MCP_HTTP_ALLOWED_HOSTS",
   "MCP_HTTP_ALLOWED_ORIGINS",
@@ -122,6 +132,47 @@ describe("resolveHttpOptions", () => {
     const opts = resolveHttpOptions();
     expect(opts.sessionTtlMs).toBe(30 * 60_000);
     expect(opts.sessionSweepIntervalMs).toBe(5 * 60_000);
+  });
+
+  it("defaults the server timeouts above load-balancer idle windows (#237)", () => {
+    const opts = resolveHttpOptions();
+    expect(opts.keepAliveTimeoutMs).toBe(DEFAULT_KEEP_ALIVE_TIMEOUT_MS);
+    expect(opts.headersTimeoutMs).toBe(DEFAULT_HEADERS_TIMEOUT_MS);
+    expect(opts.requestTimeoutMs).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+    expect(opts.shutdownTimeoutMs).toBe(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+    // The whole point: Node's 5 s default sits below AWS ALB (60 s) and nginx (75 s).
+    expect(DEFAULT_KEEP_ALIVE_TIMEOUT_MS).toBeGreaterThan(60_000);
+    expect(DEFAULT_HEADERS_TIMEOUT_MS).toBeGreaterThan(DEFAULT_KEEP_ALIVE_TIMEOUT_MS);
+  });
+
+  it("reads the server timeouts from env and falls back on bad values", () => {
+    process.env["MCP_HTTP_KEEP_ALIVE_TIMEOUT_MS"] = "80000";
+    process.env["MCP_HTTP_HEADERS_TIMEOUT_MS"] = "81000";
+    process.env["MCP_HTTP_REQUEST_TIMEOUT_MS"] = "0";
+    process.env["MCP_HTTP_SHUTDOWN_TIMEOUT_MS"] = "soon";
+    const opts = resolveHttpOptions();
+    expect(opts.keepAliveTimeoutMs).toBe(80_000);
+    expect(opts.headersTimeoutMs).toBe(81_000);
+    expect(opts.requestTimeoutMs).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+    expect(opts.shutdownTimeoutMs).toBe(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+  });
+
+  it("raises a headers timeout that does not exceed keep-alive (Node's own invariant)", () => {
+    expect(resolveServerTimeouts({ keepAliveTimeoutMs: 70_000, headersTimeoutMs: 70_000 })).toMatchObject({
+      keepAliveTimeout: 70_000,
+      headersTimeout: 71_000,
+      coerced: true,
+    });
+    expect(resolveServerTimeouts({ keepAliveTimeoutMs: 70_000, headersTimeoutMs: 90_000 })).toMatchObject({
+      headersTimeout: 90_000,
+      coerced: false,
+    });
+    expect(resolveServerTimeouts({})).toEqual({
+      keepAliveTimeout: DEFAULT_KEEP_ALIVE_TIMEOUT_MS,
+      headersTimeout: DEFAULT_HEADERS_TIMEOUT_MS,
+      requestTimeout: DEFAULT_REQUEST_TIMEOUT_MS,
+      coerced: false,
+    });
   });
 
   it("reads configuration from environment variables", () => {
@@ -1370,6 +1421,104 @@ describe("startHttpTransport (integration)", () => {
       });
       expect(get.status).toBe(400);
       await get.text();
+    });
+  });
+
+  describe("shutdown and socket timeouts (#237)", () => {
+    it("applies the resolved timeouts to the Node server", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+        keepAliveTimeoutMs: 70_000,
+        headersTimeoutMs: 60_000, // below keep-alive → coerced to 71 000
+        requestTimeoutMs: 120_000,
+      });
+      expect(handle.server.keepAliveTimeout).toBe(70_000);
+      expect(handle.server.headersTimeout).toBe(71_000);
+      expect(handle.server.requestTimeout).toBe(120_000);
+    });
+
+    it("applies the defaults when nothing is configured", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+      });
+      expect(handle.server.keepAliveTimeout).toBe(DEFAULT_KEEP_ALIVE_TIMEOUT_MS);
+      expect(handle.server.headersTimeout).toBe(DEFAULT_HEADERS_TIMEOUT_MS);
+      expect(handle.server.requestTimeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+    });
+
+    it("close() is idempotent: a second call resolves instead of failing on a closed server", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+      });
+      const first = handle.close();
+      const second = handle.close();
+      // Same in-flight shutdown, not a new one — and no ERR_SERVER_NOT_RUNNING.
+      expect(second).toBe(first);
+      await expect(first).resolves.toBeUndefined();
+      await expect(handle.close()).resolves.toBeUndefined();
+      expect(handle.server.listening).toBe(false);
+    });
+
+    it("destroys a connection still open after the grace period instead of hanging", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+        shutdownTimeoutMs: 300,
+      });
+      // A request whose *headers* never complete: the parser has started a
+      // message, so Node's own close() does not treat the socket as idle, and
+      // nothing ends it before headersTimeout (66 s) — only the grace-period
+      // destroy can. (A request stalled mid-*body* is reset by close() itself.)
+      const socket = netConnect(handle.address.port, "127.0.0.1");
+      await new Promise<void>((resolve) => socket.once("connect", resolve));
+      socket.on("error", () => undefined);
+      socket.write("POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\n");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+      const closeAll = vi.spyOn(handle.server, "closeAllConnections");
+
+      const started = Date.now();
+      await handle.close();
+      const elapsed = Date.now() - started;
+      await closed;
+      expect(closeAll).toHaveBeenCalledTimes(1);
+      expect(elapsed).toBeGreaterThanOrEqual(250);
+      expect(elapsed).toBeLessThan(5_000);
+      expect(handle.server.listening).toBe(false);
+    });
+
+    it("closes promptly when only idle keep-alive connections remain", async () => {
+      handle = await startHttpTransport(createMcpServer, {
+        host: "127.0.0.1",
+        port: 0,
+        path: "/mcp",
+        stateless: true,
+        enableJsonResponse: true,
+        shutdownTimeoutMs: 5_000,
+      });
+      // A completed request on a keep-alive connection: without
+      // closeIdleConnections() the 65 s keep-alive would hold close() open.
+      const res = await fetch(`http://127.0.0.1:${handle.address.port}/healthz`, { keepalive: true });
+      expect(res.status).toBe(200);
+      await res.text();
+      const started = Date.now();
+      await handle.close();
+      expect(Date.now() - started).toBeLessThan(2_000);
     });
   });
 
