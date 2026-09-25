@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { apiRequest } from "./boond-client.js";
+import { oauthContext } from "./oauth.js";
 import type { JsonApiResponse } from "../types.js";
 
 /**
@@ -18,6 +20,17 @@ import type { JsonApiResponse } from "../types.js";
  * Concurrent fetches sont dédupliqués via une promesse partagée pour éviter
  * de marteler l'API quand plusieurs ressources sont lues en parallèle au
  * démarrage d'une session MCP.
+ *
+ * **Le cache est partitionné par identité d'authentification et par langue**
+ * (issue #226). Le dictionnaire n'est pas une table de référence globale : il
+ * porte les états, agences, pôles et types *personnalisés* d'un tenant
+ * BoondManager. En transport HTTP OAuth chaque requête arrive avec le token
+ * d'un utilisateur — potentiellement d'un autre tenant — et le transport ne
+ * vérifie que la *présence* du Bearer. Un cache unique par processus servait
+ * donc le dictionnaire du premier appelant à tous les suivants, sans appel
+ * Boond : une fuite inter-tenants. La clé est `sha256(token) + langue` ; en
+ * stdio (credentials env, une seule identité par processus) elle se réduit à
+ * `env + langue`, et le comportement mono-utilisateur est inchangé.
  */
 
 export type DictionaryLanguage = "fr" | "en" | "es";
@@ -30,6 +43,14 @@ interface CacheEntry {
 
 const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+/**
+ * Upper bound on cached (identity, language) pairs. Each entry is a full
+ * dictionary payload (hundreds of KB), so the map is bounded; least recently
+ * used entries are evicted first. 50 is plenty for a gateway serving a
+ * handful of tenants and keeps the worst case around a few tens of MB.
+ */
+export const MAX_DICTIONARY_CACHE_ENTRIES = 50;
+
 function resolveTtlMs(): number {
   const raw = process.env["BOOND_DICTIONARY_TTL_MS"];
   if (!raw) return DEFAULT_TTL_MS;
@@ -37,8 +58,39 @@ function resolveTtlMs(): number {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_TTL_MS;
 }
 
-let cache: CacheEntry | null = null;
-let inFlight: Promise<CacheEntry> | null = null;
+/**
+ * Identity half of the cache key.
+ *
+ * - OAuth (HTTP transport): the request's Bearer token, hashed so the raw
+ *   credential never sits in a long-lived structure. Two users of the same
+ *   tenant get two entries — a small over-fetch that is the price of not
+ *   having to decode an opaque token to find its tenant.
+ * - Everything else (stdio, HTTP static auth): the credentials are process
+ *   wide, so a single constant identity is exact.
+ */
+export function currentAuthIdentity(): string {
+  const ctx = oauthContext.getStore();
+  if (!ctx) return "env";
+  return `oauth:${createHash("sha256").update(ctx.accessToken).digest("hex")}`;
+}
+
+function cacheKey(language: DictionaryLanguage): string {
+  return `${currentAuthIdentity()}|${language}`;
+}
+
+/** Insertion-ordered map used as an LRU: a hit re-inserts, an insert past the cap evicts the oldest. */
+const cache = new Map<string, CacheEntry>();
+const inFlight = new Map<string, Promise<CacheEntry>>();
+
+function touch(key: string, entry: CacheEntry): void {
+  cache.delete(key);
+  cache.set(key, entry);
+  while (cache.size > MAX_DICTIONARY_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
 
 export interface GetDictionaryOptions {
   language?: DictionaryLanguage;
@@ -47,32 +99,42 @@ export interface GetDictionaryOptions {
 }
 
 /**
- * Returns the full BoondManager dictionary payload, fetching once per TTL.
- * Concurrent calls share the same in-flight request.
+ * Returns the full BoondManager dictionary payload, fetching once per TTL
+ * per (auth identity, language). Concurrent calls for the same key share
+ * the same in-flight request; calls for different keys never do — an `en`
+ * request must not be answered with the `fr` payload still loading.
  */
 export async function getDictionary(opts: GetDictionaryOptions = {}): Promise<CacheEntry> {
   const language: DictionaryLanguage = opts.language ?? "fr";
+  const key = cacheKey(language);
   const now = Date.now();
 
-  if (!opts.force && cache !== null && cache.language === language && now - cache.fetchedAt < resolveTtlMs()) {
-    return cache;
+  if (!opts.force) {
+    const hit = cache.get(key);
+    if (hit !== undefined && now - hit.fetchedAt < resolveTtlMs()) {
+      touch(key, hit);
+      return hit;
+    }
   }
 
-  if (inFlight) return inFlight;
+  const pending = inFlight.get(key);
+  if (pending) return pending;
 
-  inFlight = (async () => {
+  const request = (async () => {
     try {
       const payload = await apiRequest("/application/dictionary", "GET", undefined, {
         language,
       });
-      cache = { payload, fetchedAt: Date.now(), language };
-      return cache;
+      const entry: CacheEntry = { payload, fetchedAt: Date.now(), language };
+      touch(key, entry);
+      return entry;
     } finally {
-      inFlight = null;
+      inFlight.delete(key);
     }
   })();
 
-  return inFlight;
+  inFlight.set(key, request);
+  return request;
 }
 
 /**
@@ -103,8 +165,13 @@ export function resolveDictionaryPath(payload: JsonApiResponse, path: string): u
   return node;
 }
 
+/** Number of cached entries. Exposed for tests. */
+export function dictionaryCacheSizeForTests(): number {
+  return cache.size;
+}
+
 /** Reset the cache. Exposed for tests. */
 export function resetDictionaryCacheForTests(): void {
-  cache = null;
-  inFlight = null;
+  cache.clear();
+  inFlight.clear();
 }

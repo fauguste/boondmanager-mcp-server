@@ -344,6 +344,20 @@ state/typeOf integers to labels via a resource read instead of a tool
 call. Arbitrary dictionary types still go through the
 `boond_application_dictionary` tool.
 
+**Dictionary cache** (`src/services/dictionary.ts`, issue #226): the
+`/application/dictionary` payload is cached in memory, but it is **not a global
+reference table** — it carries a tenant's custom states, agencies, poles and
+types. The cache is therefore keyed by `(auth identity, language)`:
+`sha256(Bearer token)` under the HTTP OAuth transport (every request may belong
+to a different tenant, and the transport only checks that a Bearer is
+*present*), a constant `env` identity on stdio / static auth. A single
+process-wide entry used to hand the first caller's dictionary to every later
+caller without an API call — a cross-tenant leak — and `inFlight` ignored the
+language, so an `en` request could receive the `fr` payload still loading.
+Both `cache` and `inFlight` are now `Map`s on that key, LRU-bounded at
+`MAX_DICTIONARY_CACHE_ENTRIES` (50). Each property has a test in
+`dictionary.test.ts`.
+
 **Entity resource templates** (`src/resources/templates.ts`, issue #177): six
 parameterised resources — `boond://{candidate,resource,contact,company,opportunity,project}/{id}`
 — returning the base record plus its cheap tabs (`information`, and
