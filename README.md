@@ -515,6 +515,8 @@ Le serveur utilise [pino](https://getpino.io/) pour des logs structures JSON (ag
 
 En production (`NODE_ENV=production`), les logs sont en JSON par défaut. En dev, le format pretty (colorisé) est actif sauf si `LOG_FORMAT=json`. Chaque requête HTTP reçoit un `corrId` (8 hex) pour tracer la requête dans les logs.
 
+Les logs sont **toujours écrits sur stderr**, quel que soit le transport : en mode stdio, stdout est réservé au flux JSON-RPC et toute autre écriture corrompt la connexion côté client. Claude Desktop capture stderr dans son visualiseur de logs (Developer → Logs), c'est donc là que les avertissements (politique d'accès, mise à jour disponible, dictionnaires) sont visibles.
+
 ### Authentification
 
 **Option 1 : Token API JWT (recommande)**

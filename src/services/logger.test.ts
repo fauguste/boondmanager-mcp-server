@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import pino from "pino";
-import { logger, generateCorrelationId, REDACT_PATHS } from "./logger.js";
+import {
+  logger,
+  generateCorrelationId,
+  REDACT_PATHS,
+  LOG_DESTINATION_FD,
+  resolveLoggerConfig,
+  resolveLogLevel,
+  usePrettyOutput,
+} from "./logger.js";
 
 describe("logger", () => {
   it("exposes the pino logger interface", () => {
@@ -15,6 +23,69 @@ describe("logger", () => {
     expect(child).toBeDefined();
     // Child inherits parent level + bindings, but is a distinct instance.
     expect(child).not.toBe(logger);
+  });
+});
+
+/**
+ * Issue #225: stdout is the JSON-RPC channel on the stdio transport, so the
+ * logger must never write there. Both output shapes are pinned here; the
+ * end-to-end proof (a real `dist/index.js` child process) lives in
+ * `src/stdio-stdout.test.ts`.
+ */
+describe("log destination (issue #225)", () => {
+  it("targets stderr, never stdout", () => {
+    expect(LOG_DESTINATION_FD).toBe(2);
+  });
+
+  it("pretty output (dev default) routes pino-pretty to stderr", () => {
+    const config = resolveLoggerConfig({});
+    expect(config.format).toBe("pretty");
+    if (config.format !== "pretty") throw new Error("unreachable");
+    const transport = config.options.transport as { target: string; options: { destination?: number } };
+    expect(transport.target).toBe("pino-pretty");
+    // pino-pretty defaults to fd 1 when `destination` is absent — the option
+    // must be present *and* be stderr.
+    expect(transport.options.destination).toBe(LOG_DESTINATION_FD);
+  });
+
+  it("JSON output (LOG_FORMAT=json) uses a stderr destination", () => {
+    const config = resolveLoggerConfig({ LOG_FORMAT: "json" });
+    expect(config.format).toBe("json");
+    if (config.format !== "json") throw new Error("unreachable");
+    expect(config.destinationFd).toBe(LOG_DESTINATION_FD);
+    expect(config.options.transport).toBeUndefined();
+  });
+
+  it("JSON output (NODE_ENV=production) uses a stderr destination", () => {
+    const config = resolveLoggerConfig({ NODE_ENV: "production" });
+    expect(config.format).toBe("json");
+    if (config.format !== "json") throw new Error("unreachable");
+    expect(config.destinationFd).toBe(LOG_DESTINATION_FD);
+  });
+
+  it("keeps the redaction paths on both branches", () => {
+    for (const env of [{}, { LOG_FORMAT: "json" }]) {
+      const { options } = resolveLoggerConfig(env);
+      expect((options.redact as { paths: string[] }).paths).toEqual(REDACT_PATHS);
+    }
+  });
+});
+
+describe("resolveLogLevel / usePrettyOutput", () => {
+  it("honours a valid LOG_LEVEL, case-insensitively", () => {
+    expect(resolveLogLevel({ LOG_LEVEL: "DEBUG" })).toBe("debug");
+    expect(resolveLogLevel({ LOG_LEVEL: "warn" })).toBe("warn");
+  });
+
+  it("falls back to info on an unknown or absent LOG_LEVEL", () => {
+    expect(resolveLogLevel({ LOG_LEVEL: "verbose" })).toBe("info");
+    expect(resolveLogLevel({})).toBe("info");
+  });
+
+  it("is pretty by default and JSON under LOG_FORMAT=json or NODE_ENV=production", () => {
+    expect(usePrettyOutput({})).toBe(true);
+    expect(usePrettyOutput({ LOG_FORMAT: "json" })).toBe(false);
+    expect(usePrettyOutput({ NODE_ENV: "production" })).toBe(false);
   });
 });
 

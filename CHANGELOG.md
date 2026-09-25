@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Les logs partent sur stderr — stdout est réservé au flux JSON-RPC en mode stdio** ([#225](https://github.com/silamir/boondmanager-mcp-server/issues/225)). Le logger pino était créé sans destination explicite, donc sur **fd 1**, et le transport pino-pretty faisait de même. En transport stdio, stdout est le canal du protocole : la ligne « Access policy active » (tout utilisateur avec `BOOND_MCP_PROFILE` / `BOOND_MCP_READ_ONLY`), l'avis de mise à jour et les avertissements de `dictionary-overrides` s'intercalaient entre deux messages MCP, d'où des déconnexions inexpliquées dans Claude Desktop / Claude Code. Les deux formats (`json` et pretty) écrivent désormais sur **stderr, sur les deux transports** — Claude Desktop capture stderr dans son visualiseur de logs, les messages restent donc visibles. Un test d'intégration lance `dist/index.js` en sous-processus avec une politique d'accès invalide, envoie `initialize` et vérifie que chaque ligne de stdout est un JSON-RPC valide.
+
 ## [2.16.0] - 2026-09-25
 
 Le projet passe sous la bannière **[Silamir](https://www.silamir.com)** : le dépôt a été transféré de `fauguste/boondmanager-mcp-server` vers `silamir/boondmanager-mcp-server`. **Aucun changement de code serveur** — le catalogue (182 outils, 12 prompts, 22 ressources, 6 templates), les schémas annoncés et le comportement d'exécution sont identiques à la 2.15.2. Ce qui change relève de l'identité et de la distribution.

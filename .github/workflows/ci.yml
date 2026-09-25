@@ -35,11 +35,12 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Run tests
-        run: npm run test:coverage
-
+      # Before the tests: src/stdio-stdout.test.ts spawns dist/index.js.
       - name: Build
         run: npm run build
+
+      - name: Run tests
+        run: npm run test:coverage
 
       - name: Validate MCPB manifest
         if: matrix.node-version == 22
