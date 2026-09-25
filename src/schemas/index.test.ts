@@ -614,7 +614,7 @@ describe("AbsenceUpdateSchema", () => {
   });
 
   it("should accept partial update", () => {
-    const result = AbsenceUpdateSchema.safeParse({ id: "1", state: 1 });
+    const result = AbsenceUpdateSchema.safeParse({ id: "1", note: "report" });
     expect(result.success).toBe(true);
   });
 });

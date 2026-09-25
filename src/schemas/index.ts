@@ -554,12 +554,10 @@ export const CandidateCreateSchema = z
 export const PositioningUpdateSchema = z
   .object({
     id: EntityIdSchema.describe("ID du positionnement \u00e0 modifier"),
-    state: z
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .describe("\u00c9tat du positionnement : ID num\u00e9rique du dictionnaire setting.state.positioning"),
+    state: stateField(
+      "positioning",
+      "État du positionnement : ID numérique de `boond://dictionary/states/positionings`"
+    ),
     stateReasonTypeOf: z
       .number()
       .int()
@@ -1096,7 +1094,10 @@ export const InvoiceCreateSchema = z
   .object({
     reference: z.string().optional().describe("Référence de la facture"),
     orderId: EntityIdSchema.optional().describe("ID du bon de commande associé"),
-    state: z.number().int().optional().describe("État de la facture"),
+    state: stateField(
+      "invoice",
+      "État de la facture : ID de `boond://dictionary/states/invoices` (ex: 0 = Création, 1 = Transmis au client)"
+    ),
     invoiceDate: z.string().optional().describe("Date de facturation (YYYY-MM-DD)"),
     expectedPaymentDate: z.string().optional().describe("Date d'échéance/paiement attendu (YYYY-MM-DD)"),
     amountExcludingTax: z.number().optional().describe("Montant HT"),
@@ -1111,7 +1112,10 @@ export const InvoiceUpdateSchema = z
   .object({
     id: EntityIdSchema.describe("ID de la facture à modifier"),
     reference: z.string().optional().describe("Référence de la facture"),
-    state: z.number().int().optional().describe("État de la facture"),
+    state: stateField(
+      "invoice",
+      "État de la facture : ID de `boond://dictionary/states/invoices` (ex: 0 = Création, 1 = Transmis au client)"
+    ),
     invoiceDate: z.string().optional().describe("Date de facturation (YYYY-MM-DD)"),
     expectedPaymentDate: z.string().optional().describe("Date d'échéance/paiement attendu (YYYY-MM-DD)"),
     amountExcludingTax: z.number().optional().describe("Montant HT"),
@@ -1144,7 +1148,7 @@ export const OrderCreateSchema = z
     reference: z.string().optional().describe("Référence du bon de commande"),
     companyId: EntityIdSchema.optional().describe("ID de la société"),
     projectId: EntityIdSchema.optional().describe("ID du projet associé"),
-    state: z.number().int().optional().describe("État du bon de commande"),
+    state: stateField("order", "État du bon de commande : ID de `boond://dictionary/states/orders`"),
     orderDate: z.string().optional().describe("Date du bon de commande (YYYY-MM-DD)"),
     startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
@@ -1159,7 +1163,7 @@ export const OrderUpdateSchema = z
   .object({
     id: EntityIdSchema.describe("ID du bon de commande à modifier"),
     reference: z.string().optional().describe("Référence"),
-    state: z.number().int().optional().describe("État"),
+    state: stateField("order", "État du bon de commande : ID de `boond://dictionary/states/orders`"),
     orderDate: z.string().optional().describe("Date (YYYY-MM-DD)"),
     startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
@@ -1203,7 +1207,9 @@ export const AbsenceCreateSchema = z
     duration: z.number().optional().describe("Durée en jours ; calculée automatiquement si absente"),
     workUnitTypeReference: z.number().int().min(1).optional().describe("Référence du type d'unité d'absence, défaut 1"),
     absencesPeriods: z.array(z.record(z.string(), z.unknown())).optional().describe("Périodes d'absence Boond brutes"),
-    state: z.number().int().optional().describe("État de la demande (0=en attente, 1=validé, 2=refusé...)"),
+    // No `state` (issue #250): on `/absences-reports` it is a validation-workflow
+    // string (`waitingForValidation`, `validated`…), not a dictionary integer,
+    // and it is moved by the workflow — same finding as `/expenses-reports`.
     note: z.string().optional().describe("Commentaire / motif"),
   })
   .strict();
@@ -1213,7 +1219,6 @@ export const AbsenceUpdateSchema = z
     id: EntityIdSchema.describe("ID de l'absence à modifier"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    state: z.number().int().optional().describe("État de la demande"),
     note: z.string().optional().describe("Commentaire / motif"),
   })
   .strict();
@@ -1422,7 +1427,10 @@ export const PositioningCreateSchema = z
     resourceId: EntityIdSchema.optional().describe("ID de la ressource positionnée"),
     projectId: EntityIdSchema.optional().describe("ID du projet"),
     opportunityId: EntityIdSchema.optional().describe("ID de l'opportunité"),
-    state: z.number().int().optional().describe("État du positionnement"),
+    state: stateField(
+      "positioning",
+      "État du positionnement : ID de `boond://dictionary/states/positionings` (`won` rattache le positionnement à un projet)"
+    ),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes / commentaires"),

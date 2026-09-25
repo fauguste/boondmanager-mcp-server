@@ -76,7 +76,7 @@ Returns: Liste des demandes d'absence correspondantes.`,
         instead: "`boond_absences_update` pour modifier une demande déjà déposée.",
         behaviour: [
           "Le détail est porté par `absencesPeriods` ; si le tableau est omis, une période unique est déduite de `startDate`/`endDate`.",
-          "`state` est soumis au workflow de validation BoondManager : la demande part dans son état initial, elle n'est pas validée par cet appel.",
+          "Pas de `state` : sur `/absences-reports` l'état est une chaîne du workflow de validation (`waitingForValidation`, `validated`…) que seul le workflow déplace — la demande part en attente de validation, elle n'est pas validée par cet appel (suivi via `boond_validations_search`).",
           "Écriture non idempotente — l'API ne déduplique pas deux demandes sur les mêmes dates.",
         ],
         returns: "confirmation et fiche de la demande créée.",
@@ -90,8 +90,7 @@ Returns: Liste des demandes d'absence correspondantes.`,
       },
     },
     async (params) => {
-      const { resourceId, typeOf, startDate, endDate, duration, workUnitTypeReference, absencesPeriods, state, note } =
-        params;
+      const { resourceId, typeOf, startDate, endDate, duration, workUnitTypeReference, absencesPeriods, note } = params;
       const periods = absencesPeriods ?? [
         {
           startDate,
@@ -103,7 +102,6 @@ Returns: Liste des demandes d'absence correspondantes.`,
       ];
       const body = buildJsonApiBody("absencesreport", {
         ...(note ? { informationComments: note } : {}),
-        ...(state !== undefined ? { state } : {}),
         absencesPeriods: periods,
       });
       (body as Record<string, Record<string, unknown>>).data.relationships = {
