@@ -8,7 +8,7 @@
 ## Installation
 
 ```bash
-git clone https://github.com/fauguste/boondmanager-mcp-server.git
+git clone https://github.com/silamir/boondmanager-mcp-server.git
 cd boondmanager-mcp-server
 npm install
 ```

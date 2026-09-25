@@ -20,12 +20,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fauguste/boondmanager-mcp-server.git"
+    "url": "git+https://github.com/silamir/boondmanager-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/fauguste/boondmanager-mcp-server/issues"
+    "url": "https://github.com/silamir/boondmanager-mcp-server/issues"
   },
-  "homepage": "https://github.com/fauguste/boondmanager-mcp-server#readme",
+  "homepage": "https://github.com/silamir/boondmanager-mcp-server#readme",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -55,8 +55,11 @@
     "candidates",
     "resources"
   ],
-  "mcpName": "io.github.fauguste/boondmanager-mcp-server",
-  "author": "Frédéric Auguste",
+  "mcpName": "io.github.silamir/boondmanager-mcp-server",
+  "author": "Silamir (https://www.silamir.com)",
+  "contributors": [
+    "Frédéric Auguste"
+  ],
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

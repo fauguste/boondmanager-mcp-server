@@ -44,7 +44,7 @@ WORKDIR /app
 # OCI image annotations — make the image discoverable in registries.
 LABEL org.opencontainers.image.title="boondmanager-mcp-server" \
       org.opencontainers.image.description="MCP server for the BoondManager API (HTTP gateway mode, OAuth2 protected resource)" \
-      org.opencontainers.image.source="https://github.com/fauguste/boondmanager-mcp-server" \
+      org.opencontainers.image.source="https://github.com/silamir/boondmanager-mcp-server" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.vendor="Silamir"
 

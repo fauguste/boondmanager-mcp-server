@@ -144,7 +144,7 @@ docker run -d --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
   -e MCP_HTTP_PUBLIC_URL=https://mcp.example.com/mcp \
   --name boondmanager-mcp \
-  ghcr.io/fauguste/boondmanager-mcp-server:latest
+  ghcr.io/silamir/boondmanager-mcp-server:latest
 ```
 
 No volume, no secret, no env var that you wouldn't paste into a Slack

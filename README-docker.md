@@ -1,20 +1,20 @@
 # BoondManager MCP Server – Docker Image
 
 [![Docker Hub](https://img.shields.io/docker/v/fauguste/boondmanager-mcp-server?label=Docker%20Hub&logo=docker&color=2496ED)](https://hub.docker.com/r/fauguste/boondmanager-mcp-server)
-[![GHCR](https://img.shields.io/badge/GHCR-fauguste%2Fboondmanager--mcp--server-181717?logo=github)](https://github.com/fauguste/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
-[![CI](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/ci.yml)
+[![GHCR](https://img.shields.io/badge/GHCR-silamir%2Fboondmanager--mcp--server-181717?logo=github)](https://github.com/silamir/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
+[![CI](https://github.com/silamir/boondmanager-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/silamir/boondmanager-mcp-server/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Serveur MCP (Model Context Protocol) pour l'API BoondManager en mode HTTP transport. Conçu pour les déploiements distants, gateways MCP et orchestrateurs multi-utilisateurs (LobeChat, Khoj, custom gateways).
 
-**158 outils, 6 prompts, 20 ressources** exposés via une API HTTP/SSE. Documentation complète sur [GitHub](https://github.com/fauguste/boondmanager-mcp-server).
+**158 outils, 6 prompts, 20 ressources** exposés via une API HTTP/SSE. Documentation complète sur [GitHub](https://github.com/silamir/boondmanager-mcp-server).
 
 ## Images disponibles
 
 Deux registres, même image multi-architecture (`linux/amd64` + `linux/arm64`) :
 
 - **Docker Hub** : `docker.io/fauguste/boondmanager-mcp-server`
-- **GHCR** : `ghcr.io/fauguste/boondmanager-mcp-server`
+- **GHCR** : `ghcr.io/silamir/boondmanager-mcp-server`
 
 **Tags** :
 - `:2.0.0` (recommandé en production – version pinned)
@@ -84,7 +84,7 @@ L'image Docker fonctionne en mode **HTTP transport** uniquement. L'authentificat
 | `BOOND_OAUTH_AUTHORIZATION_SERVER` | `https://ui.boondmanager.com` | Issuer URL de BoondManager, advertised dans `authorization_servers`. |
 | `BOOND_OAUTH_SCOPES` | (vide) | Scopes space/comma-separated advertised dans `scopes_supported`. Vide = négociation directe client-Boond. |
 
-Documentation complète : [`docs/oauth.md`](https://github.com/fauguste/boondmanager-mcp-server/blob/main/docs/oauth.md) sur GitHub.
+Documentation complète : [`docs/oauth.md`](https://github.com/silamir/boondmanager-mcp-server/blob/main/docs/oauth.md) sur GitHub.
 
 ## Variables d'environnement – Transport HTTP
 
@@ -166,7 +166,7 @@ services:
 **Reporting** : Sociétés, Projets, Ressources, Synthèse, Plans de production (1 chacun)  
 **Administration** : Comptes (2), Agences (2), Business Units (2), Poles (2), Roles (2), Calendriers (2), Drapeaux (2), Webhooks (2), Logs audit (2), Notifications (2), Fils de discussion (2), Application (2)
 
-Catalogue complet : [`TOOLS.md`](https://github.com/fauguste/boondmanager-mcp-server/blob/main/TOOLS.md)
+Catalogue complet : [`TOOLS.md`](https://github.com/silamir/boondmanager-mcp-server/blob/main/TOOLS.md)
 
 ## Healthcheck
 
@@ -199,9 +199,9 @@ docker buildx imagetools inspect \
 
 ## Support & Contributions
 
-- **Source & Documentation** : [github.com/fauguste/boondmanager-mcp-server](https://github.com/fauguste/boondmanager-mcp-server)
-- **Issues** : [GitHub Issues](https://github.com/fauguste/boondmanager-mcp-server/issues)
-- **Changelog** : [`CHANGELOG.md`](https://github.com/fauguste/boondmanager-mcp-server/blob/main/CHANGELOG.md)
+- **Source & Documentation** : [github.com/silamir/boondmanager-mcp-server](https://github.com/silamir/boondmanager-mcp-server)
+- **Issues** : [GitHub Issues](https://github.com/silamir/boondmanager-mcp-server/issues)
+- **Changelog** : [`CHANGELOG.md`](https://github.com/silamir/boondmanager-mcp-server/blob/main/CHANGELOG.md)
 - **Licence** : Apache-2.0
 
 Contributions welcome via pull requests. Tests requis (`npm test`) avant merge.
@@ -210,7 +210,7 @@ Contributions welcome via pull requests. Tests requis (`npm test`) avant merge.
 
 - **npm** : [npmjs.com/package/boondmanager-mcp-server](https://www.npmjs.com/package/boondmanager-mcp-server)
 - **MCP Registry** : [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/)
-- **GHCR** : [ghcr.io/fauguste/boondmanager-mcp-server](https://github.com/fauguste/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
+- **GHCR** : [ghcr.io/silamir/boondmanager-mcp-server](https://github.com/silamir/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
 
 ---
 
