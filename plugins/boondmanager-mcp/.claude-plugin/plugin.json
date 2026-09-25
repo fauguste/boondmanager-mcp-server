@@ -4,11 +4,11 @@
   "version": "2.15.2",
   "description": "MCP Server for BoondManager API - 182 tools, 12 prompts, 22 resources (ERP/CRM)",
   "author": {
-    "name": "Frédéric Auguste",
-    "url": "https://github.com/fauguste/boondmanager-mcp-server"
+    "name": "Silamir",
+    "url": "https://www.silamir.com"
   },
-  "homepage": "https://github.com/fauguste/boondmanager-mcp-server#readme",
-  "repository": "https://github.com/fauguste/boondmanager-mcp-server.git",
+  "homepage": "https://github.com/silamir/boondmanager-mcp-server#readme",
+  "repository": "https://github.com/silamir/boondmanager-mcp-server.git",
   "license": "Apache-2.0",
   "keywords": [
     "boondmanager",

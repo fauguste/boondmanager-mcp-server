@@ -1,14 +1,22 @@
+<p align="center">
+  <a href="https://www.silamir.com">
+    <img src="https://raw.githubusercontent.com/silamir/boondmanager-mcp-server/main/assets/silamir-logo.png" alt="Silamir" height="56" />
+  </a>
+</p>
+
 # BoondManager MCP Server
 
-[![CI](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/fauguste/boondmanager-mcp-server/actions/workflows/codeql.yml)
+<p align="center"><em>Un projet open source <a href="https://www.silamir.com">Silamir</a>.</em></p>
+
+[![CI](https://github.com/silamir/boondmanager-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/silamir/boondmanager-mcp-server/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/silamir/boondmanager-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/silamir/boondmanager-mcp-server/actions/workflows/codeql.yml)
 [![npm version](https://img.shields.io/npm/v/boondmanager-mcp-server.svg)](https://www.npmjs.com/package/boondmanager-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/boondmanager-mcp-server.svg)](https://www.npmjs.com/package/boondmanager-mcp-server)
 [![Node.js](https://img.shields.io/node/v/boondmanager-mcp-server.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
 [![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/)
 [![Docker Hub](https://img.shields.io/docker/v/fauguste/boondmanager-mcp-server?label=Docker%20Hub&logo=docker&color=2496ED)](https://hub.docker.com/r/fauguste/boondmanager-mcp-server)
-[![GHCR](https://img.shields.io/badge/GHCR-fauguste%2Fboondmanager--mcp--server-181717?logo=github)](https://github.com/fauguste/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
+[![GHCR](https://img.shields.io/badge/GHCR-silamir%2Fboondmanager--mcp--server-181717?logo=github)](https://github.com/silamir/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **Installation 1-clic :**
@@ -215,7 +223,7 @@ Exemples d'invocation des prompts ressources / competences / CV :
 
 ### Claude Desktop (one-click)
 
-Telechargez le fichier `.mcpb` depuis la [derniere release GitHub](https://github.com/fauguste/boondmanager-mcp-server/releases/latest), puis dans Claude Desktop : **Fichier > Installer une extension...** et selectionnez le fichier. Les identifiants sont demandes a l'installation et stockes de maniere chiffree (Keychain macOS / Credential Manager Windows).
+Telechargez le fichier `.mcpb` depuis la [derniere release GitHub](https://github.com/silamir/boondmanager-mcp-server/releases/latest), puis dans Claude Desktop : **Fichier > Installer une extension...** et selectionnez le fichier. Les identifiants sont demandes a l'installation et stockes de maniere chiffree (Keychain macOS / Credential Manager Windows).
 
 ### Claude Code (plugin, recommande)
 
@@ -223,7 +231,7 @@ Meme confort que le one-click Desktop : un formulaire de configuration, aucune
 variable d'environnement a poser soi-meme.
 
 ```
-/plugin marketplace add fauguste/boondmanager-mcp-server
+/plugin marketplace add silamir/boondmanager-mcp-server
 /plugin install boondmanager-mcp@boondmanager
 ```
 
@@ -386,7 +394,7 @@ boondmanager-mcp-server
 ### Depuis les sources
 
 ```bash
-git clone https://github.com/fauguste/boondmanager-mcp-server.git
+git clone https://github.com/silamir/boondmanager-mcp-server.git
 cd boondmanager-mcp-server
 npm install
 npm run build
@@ -483,7 +491,7 @@ goose session --with-extension "npx -y boondmanager-mcp-server"
 Le depot embarque un manifeste d'extension Gemini CLI (`gemini-extension.json`). Installez l'extension directement depuis GitHub :
 
 ```bash
-gemini extensions install https://github.com/fauguste/boondmanager-mcp-server
+gemini extensions install https://github.com/silamir/boondmanager-mcp-server
 ```
 
 Definissez ensuite l'authentification dans votre environnement (Gemini interpole `${VAR}` au demarrage) :
@@ -722,7 +730,7 @@ Une image Docker prete a l'emploi est publiee a chaque release sur deux registre
 
 | Registre | Image | Page |
 |---|---|---|
-| GitHub Container Registry | `ghcr.io/fauguste/boondmanager-mcp-server` | [github.com/fauguste/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server](https://github.com/fauguste/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server) |
+| GitHub Container Registry | `ghcr.io/silamir/boondmanager-mcp-server` | [github.com/silamir/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server](https://github.com/silamir/boondmanager-mcp-server/pkgs/container/boondmanager-mcp-server) |
 | Docker Hub | `docker.io/fauguste/boondmanager-mcp-server` | [hub.docker.com/r/fauguste/boondmanager-mcp-server](https://hub.docker.com/r/fauguste/boondmanager-mcp-server) |
 
 Memes digests, memes tags — choisissez celui qui s'aligne avec votre tooling. L'image demarre par defaut en transport HTTP, sur le port 3000, sur l'interface `0.0.0.0`. **Aucun volume, aucun secret a stocker** — le serveur est stateless par construction.
@@ -733,7 +741,7 @@ docker run -d --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
   -e MCP_HTTP_PUBLIC_URL=https://mcp.votre-domaine.com/mcp \
   --name boondmanager-mcp \
-  ghcr.io/fauguste/boondmanager-mcp-server:latest
+  ghcr.io/silamir/boondmanager-mcp-server:latest
 
 # Ou via Docker Hub (anonyme)
 docker run -d --restart unless-stopped \
@@ -914,7 +922,7 @@ Selon le canal d'installation :
 | Extension Claude Desktop (`.mcpb`) | Telecharger le `.mcpb` de la derniere release et le reinstaller -- les extensions tierces ne s'auto-mettent pas a jour |
 | Plugin Claude Code | `/plugin marketplace update boondmanager` puis reinstaller le plugin (le lancement est epingle sur `boondmanager-mcp-server@X.Y.Z`) |
 | `claude mcp add` / config manuelle | Epingler `boondmanager-mcp-server@latest` (ou une version >= 2.12.2) dans la commande `npx` |
-| Docker / GHCR | `docker pull ghcr.io/fauguste/boondmanager-mcp-server:latest` |
+| Docker / GHCR | `docker pull ghcr.io/silamir/boondmanager-mcp-server:latest` |
 
 > Verifiez aussi la version de Node : le serveur requiert **Node.js >= 22**. Un poste encore en
 > Node 20 est en general un poste dont l'installation n'a pas ete rafraichie depuis longtemps.
@@ -970,6 +978,11 @@ npm run typecheck
 
 ## Licence
 
-Apache License 2.0 - Copyright (c) 2025 Frédéric Auguste
+Apache License 2.0 — Copyright (c) 2025-2026 [Silamir](https://www.silamir.com).
+Créé à l'origine par Frédéric Auguste.
 
 Voir [LICENSE](./LICENSE) et [NOTICE](./NOTICE) pour les détails.
+
+BoondManager est une marque de BoondManager SAS. Ce projet est un client
+indépendant et non officiel de l'API publique BoondManager, sans affiliation
+avec BoondManager SAS.

@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.fauguste/boondmanager-mcp-server",
+  "name": "io.github.silamir/boondmanager-mcp-server",
   "title": "BoondManager MCP Server",
   "description": "MCP Server for BoondManager API - 182 tools, 12 prompts, 22 resources (ERP/CRM)",
   "version": "2.15.2",
-  "websiteUrl": "https://github.com/fauguste/boondmanager-mcp-server",
+  "websiteUrl": "https://github.com/silamir/boondmanager-mcp-server",
   "repository": {
-    "url": "https://github.com/fauguste/boondmanager-mcp-server",
+    "url": "https://github.com/silamir/boondmanager-mcp-server",
     "source": "github"
   },
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/fauguste/boondmanager-mcp-server/main/icon.png",
+      "src": "https://raw.githubusercontent.com/silamir/boondmanager-mcp-server/main/icon.png",
       "mimeType": "image/png",
       "sizes": ["128x128"]
     }
@@ -27,7 +27,7 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/fauguste/boondmanager-mcp-server/releases/download/v2.15.2/boondmanager-mcp-server-v2.15.2.mcpb",
+      "identifier": "https://github.com/silamir/boondmanager-mcp-server/releases/download/v2.15.2/boondmanager-mcp-server-v2.15.2.mcpb",
       "fileSha256": "PLACEHOLDER",
       "transport": {
         "type": "stdio"

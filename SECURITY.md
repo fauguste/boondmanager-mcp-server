@@ -7,7 +7,7 @@ authentication bypass, request smuggling, log poisoning, supply-chain risk,
 anything that could expose BoondManager data — please report it privately
 rather than opening a public issue.
 
-**Preferred channel** — open a [private security advisory on GitHub](https://github.com/fauguste/boondmanager-mcp-server/security/advisories/new).
+**Preferred channel** — open a [private security advisory on GitHub](https://github.com/silamir/boondmanager-mcp-server/security/advisories/new).
 This keeps the discussion confidential until a fix ships.
 
 **Alternative** — email `frederic.auguste@gmail.com` with subject prefix

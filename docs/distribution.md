@@ -10,16 +10,56 @@ the reference for what gets pushed where on each release.
 | Channel | URL / Identifier | Sync mechanism | Frequency |
 |---|---|---|---|
 | **npm** | [`boondmanager-mcp-server`](https://www.npmjs.com/package/boondmanager-mcp-server) | `npm publish --provenance` step in `release.yml`, authenticated by **OIDC trusted publishing** (no `NPM_TOKEN`; see the secrets section of `CLAUDE.md` for the two traps that make it fail with a misleading 404) | every `v*` tag |
-| **MCP Registry** | [`io.github.fauguste/boondmanager-mcp-server`](https://registry.modelcontextprotocol.io/) | `mcp-publisher publish` in `release.yml` (GitHub OIDC) | every `v*` tag |
-| **GitHub Releases (.mcpb bundle)** | [releases page](https://github.com/fauguste/boondmanager-mcp-server/releases) | `softprops/action-gh-release@v3` in `release.yml`; body sourced from `CHANGELOG.md` | every `v*` tag |
-| **GitHub Container Registry** | `ghcr.io/fauguste/boondmanager-mcp-server` | `docker/build-push-action@v6` in `release.yml`; multi-arch (amd64+arm64), tags `:latest`, `:X`, `:X.Y`, `:X.Y.Z` | every `v*` tag |
-| **Claude Code plugin marketplace** | `/plugin marketplace add fauguste/boondmanager-mcp-server` → `boondmanager-mcp@boondmanager` | reads `.claude-plugin/marketplace.json` + `plugins/boondmanager-mcp/` from the default branch; the plugin launches `npx boondmanager-mcp-server@X.Y.Z` (stdio) | on the user's `/plugin marketplace update` |
+| **MCP Registry** | [`io.github.silamir/boondmanager-mcp-server`](https://registry.modelcontextprotocol.io/) | `mcp-publisher publish` in `release.yml` (GitHub OIDC) | every `v*` tag |
+| **GitHub Releases (.mcpb bundle)** | [releases page](https://github.com/silamir/boondmanager-mcp-server/releases) | `softprops/action-gh-release@v3` in `release.yml`; body sourced from `CHANGELOG.md` | every `v*` tag |
+| **GitHub Container Registry** | `ghcr.io/silamir/boondmanager-mcp-server` | `docker/build-push-action@v6` in `release.yml`; multi-arch (amd64+arm64), tags `:latest`, `:X`, `:X.Y`, `:X.Y.Z` | every `v*` tag |
+| **Claude Code plugin marketplace** | `/plugin marketplace add silamir/boondmanager-mcp-server` → `boondmanager-mcp@boondmanager` | reads `.claude-plugin/marketplace.json` + `plugins/boondmanager-mcp/` from the default branch; the plugin launches `npx boondmanager-mcp-server@X.Y.Z` (stdio) | on the user's `/plugin marketplace update` |
 | **LobeHub MCP marketplace** | [fauguste-boondmanager-mcp-server](https://lobehub.com/mcp/fauguste-boondmanager-mcp-server) | mirrors the MCP Registry (auto, ~24-48 h delay) | per release |
 | **Smithery** | [smithery.ai listing](https://smithery.ai/server/@fauguste/boondmanager-mcp-server) | reads `smithery.yaml` from this repo | per push to `main` |
-| **Gemini CLI extension** | `gemini extensions install https://github.com/fauguste/boondmanager-mcp-server` | reads `gemini-extension.json` from repo root | on install (reads the default branch) |
+| **Gemini CLI extension** | `gemini extensions install https://github.com/silamir/boondmanager-mcp-server` | reads `gemini-extension.json` from repo root | on install (reads the default branch) |
 | **One-click badges (Cursor, VS Code, VS Code Insiders)** | deeplinks in `README.md` (no package) | hosted HTTPS redirects (`cursor.com/install-mcp`, `insiders.vscode.dev/redirect/mcp/install`) with base64/url-encoded `npx` config — clickable on github.com | manual (only if the `npx` invocation changes) |
 | **LM Studio / Goose** | install sections in `README.md` (no package) | native `lmstudio://` / `goose://` deeplinks are stripped by GitHub, so these are documented as copy-paste config instead of badges | manual |
 | **Glama listing badge** | [Glama](https://glama.ai/mcp/servers/fauguste/boondmanager-mcp-server) | live `/badge` PNG, embedded via `<img width>` to keep it compact. Smithery has no usable README badge (their badge endpoint is WAF-gated), so only the listing channel row above is kept | auto |
+
+## Repository transfer to the `silamir` org (2026-09-25)
+
+The repository moved from `fauguste/boondmanager-mcp-server` to
+`silamir/boondmanager-mcp-server`. GitHub serves permanent redirects for the old
+path (web, git, API), so nothing breaks at the URL level — but three channels key
+on the **owner** and need attention:
+
+- **npm — trusted publisher.** OIDC binds to `<owner>/<repo>/<workflow>`. The
+  publisher must be re-pointed to `silamir/boondmanager-mcp-server/release.yml`
+  on npmjs.com, otherwise `npm publish` fails with the misleading `404 PUT`
+  documented in the secrets section of `CLAUDE.md`. The npm **package name is
+  unchanged** (`boondmanager-mcp-server`), so every `npx` pin, one-click badge
+  and `.mcp.json` keeps working.
+- **MCP Registry — namespace.** `io.github.<owner>` is verified through GitHub
+  OIDC, so the server id becomes `io.github.silamir/boondmanager-mcp-server`.
+  There is no rename: the first release after the transfer publishes a **new
+  entry**, and the old `io.github.fauguste/...` one should be deprecated.
+- **GHCR — image path.** Packages follow the repo, so new tags land at
+  `ghcr.io/silamir/boondmanager-mcp-server`. Images published before the
+  transfer stay at the old path and are **not** redirected; the `CHANGELOG`
+  entries that mention `ghcr.io/fauguste/...` are historical and left as such.
+
+**Docker Hub stays on `fauguste/boondmanager-mcp-server`** — deliberate, there is
+no Silamir org on Docker Hub yet. This is the one place where the two namespaces
+legitimately differ, hence the README badges pointing at two owners.
+
+Three listings are **third-party-owned slugs** that only change when each service
+re-indexes the repo under its new owner. They are deliberately left pointing at
+the old slug until the new one is observed, because editing them early yields
+dead links:
+
+| Listing | Current slug | Expected after re-index |
+|---|---|---|
+| Glama | `glama.ai/mcp/servers/fauguste/boondmanager-mcp-server` | `.../silamir/...` |
+| Smithery | `smithery.ai/server/@fauguste/boondmanager-mcp-server` | `@silamir/...` |
+| LobeHub | `lobehub.com/mcp/fauguste-boondmanager-mcp-server` | `silamir-...` |
+
+Check them at the first post-transfer release and update this file plus the
+README badges in the same commit.
 
 ## One-time setup (manual)
 
@@ -33,7 +73,7 @@ discover the project. Set them with the GitHub CLI — re-running is safe and
 overwrites the previous list:
 
 ```bash
-gh repo edit fauguste/boondmanager-mcp-server \
+gh repo edit silamir/boondmanager-mcp-server \
   --add-topic mcp \
   --add-topic mcp-server \
   --add-topic model-context-protocol \
@@ -53,7 +93,7 @@ Open a PR adding the entry under the *Business / CRM* category to
 [`punkpeye/awesome-mcp-servers`](https://github.com/punkpeye/awesome-mcp-servers):
 
 ```markdown
-- [fauguste/boondmanager-mcp-server](https://github.com/fauguste/boondmanager-mcp-server) - MCP server for the BoondManager API (ERP/CRM for staffing companies). 156 tools, 6 prompts, 19 resources.
+- [silamir/boondmanager-mcp-server](https://github.com/silamir/boondmanager-mcp-server) - MCP server for the BoondManager API (ERP/CRM for staffing companies). 156 tools, 6 prompts, 19 resources.
 ```
 
 ### 3. Glama MCP catalogue
@@ -77,7 +117,7 @@ only act if the auto-mirror hasn't picked us up.
 ### 6. awesome-ai-plugins (community list)
 
 Requested by the list's maintainers in
-[issue #194](https://github.com/fauguste/boondmanager-mcp-server/issues/194).
+[issue #194](https://github.com/silamir/boondmanager-mcp-server/issues/194).
 [`hashgraph-online/awesome-ai-plugins`](https://github.com/hashgraph-online/awesome-ai-plugins)
 is a cross-assistant catalogue (~340 entries) that already lists a number of
 ERP/CRM MCP servers, so the fit is real — but the invitation is mass outreach
@@ -89,7 +129,7 @@ Open a PR adding the entry to the **Community Plugins → Tools & Integrations**
 section, in alphabetical order (between `Bitbucket CLI` and `Cadence Code`):
 
 ```markdown
-- [BoondManager MCP Server](https://github.com/fauguste/boondmanager-mcp-server) - MCP server for the BoondManager staffing ERP/CRM exposing 182 tools, 12 prompts and 22 resources over candidates, resources, opportunities, projects, invoices and expense reports, with stdio and OAuth-protected HTTP transports.
+- [BoondManager MCP Server](https://github.com/silamir/boondmanager-mcp-server) - MCP server for the BoondManager staffing ERP/CRM exposing 182 tools, 12 prompts and 22 resources over candidates, resources, opportunities, projects, invoices and expense reports, with stdio and OAuth-protected HTTP transports.
 ```
 
 **Do not add their scanner CI.** `CONTRIBUTING.md` recommends a workflow that
@@ -105,9 +145,9 @@ After every `v*` tag is pushed and the Release workflow turns green, take 2
 minutes to spot-check the distribution surface:
 
 1. **npm** — `npm view boondmanager-mcp-server version` matches the tag.
-2. **MCP Registry** — the new version is listed at `https://registry.modelcontextprotocol.io/v0/servers/io.github.fauguste/boondmanager-mcp-server`.
+2. **MCP Registry** — the new version is listed at `https://registry.modelcontextprotocol.io/v0/servers/io.github.silamir/boondmanager-mcp-server`.
 3. **GitHub Release** — the body matches the `## [X.Y.Z]` section of `CHANGELOG.md` and the `.mcpb` asset is attached.
-4. **GHCR** — `docker pull ghcr.io/fauguste/boondmanager-mcp-server:<tag>` succeeds; `docker manifest inspect` shows both `linux/amd64` and `linux/arm64`.
+4. **GHCR** — `docker pull ghcr.io/silamir/boondmanager-mcp-server:<tag>` succeeds; `docker manifest inspect` shows both `linux/amd64` and `linux/arm64`.
 5. **LobeHub** — within ~48 h, `https://lobehub.com/mcp/fauguste-boondmanager-mcp-server` shows the new description / changelog. If not, it's safe to ignore (LobeHub re-scans on its own cadence).
 6. **Smithery** — `https://smithery.ai/server/@fauguste/boondmanager-mcp-server` reflects the latest `smithery.yaml`. Smithery refreshes on every push to `main`, not per tag.
 7. **Claude Code plugin** — `claude plugin marketplace update boondmanager` then check the entry advertises the tagged version. The refresh happens on the *user's* machine, so this is the one channel where "published" and "what users get" can disagree for as long as they don't update. The version pinned in `plugins/boondmanager-mcp/.mcp.json` only resolves once the npm publish step has landed, which is why the plugin files are bumped in the release commit and never ahead of it.

@@ -100,7 +100,7 @@ jobs:
       # `tsc` (a devDependency), so the full dev tree must still be present.
       - name: Publish to npm
         # No NODE_AUTH_TOKEN: authentication is OIDC trusted publishing,
-        # configured on npmjs.com against (fauguste, boondmanager-mcp-server,
+        # configured on npmjs.com against (silamir, boondmanager-mcp-server,
         # release.yml). `permissions.id-token: write` above is what lets the
         # runner mint the OIDC token. Nothing to rotate, nothing to expire —
         # the previous long-lived NPM_TOKEN expired silently at its 90-day cap
@@ -184,7 +184,7 @@ jobs:
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           MCPB_FILE="boondmanager-mcp-server-v${TAG_VERSION}.mcpb"
           MCPB_SHA256=$(sha256sum "$MCPB_FILE" | awk '{print $1}')
-          MCPB_URL="https://github.com/fauguste/boondmanager-mcp-server/releases/download/v${TAG_VERSION}/${MCPB_FILE}"
+          MCPB_URL="https://github.com/silamir/boondmanager-mcp-server/releases/download/v${TAG_VERSION}/${MCPB_FILE}"
 
           jq \
             --arg ver "$TAG_VERSION" \

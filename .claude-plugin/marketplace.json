@@ -2,8 +2,8 @@
   "name": "boondmanager",
   "description": "Plugins BoondManager pour Claude Code",
   "owner": {
-    "name": "Frédéric Auguste",
-    "url": "https://github.com/fauguste"
+    "name": "Silamir",
+    "url": "https://github.com/silamir"
   },
   "plugins": [
     {
