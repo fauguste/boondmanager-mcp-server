@@ -94,28 +94,23 @@ describe("registerAbsenceTools", () => {
     });
   });
 
-  it("maps absence state when provided", async () => {
+  it("refuses state: on /absences-reports it is a validation-workflow string the write cannot move (#250)", () => {
     registerAbsenceTools(server);
-    const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_absences_create");
-    const handler = call?.[2] as (params: unknown) => Promise<unknown>;
-
-    await handler({
-      resourceId: "5",
-      typeOf: "CP",
-      startDate: "2026-07-14",
-      endDate: "2026-07-14",
-      state: 1,
-    });
-
-    expect(apiRequest).toHaveBeenCalledWith(
-      "/absences-reports",
-      "POST",
-      expect.objectContaining({
-        data: expect.objectContaining({
-          attributes: expect.objectContaining({ state: 1 }),
-        }),
-      })
-    );
+    for (const name of ["boond_absences_create", "boond_absences_update"]) {
+      const call = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === name)!;
+      const schema = call[1].inputSchema as unknown as { safeParse: (v: unknown) => { success: boolean } };
+      expect(
+        schema.safeParse({
+          id: "1",
+          resourceId: "5",
+          typeOf: "CP",
+          startDate: "2026-10-01",
+          endDate: "2026-10-02",
+          state: 1,
+        }).success,
+        name
+      ).toBe(false);
+    }
   });
 
   it("searches absences reports with resource keyword reference", async () => {

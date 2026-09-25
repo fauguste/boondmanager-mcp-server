@@ -290,6 +290,17 @@ below and fix this section.
 - The previous `boond_timesheets_create` sent `totalDays`, `totalHours`,
   `state`, `note` at report level — line vocabulary in a report slot, none of
   it in `models.timesreport`; it had never created anything.
+**`state` on write schemas** (issue #250) is a truth table, pinned in
+`src/schemas/state-writability.test.ts` with the verification behind each
+row: absent on the three validation-workflow documents (`expensesReport` —
+verified on write in #179; `absencesReport` and `timesReport` — verified on
+read: their `state` is a workflow *string* such as `waitingForValidation`,
+so an integer could never be what the API stores), exposed as a dictionary id
+(`stateField`, `boond://dictionary/states/*`) on `invoice`, `order` and
+`positioning` (the positionings RAML documents `won` on POST attaching a
+project; the invoice / order write path is not verified). Don't add a bare
+`z.number()` `state` to a write schema: use `stateField` where it persists,
+nothing where the workflow owns it.
 
 **`boond_expenses_default`** exists because the expense-type codes are published
 nowhere else. `GET /expenses-reports/default?resource=&term=` is the only route
