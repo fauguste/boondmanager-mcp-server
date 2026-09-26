@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerAbsenceTools } from "./absences.js";
+import { formatAbsenceDefaults, registerAbsenceTools } from "./absences.js";
 import { apiRequest } from "../services/boond-client.js";
 import { AbsenceSearchSchema } from "../schemas/index.js";
 
@@ -26,9 +26,9 @@ describe("registerAbsenceTools", () => {
     vi.mocked(apiRequest).mockResolvedValue({ data: { id: "31", type: "absencesreport", attributes: {} } } as never);
   });
 
-  it("should register 5 absence tools", () => {
+  it("should register 6 absence tools (default + CRUD)", () => {
     registerAbsenceTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(5);
+    expect(server.registerTool).toHaveBeenCalledTimes(6);
   });
 
   it("should register all expected tool names", () => {
@@ -244,5 +244,57 @@ describe("AbsenceSearchSchema", () => {
 
     expect(AbsenceSearchSchema.safeParse({ startMonth: "2026-9", endMonth: "2026-09" }).success).toBe(false);
     expect(AbsenceSearchSchema.safeParse({ startMonth: "2026-09", endMonth: "2026-09" }).success).toBe(true);
+  });
+});
+
+describe("boond_absences_default (issue #257)", () => {
+  it("reads /absences-reports/default with resource (and agency when given)", async () => {
+    const server = createMockServer();
+    vi.mocked(apiRequest).mockClear();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "0", type: "absencesreport", attributes: {} } } as never);
+    registerAbsenceTools(server);
+    const handler = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_absences_default")![2] as (
+      p: unknown
+    ) => Promise<unknown>;
+    await handler({ resourceId: "18081" });
+    expect(apiRequest).toHaveBeenCalledWith("/absences-reports/default", "GET", undefined, { resource: "18081" });
+    await handler({ resourceId: "18081", agencyId: "3" });
+    expect(apiRequest).toHaveBeenLastCalledWith("/absences-reports/default", "GET", undefined, {
+      resource: "18081",
+      agency: "3",
+    });
+  });
+
+  it("renders the absence work-unit types of the included resource and the report's scalars", () => {
+    const text = formatAbsenceDefaults({
+      data: {
+        id: "0",
+        type: "absencesreport",
+        attributes: { term: "2026-09", state: "savedAndNoValidation", absencesPeriods: [] },
+        relationships: { resource: { data: { id: "18081", type: "resource" } } },
+      },
+      included: [
+        {
+          id: "18081",
+          type: "resource",
+          attributes: {
+            firstName: "Ana",
+            lastName: "Silva",
+            workUnitTypesAllowed: [
+              { reference: 1, name: "Normale", activityType: "production" },
+              { reference: 4, name: "RTT", activityType: "absence" },
+              { reference: 5, name: "Maladie", activityType: "absence" },
+            ],
+          },
+        },
+        { id: "3", type: "agency", attributes: { name: "Paris" } },
+      ],
+    });
+    expect(text).toContain("ressource #18081 (Ana Silva) | agence #3 (Paris)");
+    expect(text).toContain("reference=4 | RTT | absence");
+    expect(text).toContain("reference=5 | Maladie | absence");
+    expect(text).not.toContain("Normale");
+    expect(text).toContain("term: 2026-09");
+    expect(text).not.toContain("absencesPeriods");
   });
 });

@@ -334,10 +334,14 @@ describe("registerAll — access policy filtering", () => {
     for (const name of tools) {
       // Allowed surface: the two listed domains, plus the workflow mirrors
       // (gated by their source prompt's domains, which are ⊆ {invoices, application}).
+      // `boond_find` (#262) and `boond_rights_get` (#257) are registered by the
+      // application registrar under names that do not carry the domain prefix.
       expect(
         name.startsWith("boond_invoices_") ||
           name.startsWith("boond_application_") ||
-          name.startsWith("boond_workflow_")
+          name.startsWith("boond_workflow_") ||
+          name === "boond_find" ||
+          name === "boond_rights_get"
       ).toBe(true);
     }
     // `provider-invoices` must NOT leak in just because it shares the `invoices` substring.

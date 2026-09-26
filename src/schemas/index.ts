@@ -1379,14 +1379,35 @@ export const DeliveryUpdateSchema = z
 
 // ---- Absence schemas ----
 
+/** `GET /absences-reports/default?resource=&agency=` (issue #257) — the absence types are published there only. */
+export const AbsenceDefaultSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe("ID de la ressource (requis par l'API)."),
+    agencyId: EntityIdSchema.optional().describe("ID de l'agence — déduite de la ressource si omise."),
+  })
+  .strict();
+export type AbsenceDefaultInput = z.infer<typeof AbsenceDefaultSchema>;
+
 export const AbsenceCreateSchema = z
   .object({
     resourceId: EntityIdSchema.describe("ID de la ressource en absence"),
-    typeOf: z.string().min(1).describe("Libellé de l'absence (congé payé, RTT, maladie, sans solde...)"),
+    typeOf: z
+      .string()
+      .min(1)
+      .describe(
+        "Libellé de l'absence (congé payé, RTT, maladie, sans solde...) — porté par `title` ; le type effectif est `workUnitTypeReference`."
+      ),
     startDate: z.string().min(1).describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().min(1).describe("Date de fin (YYYY-MM-DD)"),
     duration: z.number().optional().describe("Durée en jours ; calculée automatiquement si absente"),
-    workUnitTypeReference: z.number().int().min(1).optional().describe("Référence du type d'unité d'absence, défaut 1"),
+    workUnitTypeReference: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        "Code `reference` du type d'absence, publié par `boond_absences_default` (`workUnitTypesAllowed` de la ressource : RTT, maladie, congés payés…) — nulle part ailleurs. Défaut 1 (à confirmer avec le default)."
+      ),
     absencesPeriods: z.array(z.record(z.string(), z.unknown())).optional().describe("Périodes d'absence Boond brutes"),
     // No `state` (issue #250): on `/absences-reports` it is a validation-workflow
     // string (`waitingForValidation`, `validated`…), not a dictionary integer,

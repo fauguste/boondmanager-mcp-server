@@ -164,6 +164,36 @@ function findHint(prefix: string): string {
   return FIND_PREFIXES.has(prefix) ? ", ou `boond_find` pour résoudre un nom / un e-mail en ID" : "";
 }
 
+/** Entities `boond_rights_get` covers (issue #257) — `GET /{entity}/{id}/rights` exists for them. */
+const RIGHTS_PREFIXES = new Set([
+  "boond_candidates",
+  "boond_resources",
+  "boond_contacts",
+  "boond_companies",
+  "boond_opportunities",
+  "boond_projects",
+  "boond_actions",
+  "boond_positionings",
+  "boond_invoices",
+  "boond_orders",
+  "boond_deliveries",
+  "boond_purchases",
+  "boond_payments",
+  "boond_provider_invoices",
+  "boond_products",
+  "boond_contracts",
+  "boond_advantages",
+  "boond_timesheets",
+  "boond_expenses",
+  "boond_absences",
+  "boond_agencies",
+]);
+function rightsHint(prefix: string): string[] {
+  return RIGHTS_PREFIXES.has(prefix)
+    ? ["`boond_rights_get` dit si l'utilisateur a ce droit sur l'enregistrement avant d'essayer (un 403 évité)."]
+    : [];
+}
+
 export function defaultGetDescription(opts: EntityWording & { withTab: boolean }): string {
   const behaviour: string[] = [
     `Un ID inconnu remonte l'erreur BoondManager telle quelle — l'ID doit venir de \`${opts.prefix}_search\`, jamais d'une supposition.`,
@@ -204,6 +234,7 @@ export function defaultUpdateDescription(opts: EntityWording): string {
     behaviour: [
       "Mise à jour partielle : seuls les champs fournis sont écrits, les autres sont laissés en place.",
       "Attention aux champs de type tableau, qui sont **remplacés** et non fusionnés.",
+      ...rightsHint(opts.prefix),
     ],
     returns: `confirmation et fiche mise à jour.`,
   });
@@ -215,6 +246,7 @@ export function defaultDeleteDescription(opts: EntityWording): string {
     when: `uniquement sur demande explicite de l'utilisateur, et après avoir vérifié l'ID avec \`${opts.prefix}_get\`.`,
     instead: `\`${opts.prefix}_update\` pour désactiver ou changer l'état d'un enregistrement sans le détruire — c'est presque toujours l'intention réelle.`,
     behaviour: [
+      ...rightsHint(opts.prefix),
       "⚠️ Irréversible, sans corbeille côté API.",
       "Si le client MCP annonce la capacité `elicitation`, une confirmation est demandée à l'utilisateur final et un refus annule l'appel (`structuredContent.deleted: false` + `reason`) ; sinon la suppression part directement.",
     ],
