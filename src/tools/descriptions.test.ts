@@ -96,14 +96,14 @@ const MAX_SERVER_INSTRUCTIONS_LENGTH = 4000;
 
 /**
  * Cumulative budget for SEP-973 icons in `tools/list`. Icons are per-domain but
- * shipped per-tool, so the total scales with the catalogue (~180 tools × ~230 B
- * ≈ 40 KiB today). This cap is what stops a "nicer" glyph set from quietly
- * costing more than the tool descriptions it decorates; the second assertion
- * bounds it relative to the payload so growing the catalogue alone can't trip
- * it. Operators who don't render icons can drop them entirely with
- * `BOOND_MCP_ICONS=0`.
+ * shipped per-tool, so the total scales with the catalogue (223 tools × ~230 B
+ * ≈ 50 KiB since #254; it was ~40 KiB at 182 tools). This cap is what stops a
+ * "nicer" glyph set from quietly costing more than the tool descriptions it
+ * decorates; the second assertion bounds it relative to the payload so growing
+ * the catalogue alone can't trip it. Operators who don't render icons can
+ * drop them entirely with `BOOND_MCP_ICONS=0`.
  */
-const MAX_TOTAL_ICON_BYTES = 48 * 1024;
+const MAX_TOTAL_ICON_BYTES = 64 * 1024;
 const MAX_ICON_SHARE_OF_PAYLOAD = 0.2;
 
 describe("tools/list icon budget", () => {

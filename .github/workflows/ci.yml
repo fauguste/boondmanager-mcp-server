@@ -176,8 +176,11 @@ jobs:
       pull-requests: write
     env:
       # Raise this consciously, in the PR that crosses it, with the reason in
-      # its description. 382 KiB on 2026-09-26 (185 tools).
-      MAX_TOOLS_LIST_KIB: 480
+      # its description. 382 KiB on 2026-09-26 (185 tools); raised to 560 the
+      # same day by #254 (223 tools, ~480 KiB) with #256 (233 tools, ~500 KiB)
+      # right behind — the 2026-09-25 audit adds ~50 tools on purpose, and
+      # operators who need less have BOOND_MCP_PROFILE / BOOND_MCP_ICONS=0.
+      MAX_TOOLS_LIST_KIB: 560
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
