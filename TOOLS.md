@@ -3,17 +3,18 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**213 tools** across **39 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
+**215 tools** across **40 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
 ## Tools
 
-### absences (5)
+### absences (6)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_absences_create` | Creer une demande d'absence | write |
+| `boond_absences_default` | Référentiels d'une demande d'absence | read · idempotent |
 | `boond_absences_delete` | Supprimer une absence | delete |
 | `boond_absences_get` | Details d'une absence | read · idempotent |
 | `boond_absences_search` | Rechercher des demandes d'absence | read · idempotent · open-world |
@@ -342,6 +343,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_resources_times_reports` | Feuilles de temps d'une ressource | read · idempotent |
 | `boond_resources_timesheets` | Feuilles de temps d'une ressource | read · idempotent |
 | `boond_resources_update` | Modifier un(e) ressource | write · idempotent |
+
+### rights (1)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_rights_get` | Droits de l'utilisateur sur un enregistrement | read · idempotent |
 
 ### roles (2)
 

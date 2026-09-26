@@ -79,7 +79,8 @@ describe("registerContractTools", () => {
   it("names only tools that exist as siblings (#229, #253)", () => {
     registerContractTools(server);
     const registered = vi.mocked(server.registerTool).mock.calls.map((c) => String(c[0]));
-    const known = [...registered, "boond_resources_contracts"];
+    // `boond_rights_get` is the cross-entity rights tool (#257), named by the update template.
+    const known = [...registered, "boond_resources_contracts", "boond_rights_get"];
     for (const call of vi.mocked(server.registerTool).mock.calls) {
       const description = String(call[1].description);
       for (const sibling of description.match(/boond_[a-z_]+/g) ?? []) {
