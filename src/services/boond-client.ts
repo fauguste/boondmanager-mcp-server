@@ -27,13 +27,7 @@ export {
   resetClientForTests,
 } from "./http/auth.js";
 export { parseBoondErrorBody, hintForUnauthorized, BoondApiError, formatApiError } from "./http/errors.js";
-export {
-  type RetryConfig,
-  resolveRetryConfig,
-  isRetryable,
-  parseRetryAfter,
-  computeBackoffMs,
-} from "./http/retry.js";
+export { type RetryConfig, resolveRetryConfig, isRetryable, parseRetryAfter, computeBackoffMs } from "./http/retry.js";
 export {
   type RateLimitConfig,
   resolveRateLimitConfig,

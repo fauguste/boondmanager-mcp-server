@@ -1244,8 +1244,17 @@ export const AbsenceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
-    startMonth: z.string().optional().describe("Mois de début de période (YYYY-MM)"),
-    endMonth: z.string().optional().describe("Mois de fin de période (YYYY-MM)"),
+    // Both are REQUIRED by `GET /absences-reports` (422 `1017 - Missing required
+    // attribute` otherwise — caught by scripts/smoke-live.mjs, issue #244).
+    // Declaring them optional made the tool fail on its most natural call.
+    startMonth: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/, "Format attendu : YYYY-MM")
+      .describe("Mois de début de période (YYYY-MM) — obligatoire pour l'API"),
+    endMonth: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/, "Format attendu : YYYY-MM")
+      .describe("Mois de fin de période (YYYY-MM) — obligatoire pour l'API"),
     ...paginationShape,
   })
   .strict();
