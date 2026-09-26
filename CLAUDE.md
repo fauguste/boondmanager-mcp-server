@@ -1733,7 +1733,8 @@ read-only, confirmation *kept* for deletes. Pinned in
   the image was only built at release time) and **`tools-list-size`**
   (`scripts/measure-tools-list.mjs` spawns `dist/index.js` over stdio and
   measures the real `tools/list` bytes; fails above `MAX_TOOLS_LIST_KIB`
-  (480, 382 KiB on 2026-09-26), builds the base branch and posts a sticky
+  (560 since #254 — 382 KiB at 185 tools, ~500 KiB at 233 tools on
+  2026-09-26), builds the base branch and posts a sticky
   `<!-- tools-list-size -->` comment with the delta on same-repo PRs). Raise
   the ceiling in the PR that crosses it, with the reason in its description.
 - **Smoke test (live)** (`.github/workflows/smoke-live.yml` +
