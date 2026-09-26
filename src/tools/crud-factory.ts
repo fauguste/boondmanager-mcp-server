@@ -95,7 +95,7 @@ export function buildListStructured(
       // flat items with no `attributes` wrapper — same fallback as
       // `formatProjectedSummary`, otherwise structuredContent held bare ids while
       // the text output showed the projected values.
-      const attrs = (entity.attributes ?? entity) as Record<string, unknown>;
+      const attrs = entity.attributes ?? entity;
       const selected: Record<string, unknown> = {};
       for (const field of fields) {
         if (attrs[field] !== undefined) selected[field] = attrs[field];
@@ -172,7 +172,11 @@ const CANCEL_DELETE_VALUE = "cancel";
  */
 function isElicitationResponseRejected(error: unknown): boolean {
   if (!(error instanceof McpError)) return false;
+  // `McpError.code` is typed `number` by the SDK while `ErrorCode` is an enum:
+  // the comparison is what the SDK itself documents.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
   if (error.code === ErrorCode.InvalidParams) return true;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
   return error.code === ErrorCode.InternalError && /elicitation response/i.test(error.message);
 }
 

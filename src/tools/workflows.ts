@@ -53,7 +53,7 @@ export function registerWorkflowTools(server: McpServer, policy?: AccessPolicy):
           openWorldHint: false,
         },
       },
-      async (params) => {
+      (params) => {
         const text = p.build((params ?? {}) as Record<string, string | undefined>);
         return {
           content: [{ type: "text" as const, text }],

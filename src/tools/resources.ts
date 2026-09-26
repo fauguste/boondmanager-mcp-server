@@ -339,7 +339,7 @@ export function registerResourceTools(server: McpServer): void {
       } else {
         const currentResponse = await apiRequest(`/resources/${id}/technical-data`);
         const currentEntity = Array.isArray(currentResponse.data) ? currentResponse.data[0] : currentResponse.data;
-        const currentAttrs = (currentEntity?.attributes ?? {}) as Record<string, unknown>;
+        const currentAttrs = currentEntity?.attributes ?? {};
         attributes = mergeTechnicalData(currentAttrs, provided);
       }
 
@@ -389,8 +389,7 @@ export function registerResourceTools(server: McpServer): void {
       const next = [...current, provided as EmbeddedReference];
       const response = await putTechnicalDataReferences(resourceId, next);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
-      const refs = ((entity?.attributes as { references?: EmbeddedReference[] })?.references ??
-        []) as EmbeddedReference[];
+      const refs = (entity?.attributes as { references?: EmbeddedReference[] })?.references ?? [];
       const created = refs[refs.length - 1];
       return {
         content: [

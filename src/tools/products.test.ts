@@ -57,3 +57,33 @@ describe("registerProductTools", () => {
     expect(names).toContain("boond_products_delete");
   });
 });
+
+describe("product handlers (#245)", () => {
+  let server: McpServer;
+  beforeEach(() => {
+    server = createMockServer();
+    registerProductTools(server);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("create POSTs the attributes as-is and returns the new id", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "5", type: "product", attributes: {} } } as never);
+    const result = (await getHandler(server, "boond_products_create")({ name: "Licence", unitPrice: 100 })) as {
+      structuredContent: unknown;
+    };
+    expect(apiSpy).toHaveBeenCalledWith("/products", "POST", {
+      data: { type: "product", attributes: { name: "Licence", unitPrice: 100 } },
+    });
+    expect(result.structuredContent).toEqual({ id: "5", type: "product" });
+  });
+
+  it("update carries the id in the body and only the supplied fields", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "5", type: "product", attributes: {} } } as never);
+    await getHandler(server, "boond_products_update")({ id: "5", taxRate: 20 });
+    expect(apiSpy.mock.calls[0][2]).toEqual({ data: { type: "product", id: "5", attributes: { taxRate: 20 } } });
+  });
+});

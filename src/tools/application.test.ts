@@ -92,3 +92,21 @@ describe("registerApplicationTools", () => {
     });
   });
 });
+
+describe("boond_application_current_user handler (#245)", () => {
+  it("reads /application/current-user and renders the entity", async () => {
+    const server = createMockServer();
+    registerApplicationTools(server);
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "1", type: "user", attributes: { firstName: "Moi" } } } as never);
+    const handler = vi
+      .mocked(server.registerTool)
+      .mock.calls.find((c) => c[0] === "boond_application_current_user")![2] as (
+      p: unknown
+    ) => Promise<{ content: Array<{ text: string }> }>;
+    const result = await handler({});
+    expect(apiSpy).toHaveBeenCalledWith("/application/current-user");
+    expect(result.content[0].text).toContain('"firstName": "Moi"');
+  });
+});

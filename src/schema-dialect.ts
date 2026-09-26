@@ -74,7 +74,7 @@ const SCHEMA_FIELDS = ["inputSchema", "outputSchema"] as const;
 export function stripSchemaDialect<T>(value: T): T {
   if (Array.isArray(value)) {
     let changed = false;
-    const out = value.map((item) => {
+    const out = (value as unknown[]).map((item) => {
       const stripped = stripSchemaDialect(item);
       if (stripped !== item) changed = true;
       return stripped;

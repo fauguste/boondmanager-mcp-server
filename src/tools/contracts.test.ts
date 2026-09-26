@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerContractTools } from "./contracts.js";
+import { buildContractBody, registerContractTools } from "./contracts.js";
 import { toolCallback } from "./test-helpers.js";
 import { apiRequest } from "../services/boond-client.js";
 
@@ -81,5 +81,18 @@ describe("registerContractTools", () => {
       expect(call[1].description).not.toContain("boond_contracts_search");
       expect(call[1].description).toContain("boond_resources_administrative");
     }
+  });
+});
+
+describe("buildContractBody (#245)", () => {
+  it("attaches the resource only when an id is given", () => {
+    expect(buildContractBody({ typeOf: 0, resourceId: "30888" })).toEqual({
+      data: {
+        type: "contract",
+        attributes: { typeOf: 0 },
+        relationships: { resource: { data: { id: "30888", type: "resource" } } },
+      },
+    });
+    expect(buildContractBody({ typeOf: 1 })).toEqual({ data: { type: "contract", attributes: { typeOf: 1 } } });
   });
 });
