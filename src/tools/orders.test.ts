@@ -26,9 +26,9 @@ describe("registerOrderTools", () => {
     vi.mocked(apiRequest).mockResolvedValue({ data: { id: "1", type: "order", attributes: {} } } as never);
   });
 
-  it("should register 5 order tools", () => {
+  it("should register 8 order tools (CRUD + 3 tabs)", () => {
     registerOrderTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(5);
+    expect(server.registerTool).toHaveBeenCalledTimes(8);
   });
 
   it("should register all expected tool names", () => {
@@ -39,6 +39,10 @@ describe("registerOrderTools", () => {
     expect(names).toContain("boond_orders_create");
     expect(names).toContain("boond_orders_update");
     expect(names).toContain("boond_orders_delete");
+    // ENTITY_TABS.orders, wired since #258.
+    expect(names).toContain("boond_orders_information");
+    expect(names).toContain("boond_orders_actions");
+    expect(names).toContain("boond_orders_invoices");
   });
 
   it("should register search and get as readOnly", () => {

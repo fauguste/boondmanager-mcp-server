@@ -21,9 +21,9 @@ describe("registerPurchaseTools", () => {
     server = createMockServer();
   });
 
-  it("should register 4 purchase tools", () => {
+  it("should register 5 purchase tools (search/get/create/delete + information tab)", () => {
     registerPurchaseTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(4);
+    expect(server.registerTool).toHaveBeenCalledTimes(5);
   });
 
   it("should register all expected tool names", () => {
@@ -33,6 +33,7 @@ describe("registerPurchaseTools", () => {
     expect(names).toContain("boond_purchases_get");
     expect(names).toContain("boond_purchases_create");
     expect(names).toContain("boond_purchases_delete");
+    expect(names).toContain("boond_purchases_information");
   });
 
   it("should register search and get as readOnly", () => {

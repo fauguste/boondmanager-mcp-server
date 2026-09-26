@@ -26,9 +26,9 @@ describe("registerInvoiceTools", () => {
     vi.mocked(apiRequest).mockResolvedValue({ data: { id: "1", type: "invoice", attributes: {} } } as never);
   });
 
-  it("should register 5 invoice tools", () => {
+  it("should register 7 invoice tools (CRUD + 2 tabs)", () => {
     registerInvoiceTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(5);
+    expect(server.registerTool).toHaveBeenCalledTimes(7);
   });
 
   it("should register all expected tool names", () => {
@@ -39,6 +39,11 @@ describe("registerInvoiceTools", () => {
     expect(names).toContain("boond_invoices_create");
     expect(names).toContain("boond_invoices_update");
     expect(names).toContain("boond_invoices_delete");
+    // ENTITY_TABS.invoices, wired since #258. `billable-items` is deliberately
+    // absent (403 feature-gated route on the probed tenant).
+    expect(names).toContain("boond_invoices_information");
+    expect(names).toContain("boond_invoices_actions");
+    expect(names).not.toContain("boond_invoices_billable_items");
   });
 
   it("should register search and get as readOnly", () => {

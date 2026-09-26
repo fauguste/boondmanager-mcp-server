@@ -28,4 +28,23 @@ describe("formatTabResponse", () => {
     const result = formatTabResponse({ data: [] });
     expect(result).toContain("0 élément(s)");
   });
+
+  it("renders meta.totals aggregates ahead of the rows, without the row count (issue #258)", () => {
+    const text = formatTabResponse({
+      data: [{ id: "31335", type: "invoice", attributes: { reference: "S_202609_02492" } }],
+      meta: { totals: { rows: 1, turnoverOrderedExcludingTax: 1000, deltaInvoicedExcludingTax: 0 } },
+    } as never);
+    expect(text.split("\n")[0]).toBe(
+      '1 élément(s) — totaux : {"turnoverOrderedExcludingTax":1000,"deltaInvoicedExcludingTax":0}'
+    );
+    expect(text).toContain('"reference": "S_202609_02492"');
+  });
+
+  it("keeps the plain header when meta.totals only holds rows", () => {
+    const text = formatTabResponse({
+      data: [{ id: "1", type: "action", attributes: {} }],
+      meta: { totals: { rows: 1 } },
+    } as never);
+    expect(text.split("\n")[0]).toBe("1 élément(s)");
+  });
 });

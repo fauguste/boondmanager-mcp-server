@@ -12,6 +12,8 @@ import {
   registerDeleteTool,
 } from "./crud-factory.js";
 import { defaultDeleteDescription } from "./description-builders.js";
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
 
 const OPTS = {
   entityName: "facture",
@@ -19,6 +21,28 @@ const OPTS = {
   apiPath: "/invoices",
   prefix: "boond_invoices",
 };
+
+// `ENTITY_TABS.invoices` — verified live on 2026-09-26 (issue #258).
+const INVOICE_TABS: TabDefinition[] = [
+  {
+    name: "information",
+    tab: "information",
+    title: "Informations complètes d'une facture",
+    subject: "les informations complètes",
+    content:
+      "lignes facturées, coordonnées de facturation et bancaires, échéance, état d'envoi, commande et projet liés",
+    returns: "Fiche complète de la facture (relations société, contact, commande, projet, prestation incluses).",
+  },
+  {
+    name: "actions",
+    tab: "actions",
+    title: "Actions liées à une facture",
+    subject: "les actions",
+    content: "envois, relances, notes",
+    returns: "Liste des actions rattachées à la facture, la plus récente en premier.",
+    behaviour: ["Un envoi de facture par e-mail apparaît ici comme une action, avec ses destinataires dans `text`."],
+  },
+];
 
 /** Maps convenience inputs and simple amount fields to the Boond JSON:API body. */
 function buildInvoiceBody(params: Record<string, unknown>): unknown {
@@ -112,4 +136,6 @@ Returns : page de résumés (référence, date, montants HT/TTC, état). Lecture
       prefix: "boond_invoices",
     }),
   });
+
+  registerTabTools(server, OPTS, INVOICE_TABS);
 }
