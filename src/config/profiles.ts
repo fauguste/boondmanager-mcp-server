@@ -68,10 +68,17 @@ const PROFILE_TABLE = {
     "resources",
     "absences",
     "timesheets",
+    // `invoices` for `preparation_rdv_client` (issue #259): a salesperson reads
+    // the client's overdue invoices before a meeting.
+    "invoices",
     "application",
     "workflows",
   ],
-  /** Gestion / compta : facturation client et fournisseur, encaissements. */
+  /**
+   * Gestion / compta : facturation client et fournisseur, encaissements.
+   * `timesheets` and `deliveries` are here for `preparation_facturation`
+   * (issue #259): billing starts from validated CRA and running deliveries.
+   */
   finance: [
     "invoices",
     "payments",
@@ -82,10 +89,16 @@ const PROFILE_TABLE = {
     "projects",
     "companies",
     "reporting",
+    "timesheets",
+    "deliveries",
     "application",
     "workflows",
   ],
-  /** Delivery / staffing : missions, CRA, absences, validations. */
+  /**
+   * Delivery / staffing : missions, CRA, absences, validations. `contracts`
+   * for `alertes_contrats` (issue #253): contract and probation ends are the
+   * delivery manager's calendar.
+   */
   delivery: [
     "projects",
     "deliveries",
@@ -94,6 +107,7 @@ const PROFILE_TABLE = {
     "absences",
     "planning-absences",
     "validations",
+    "contracts",
     "application",
     "workflows",
   ],

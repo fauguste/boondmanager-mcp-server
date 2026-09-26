@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**204 tools** across **39 domains** · **14 prompts** · **47 resources** · **6 resource templates**.
+**212 tools** across **39 domains** · **22 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -389,10 +389,11 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_webhooks_get` | Détails d'un(e) webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
-### workflow (14)
+### workflow (22)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_workflow_absences_a_valider` | Demandes d'absence à valider | read · idempotent |
 | `boond_workflow_alertes_contrats` | Fins de contrat et périodes d'essai à venir | read · idempotent |
 | `boond_workflow_candidats_pour_opportunite` | Candidats correspondant à une opportunité | read · idempotent |
 | `boond_workflow_cartographie_competences` | Cartographie des compétences d'un périmètre | read · idempotent |
@@ -400,20 +401,28 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_workflow_factures_a_relancer` | Factures impayées à relancer | read · idempotent |
 | `boond_workflow_fiche_consultant` | Fiche complète d'un collaborateur | read · idempotent |
 | `boond_workflow_fin_de_mission` | Anticipation des fins de mission | read · idempotent |
+| `boond_workflow_marge_projet` | Marge d'un projet : simulé vs réalisé | read · idempotent |
 | `boond_workflow_pipeline_commercial` | Pipeline commercial sur une période | read · idempotent |
+| `boond_workflow_preparation_entretien` | Préparer un entretien candidat | read · idempotent |
+| `boond_workflow_preparation_facturation` | Préparation de la facturation mensuelle | read · idempotent |
+| `boond_workflow_preparation_rdv_client` | Préparer un rendez-vous client | read · idempotent |
+| `boond_workflow_purge_rgpd_candidats` | Purge RGPD des candidats inactifs | read · idempotent |
 | `boond_workflow_recap_hebdo` | Récap hebdomadaire (moi + mon équipe) | read · idempotent |
 | `boond_workflow_recherche_profil_competences` | Recherche multi-source d'un profil par compétences | read · idempotent |
+| `boond_workflow_relance_cra` | Relance des CRA du mois | read · idempotent |
+| `boond_workflow_relance_devis` | Devis et propositions à relancer | read · idempotent |
 | `boond_workflow_saisir_cra` | Saisir ou compléter un CRA | read · idempotent |
 | `boond_workflow_staffing_disponible` | Consultants disponibles pour un staffing | read · idempotent |
 | `boond_workflow_synthese_equipe` | Synthèse d'une équipe | read · idempotent |
 | `boond_workflow_traiter_note_de_frais` | Traiter un justificatif en note de frais | read · idempotent |
 
-## Prompts (14)
+## Prompts (22)
 
 Pre-orchestrated workflows surfaced via the MCP prompts API.
 
 | Prompt | Title | Args |
 |---|---|---|
+| `absences_a_valider` | Demandes d'absence à valider | `mois?` `manager_id?` |
 | `alertes_contrats` | Fins de contrat et périodes d'essai à venir | `horizon_jours?` `manager_id?` |
 | `candidats_pour_opportunite` | Candidats correspondant à une opportunité | `opportunity_id` |
 | `cartographie_competences` | Cartographie des compétences d'un périmètre | `manager_id?` `agency_id?` `top_n?` |
@@ -421,9 +430,16 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `factures_a_relancer` | Factures impayées à relancer | `society_id?` |
 | `fiche_consultant` | Fiche complète d'un collaborateur | `resource_id` |
 | `fin_de_mission` | Anticipation des fins de mission | `horizon_jours?` `manager_id?` |
+| `marge_projet` | Marge d'un projet : simulé vs réalisé | `project_id` `periode?` |
 | `pipeline_commercial` | Pipeline commercial sur une période | `date_debut` `date_fin` `manager_id?` |
+| `preparation_entretien` | Préparer un entretien candidat | `candidate_id` `opportunity_id?` |
+| `preparation_facturation` | Préparation de la facturation mensuelle | `mois?` `manager_id?` |
+| `preparation_rdv_client` | Préparer un rendez-vous client | `society_id` `horizon_jours?` |
+| `purge_rgpd_candidats` | Purge RGPD des candidats inactifs | `mois_inactivite?` `manager_id?` |
 | `recap_hebdo` | Récap hebdomadaire (moi + mon équipe) | `semaine?` |
 | `recherche_profil_competences` | Recherche multi-source d'un profil par compétences | `competences` `experience_min?` `dispo_avant?` `inclure_candidats?` `manager_id?` |
+| `relance_cra` | Relance des CRA du mois | `mois?` `manager_id?` |
+| `relance_devis` | Devis et propositions à relancer | `jours_sans_action?` `manager_id?` |
 | `saisir_cra` | Saisir ou compléter un CRA | `resource_id?` `term?` `consignes?` |
 | `staffing_disponible` | Consultants disponibles pour un staffing | `start_date` `end_date` `competences?` `manager_id?` |
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |

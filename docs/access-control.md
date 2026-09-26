@@ -59,17 +59,19 @@ ces regroupements, prêts à l'emploi — définis dans
 
 | Profil | Domaines | Outils | Prompts |
 |--------|----------|--------|---------|
-| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 88 | 9 |
-| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, application, workflows | 108 | 9 |
-| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, application, workflows | 61 | 2 |
-| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, application, workflows | 56 | 6 |
+| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 93 | 12 |
+| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, invoices, application, workflows | 124 | 13 |
+| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, timesheets, deliveries, application, workflows | 87 | 5 |
+| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, contracts, application, workflows | 68 | 9 |
 | `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |
-| *(aucun)* | tous | 182 | 12 |
+| *(aucun)* | tous | 212 | 22 |
 
 Comptages **générés** depuis les registrations réelles (les mêmes que celles
-qu'un client voit dans `tools/list`), profil seul, toutes opérations. Avec
-`BOOND_MCP_READ_ONLY=true` en plus : `recruiting` 61, `sales` 68, `finance` 42,
-`delivery` 38, `admin` 18.
+qu'un client voit dans `tools/list`), profil seul, toutes opérations — recalculés
+le 2026-09-26 (issue #259). Avec `BOOND_MCP_READ_ONLY=true` en plus :
+`recruiting` 66, `sales` 88, `finance` 58, `delivery` 47, `admin` 18. Pour
+recalculer : `npm run build`, puis `registerAll()` sur un serveur factice avec
+`resolveAccessPolicy({ BOOND_MCP_PROFILE: … })` (voir `src/server.test.ts`).
 
 Notes :
 
