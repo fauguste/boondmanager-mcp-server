@@ -137,7 +137,9 @@ const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 if (process.env.GITHUB_STEP_SUMMARY) {
   const { appendFileSync } = await import("node:fs");
-  const rows = results.map((r) => `| ${r.ok ? "✅" : "❌"} | \`${r.name}\` | ${r.note.replace(/\|/g, "\\|")} |`);
+  // Markdown table cell: escape backslashes first, then pipes (CodeQL js/incomplete-sanitization).
+  const cell = (text) => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+  const rows = results.map((r) => `| ${r.ok ? "✅" : "❌"} | \`${r.name}\` | ${cell(r.note)} |`);
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
     `### Smoke test (live BoondManager)\n\n${results.length - failed.length}/${results.length} passed\n\n| | Check | Note |\n|---|---|---|\n${rows.join("\n")}\n`,
