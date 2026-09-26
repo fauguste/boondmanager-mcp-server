@@ -18,13 +18,13 @@ export function parseContentDispositionFilename(header: string | null): string |
   const star = header.match(/filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/);
   if (star) {
     try {
-      return decodeURIComponent(star[1].trim());
+      return decodeURIComponent((star[1] ?? "").trim());
     } catch {
       // fall through to the plain form
     }
   }
   const plain = header.match(/filename\s*=\s*"([^"]+)"/) ?? header.match(/filename\s*=\s*([^;]+)/);
-  return plain ? plain[1].trim() : undefined;
+  return plain?.[1]?.trim();
 }
 
 export interface DownloadedDocument {
@@ -148,7 +148,7 @@ export async function apiDownload(
   const maxBytes = options.maxBytes ?? Infinity;
   const response = await send(path, { method: "GET", headers: { Accept: "*/*" } });
 
-  const contentType = response.headers.get("content-type")?.split(";")[0].trim() || "application/octet-stream";
+  const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
   const filename = parseContentDispositionFilename(response.headers.get("content-disposition"));
 
   // BoondManager only answers 404 on an unknown document when the request asks

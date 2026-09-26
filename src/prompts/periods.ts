@@ -128,7 +128,10 @@ export function periodBounds(arg: string | undefined, now: Date, defaultKind: Pe
   // Explicit range.
   const range = /^(\d{4}-\d{2}-\d{2})\s*(?:\.\.|->|→|a|au|-)\s*(\d{4}-\d{2}-\d{2})$/.exec(text);
   if (range) {
-    const [a, b] = [range[1], range[2]].sort();
+    const first = range[1] ?? "";
+    const second = range[2] ?? "";
+    const a = first <= second ? first : second;
+    const b = first <= second ? second : first;
     return { startDate: a, endDate: b, startMonth: a.slice(0, 7), endMonth: b.slice(0, 7), label: `du ${a} au ${b}` };
   }
 
@@ -149,8 +152,11 @@ export function periodBounds(arg: string | undefined, now: Date, defaultKind: Pe
 
   // French month name + year: "avril 2026".
   const named = /^([a-z]+)\s+(\d{4})$/.exec(text);
-  if (named && named[1] in FRENCH_MONTHS) {
-    return monthBounds(Number(named[2]), FRENCH_MONTHS[named[1]], `${named[1]} ${named[2]}`);
+  const monthName = named?.[1];
+  const monthIndex = monthName === undefined ? undefined : FRENCH_MONTHS[monthName];
+  if (monthName !== undefined && monthIndex !== undefined) {
+    const year = named?.[2] ?? "";
+    return monthBounds(Number(year), monthIndex, `${monthName} ${year}`);
   }
 
   if (/^(cette semaine|semaine en cours|la semaine en cours|this week|semaine)$/.test(text)) {

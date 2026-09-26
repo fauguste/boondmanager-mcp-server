@@ -84,8 +84,9 @@ const TRACEPARENT_RE = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/;
 export function parseTraceparent(value: unknown): { header: string; traceId: string } | undefined {
   if (typeof value !== "string") return undefined;
   const match = TRACEPARENT_RE.exec(value.trim());
-  if (!match || /^0+$/.test(match[1])) return undefined;
-  return { header: match[0], traceId: match[1] };
+  const traceId = match?.[1];
+  if (!match || !traceId || /^0+$/.test(traceId)) return undefined;
+  return { header: match[0], traceId };
 }
 
 /** The `traceparent` the client put in the request's `_meta` (SEP-414), if valid. */
