@@ -1224,6 +1224,69 @@ export const PROMPTS: PromptDefinition[] = [
   },
 
   {
+    name: "ingest_communication",
+    title: "Ingérer un e-mail ou un compte rendu dans le CRM",
+    description:
+      "À partir d'un e-mail, d'un compte rendu d'appel ou d'une note de réunion collés dans la conversation : extrait les " +
+      "entités (contact, société, engagements), déduplique contre BoondManager, présente le plan d'écriture, puis crée ou " +
+      "rattache contact / société / action après validation explicite. Aucun Sampling : c'est le modèle qui extrait.",
+    argsSchema: {
+      contenu: z
+        .string()
+        .optional()
+        .describe(
+          "Le texte brut (e-mail, CR d'appel, note). Absent → prendre ce qui a été collé dans la conversation."
+        ),
+      type_action: z
+        .string()
+        .optional()
+        .describe("Nature de l'action à tracer : appel, email, rendez-vous, note… Défaut : déduite du texte."),
+      opportunite_id: z
+        .string()
+        .optional()
+        .describe("Opportunité à laquelle rattacher l'action. " + ID_OR_NAME_HINT_OPPORTUNITY),
+    },
+    domains: ["contacts", "companies", "actions", "application"],
+    build: ({ contenu, type_action, opportunite_id }, now = new Date()) => {
+      const today = toIsoDate(now);
+      const lines = ["Ingère la communication ci-dessous dans BoondManager (contact, société, action).", ""];
+      let opp: ReturnType<typeof resolveEntity> | undefined;
+      if (opportunite_id) {
+        opp = resolveEntity(opportunite_id, "opportunity", "<OPPORTUNITE_ID>");
+        if (opp.preamble) lines.push(opp.preamble);
+      }
+      lines.push(
+        contenu
+          ? `Texte à traiter :\n"""\n${contenu.trim()}\n"""`
+          : "Texte à traiter : celui collé dans la conversation (le demander s'il n'y en a pas).",
+        `Date de référence : aujourd'hui = ${today}.${type_action ? ` Type d'action demandé : « ${type_action} ».` : ""}`,
+        "",
+        "Étapes :",
+        "**1. Extraire** — expéditeur (prénom, nom, e-mail, téléphone, fonction), société (nom, domaine de l'e-mail), objet, engagements pris de part et d'autre, échéances, besoins exprimés, date de l'échange. Ne rien inventer : un champ absent reste vide.",
+        "",
+        "**2. Dédupliquer avant toute création** — l'étape la plus importante :",
+        '   - contact : `boond_find` avec `entity: "contact"` et `email` (l\'e-mail extrait) ; à défaut d\'e-mail, `boond_find` avec `query: "Prénom Nom"` — plusieurs correspondances exactes reviennent en erreur avec la liste : demander à l\'utilisateur lequel ;',
+        '   - société : `boond_find` avec `entity: "company"` et `query` = nom de la société (ou `boond_companies_search` avec `keywords` = domaine de l\'e-mail) ;',
+        "   - si le contact existe, lire sa société via `boond_contacts_get` et la comparer à celle du texte ;",
+        opp
+          ? `   - opportunité : \`${opp.idForFilter}\` (fournie).`
+          : '   - opportunité : si le texte en désigne une, `boond_find` avec `entity: "opportunity"` ; sinon aucune.',
+        "",
+        "**3. Présenter le plan d'écriture et ATTENDRE la validation.** Un tableau : entité | action (créer / rattacher à #id existant / ignorer) | valeurs. Signaler les champs déduits (fonction devinée, société déduite du domaine). **Aucune écriture avant un « oui » explicite.**",
+        "",
+        "**4. Écrire, dans cet ordre** (le contact référence la société, l'action référence le contact) :",
+        "   - société manquante → `boond_companies_create` ;",
+        "   - contact manquant → `boond_contacts_create` avec `companyId` ;",
+        `   - action → \`boond_actions_create\` avec \`contactId\` (+ \`companyId\`), \`typeOf\` lu dans \`boond://dictionary/actions/contacts\`${type_action ? ` (type « ${type_action} »)` : " (appel / e-mail / RDV / note selon le texte)"}, \`startDate\` = date de l'échange en ISO 8601 avec fuseau, \`title\` = objet, \`text\` = compte rendu structuré (contexte, engagements, prochaine étape).`,
+        opp ? `   - rattacher l'action à l'opportunité \`${opp.idForFilter}\` (\`opportunityId\`).` : "",
+        "",
+        "**5. Restituer** les IDs créés ou rattachés, et proposer la suite : un rappel (`boond_actions_create` daté de l'échéance) pour chaque engagement pris."
+      );
+      return lines.filter(Boolean).join("\n");
+    },
+  },
+
+  {
     name: "saisir_cra",
     title: "Saisir ou compléter un CRA",
     description:
@@ -1308,6 +1371,8 @@ const COMPLETION_KIND_BY_ARG: Record<string, EntityKind> = {
   project_id: "project",
   candidate_id: "candidate",
   contact_id: "contact",
+  // `ingest_communication` (#180) spells it the French way.
+  opportunite_id: "opportunity",
 };
 
 const SEARCH_PATH_BY_KIND: Record<EntityKind, string> = {

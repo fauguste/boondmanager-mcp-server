@@ -51,6 +51,7 @@ describe("registerAllPrompts", () => {
         "relance_devis",
         "purge_rgpd_candidats",
         "preparation_facturation",
+        "ingest_communication",
       ])
     );
   });
@@ -766,6 +767,40 @@ describe("registerAllPrompts", () => {
         const prompt = PROMPTS.find((p) => p.name === name)!;
         expect(prompt.domains, name).toEqual(expect.arrayContaining(domains));
       }
+    });
+  });
+
+  describe("ingest_communication (#180)", () => {
+    const build = (args: Record<string, string | undefined>) =>
+      PROMPTS.find((p) => p.name === "ingest_communication")!.build(args, new Date(2026, 8, 26));
+
+    it("extracts, deduplicates through boond_find, waits for consent, then writes in dependency order", () => {
+      const text = build({ contenu: "Bonjour, suite à notre appel…", type_action: "appel", opportunite_id: "77" });
+      expect(text).toContain("Bonjour, suite à notre appel…");
+      const order = [
+        "Extraire",
+        "Dédupliquer",
+        "boond_find",
+        "ATTENDRE la validation",
+        "boond_companies_create",
+        "boond_contacts_create",
+        "boond_actions_create",
+      ];
+      const positions = order.map((s) => text.indexOf(s));
+      expect(positions.every((p) => p >= 0)).toBe(true);
+      expect([...positions]).toEqual([...positions].sort((a, b) => a - b));
+      expect(text).toContain('entity: "contact"');
+      expect(text).toContain("boond://dictionary/actions/contacts");
+      expect(text).toContain("`77` (fournie)");
+      expect(text).toContain("type « appel »");
+      expect(text).not.toMatch(/sampling/i);
+    });
+
+    it("asks for the pasted text when no contenu is given and resolves an opportunity label", () => {
+      const text = build({ opportunite_id: "Refonte SI" });
+      expect(text).toContain("celui collé dans la conversation");
+      expect(text).toContain("boond_opportunities_search");
+      expect(text).toContain("<OPPORTUNITE_ID>");
     });
   });
 
