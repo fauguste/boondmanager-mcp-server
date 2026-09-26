@@ -88,7 +88,21 @@ src/
 ├── transports/
 │   └── http.ts           # startHttpTransport() + resolveHttpOptions() — MCP Streamable HTTP server + GET /healthz (liveness, non authentifié)
 ├── services/
-│   ├── boond-client.ts   # HTTP client: apiRequest(), apiDownload() (binary), apiUploadForm() (multipart), buildSearchQuery(), formatListResponse(), formatDetailResponse(), parseBoondErrorBody(), formatApiError(); initClient() (stdio) / initClientWithAuth() (OAuth); oauthContextAuth (reads AsyncLocalStorage)
+│   ├── boond-client.ts   # Barrel — the ONLY path tools, transports, resources and test mocks import from. Implementation below (issue #239)
+│   ├── http/
+│   │   ├── auth.ts       # Config + auth providers: initClient() (stdio JWT / token / BasicAuth), initClientWithAuth() (OAuth), oauthContextAuth (reads AsyncLocalStorage), buildJwt()
+│   │   ├── errors.ts     # parseBoondErrorBody(), formatApiError() (+ Cloudflare detection, status hints), BoondApiError, timeoutError(), nonJsonResponseError()
+│   │   ├── retry.ts      # Retry policy: resolveRetryConfig(), isRetryable(), parseRetryAfter(), computeBackoffMs()
+│   │   ├── rate-limit.ts # Per-identity token buckets (getRateLimiter(), LRU-bounded at MAX_RATE_LIMIT_BUCKETS)
+│   │   ├── transport.ts  # send() — the single fetch path (URL guard, bucket, auth per attempt, timeout, retries, error mapping); apiRequest(), apiUploadForm()
+│   │   └── download.ts   # apiDownload(): streaming under maxBytes, byte progress, app-shell guard, DownloadTooLargeError
+│   ├── search.ts         # buildSearchQuery() + apiSearch() (per-route maxResults chunking + progress)
+│   ├── format/
+│   │   ├── summary.ts    # formatEntitySummary() (+ business-identifier fallback), formatProjectedSummary() (`fields`), renderAttributeValue()
+│   │   ├── html.ts       # textExcerpt() / decodeHtmlEntities() for HTML note fields
+│   │   ├── list.ts       # formatListResponse() — one line per row, line-boundary truncation
+│   │   ├── detail.ts     # projectEntity() + formatDetailResponse()
+│   │   └── tab.ts        # formatTabResponse()
 │   ├── oauth.ts          # OAuth2 protected-resource plumbing for the HTTP transport: oauthContext (AsyncLocalStorage), extractBearerToken(), buildProtectedResourceMetadata() (RFC 9728). No state, no client_secret.
 │   ├── progress.ts       # progressReporterFrom(extra) — notifications/progress reporter, no-op without a client progressToken
 │   ├── rate-limiter.ts   # Token-bucket rate limiter for BoondManager API
@@ -314,7 +328,7 @@ tool renders those down rather than dumping the response, which inlines the
 resource's entire `timesreport` (every daily row of the month) — data no expense
 payload references, and enough of it to eat the character budget.
 
-**List summaries** (`src/services/boond-client.ts::formatEntitySummary`): one
+**List summaries** (`src/services/format/summary.ts::formatEntitySummary`): one
 line per search result. A tool whose rows need a bespoke line hands
 `formatListResponse` its own `summaryFn` (4th argument — `timesheetSummary`
 in `src/tools/timesheets.ts`, issue #243) rather than growing a private
@@ -329,7 +343,7 @@ date — fall back to `fallbackIdentityParts()`, which appends `number`,
 `text`. The fallback is **conditional on purpose**: `/resources` and
 `/opportunities` also carry `reference` and amount attributes, and appending
 them there would inflate every line for no gain. When touching this, keep the
-regression tests in `boond-client.test.ts` that pin the named-row output
+regression tests in `format/summary.test.ts` that pin the named-row output
 byte-for-byte.
 
 Invariants the excerpt path must keep (each has a test):
@@ -355,12 +369,28 @@ can now hit the limit; a mid-line cut used to emit a half-row that looked
 complete and hid the row count from the model. The result is always
 ≤ `CHARACTER_LIMIT`.
 
-**Error formatting** (`src/services/boond-client.ts`): non-2xx responses
+**Error formatting** (`src/services/http/errors.ts`): non-2xx responses
 are surfaced through `formatApiError()` which uses
 `parseBoondErrorBody()` to extract `errors[].detail` from BoondManager's
 JSON:API error envelope and adds a status-specific `Hint:` line. The raw
 body is only included as a fallback when the response isn't structured
 JSON. Both helpers are exported for unit testing.
+
+**One send path** (`src/services/http/transport.ts::send()`, issue #239):
+`apiRequest`, `apiUploadForm` and `apiDownload` are thin wrappers over a
+single `send(path, { method, query, body, headers })` that returns the first
+2xx `Response` with its body unread. Everything that used to be copied three
+times — and had drifted — lives there once: path guard, per-identity bucket,
+auth header resolved *per attempt* (an OAuth refresh between two tries is
+picked up), per-attempt `AbortSignal.timeout`, retry policy with `Retry-After`,
+error mapping. Consequences pinned by tests: a multipart upload timeout is
+reported with the endpoint and the `BOOND_HTTP_TIMEOUT_MS` hint (it used to
+leak a bare `TimeoutError`), an upload honours a 429 (the same `FormData` is
+resent — `fetch` re-serialises it per call), a document download retries a
+transient 5xx like any other GET (it used to be a single attempt), and a 2xx
+whose body is not JSON names the endpoint instead of surfacing a raw
+`SyntaxError`. A new helper must go through `send()`; if it calls `fetch`
+itself it will diverge the same way.
 
 **Structured logging** (`src/services/logger.ts`): Pino-based logger
 with level control via `LOG_LEVEL` (trace/debug/info/warn/error/fatal)
@@ -1290,7 +1320,7 @@ no `client_secret`, no refresh token, no per-user storage. The flow:
 3. The HTTP transport (`src/transports/http.ts`) extracts the Bearer
    token before dispatching to the SDK's `StreamableHTTPServerTransport`,
    wraps the handler in `oauthContext.run({ accessToken }, …)`.
-4. When a tool fires an API call, `oauthContextAuth` in `boond-client.ts`
+4. When a tool fires an API call, `oauthContextAuth` in `http/auth.ts`
    reads the token out of the AsyncLocalStorage context and forwards it
    verbatim to BoondManager as `Authorization: Bearer <access_token>`.
 5. The MCP client refreshes its own tokens — the server never sees the
@@ -1321,7 +1351,7 @@ really matters in production):
 
 Implementation: `src/services/oauth.ts` (AsyncLocalStorage context,
 header parsing, metadata builder), `src/transports/http.ts` (Bearer
-extraction + discovery endpoint + 401 challenge), `src/services/boond-client.ts`
+extraction + discovery endpoint + 401 challenge), `src/services/http/auth.ts`
 (`oauthContextAuth` provider). Full setup guide: `docs/oauth.md`.
 - `BOOND_BASE_URL` (optional, defaults to `https://ui.boondmanager.com/api`)
 - `BOOND_HTTP_TIMEOUT_MS` (optional, defaults to `30000`) — per-request timeout for the BoondManager HTTP client. Non-numeric / non-positive values fall back to the default. A timeout surfaces as an `Error` whose message includes the configured value and the failing endpoint.
@@ -1415,8 +1445,8 @@ Both booleans (`mcp_read_only`, `confirm_delete`) arrive as *strings* and carry
 an explicit `default`. `"false"` must not read as "set, therefore on"; and every
 ambiguous value resolves in the safe direction — all operations allowed for
 read-only, confirmation *kept* for deletes. Pinned in
-`access-policy.test.ts`, `env-flags.test.ts`, `dictionary-overrides.test.ts` and
-`boond-client.test.ts`.
+`access-policy.test.ts`, `env-flags.test.ts`, `dictionary-overrides.test.ts`,
+`http/auth.test.ts` and `http/transport.test.ts`.
 
 ## CI/CD
 
