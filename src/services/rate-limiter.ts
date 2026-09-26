@@ -14,6 +14,8 @@
  *     in-memory token count is always consistent.
  */
 
+import { abortPromise } from "./request-context.js";
+
 export interface Clock {
   now(): number;
   sleep(ms: number): Promise<void>;
@@ -21,8 +23,7 @@ export interface Clock {
 
 export const realClock: Clock = {
   now: () => Date.now(),
-  sleep: (ms) =>
-    ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms)),
+  sleep: (ms) => (ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms))),
 };
 
 export class TokenBucket {
@@ -41,9 +42,17 @@ export class TokenBucket {
     this.lastRefill = clock.now();
   }
 
-  /** Wait until a token is available, then consume it. */
-  acquire(): Promise<void> {
-    const next = this.chain.then(() => this.consume());
+  /**
+   * Wait until a token is available, then consume it.
+   *
+   * `signal` (issue #231): a caller that has been cancelled must not sit in
+   * the queue — the promise rejects with the signal's reason at once if it
+   * has already fired, or as soon as it fires while waiting for a refill.
+   * The chain is not poisoned: the next acquirer proceeds normally.
+   */
+  acquire(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("aborted"));
+    const next = this.chain.then(() => this.consume(signal));
     // Swallow the rejection on the chain itself so a single failing consume
     // (which shouldn't happen, but be defensive) does not poison every later
     // acquire. Callers still see their own promise resolve/reject normally.
@@ -60,12 +69,13 @@ export class TokenBucket {
     return this.tokens;
   }
 
-  private async consume(): Promise<void> {
+  private async consume(signal?: AbortSignal): Promise<void> {
     this.refill();
     while (this.tokens < 1) {
+      if (signal?.aborted) throw signal.reason ?? new Error("aborted");
       const deficit = 1 - this.tokens;
       const waitMs = Math.max(1, Math.ceil((deficit / this.refillPerSec) * 1000));
-      await this.clock.sleep(waitMs);
+      await (signal ? Promise.race([this.clock.sleep(waitMs), abortPromise(signal)]) : this.clock.sleep(waitMs));
       this.refill();
     }
     this.tokens -= 1;

@@ -3,6 +3,7 @@ import type { DomainName } from "../constants.js";
 import { withValidationFeedback } from "./validation-wrapper.js";
 import { withParameterDisclosure } from "./parameter-disclosure.js";
 import { withUsageGuidance } from "./usage-guidance.js";
+import { requestSignalFrom, runWithRequestSignal } from "../services/request-context.js";
 
 /**
  * Per-domain registration decorations, applied centrally in
@@ -37,6 +38,45 @@ export interface RegistrationIndex {
 
 export function createRegistrationIndex(): RegistrationIndex {
   return { toolDomains: new Map() };
+}
+
+/** The SDK registration methods whose last argument is a request handler. */
+const HANDLER_REGISTRATIONS = new Set(["registerTool", "registerPrompt", "registerResource"]);
+
+/**
+ * Wrap a server so every handler registered through it — tool, prompt or
+ * resource — runs inside `runWithRequestSignal(extra.signal, …)` (issue #231).
+ * The handler is always the last argument of the registration call and
+ * `extra` the last argument of the handler (`(args, extra)` for a tool with an
+ * input schema, `(extra)` without, `(uri, variables, extra)` for a template).
+ * `send()` reads the signal back from the AsyncLocalStorage, so the ~180
+ * handlers and the client helpers keep their signatures.
+ *
+ * Applied once, on the innermost server, in `server.ts::registerAll` — before
+ * the per-domain decorations and the access policy — so that nothing
+ * registered anywhere escapes it.
+ */
+export function propagateRequestSignal(server: McpServer): McpServer {
+  return new Proxy(server, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target) as unknown;
+      if (typeof value !== "function") return value;
+      if (typeof prop !== "string" || !HANDLER_REGISTRATIONS.has(prop)) {
+        return (value as (...a: unknown[]) => unknown).bind(target);
+      }
+      return (...args: unknown[]) => {
+        const handler = args[args.length - 1];
+        if (typeof handler !== "function") {
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        }
+        const wrapped = (...handlerArgs: unknown[]) =>
+          runWithRequestSignal(requestSignalFrom(handlerArgs[handlerArgs.length - 1]), () =>
+            (handler as (...a: unknown[]) => unknown)(...handlerArgs)
+          );
+        return (value as (...a: unknown[]) => unknown).apply(target, [...args.slice(0, -1), wrapped]);
+      };
+    },
+  });
 }
 
 /**

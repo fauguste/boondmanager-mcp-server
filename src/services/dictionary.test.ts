@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as boondClient from "./boond-client.js";
 import { oauthContext } from "./oauth.js";
+import { currentRequestSignal, runWithRequestSignal } from "./request-context.js";
 import {
   MAX_DICTIONARY_CACHE_ENTRIES,
   currentAuthIdentity,
@@ -270,5 +271,29 @@ describe("dictionary service", () => {
     it("trims surrounding whitespace from the path", () => {
       expect(resolveDictionaryPath(payload, "  setting.tool  ")).toEqual([{ id: 42, value: "Java" }]);
     });
+  });
+});
+
+describe("dictionary load is detached from the caller's cancellation (#231)", () => {
+  beforeEach(() => {
+    resetDictionaryCacheForTests();
+    vi.restoreAllMocks();
+  });
+
+  it("loads inside a cancelled request context and serves every waiter", async () => {
+    // Two requests await the same in-flight load (#226). If the load ran
+    // under the first caller's signal, cancelling that caller would reject
+    // the dictionary for the second one as well.
+    const apiSpy = vi.spyOn(boondClient, "apiRequest").mockImplementation(async () => {
+      expect(currentRequestSignal()).toBeUndefined();
+      return { data: { setting: {} } } as never;
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const first = runWithRequestSignal(controller.signal, () => getDictionary());
+    const second = getDictionary();
+    await expect(first).resolves.toMatchObject({ language: "fr" });
+    await expect(second).resolves.toMatchObject({ language: "fr" });
+    expect(apiSpy).toHaveBeenCalledTimes(1);
   });
 });

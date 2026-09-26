@@ -18,6 +18,7 @@ import { getConfig } from "./auth.js";
 import { BoondApiError, formatApiError, nonJsonResponseError, timeoutError } from "./errors.js";
 import { getRateLimiter } from "./rate-limit.js";
 import { computeBackoffMs, isRetryable, parseRetryAfter, resolveRetryConfig, sleep } from "./retry.js";
+import { currentRequestSignal, RequestCancelledError, throwIfCancelled } from "../request-context.js";
 
 export type QueryValue = string | number | Array<string | number> | undefined;
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -113,6 +114,11 @@ export interface SendOptions {
   body?: string | FormData;
   /** Extra headers (`Accept`, `Content-Type`); the auth header is added per attempt. */
   headers?: Record<string, string>;
+  /**
+   * Cancellation signal. Defaults to the current MCP request's `extra.signal`
+   * (`currentRequestSignal()`, issue #231) — pass one only to override it.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -123,7 +129,10 @@ export interface SendOptions {
  *
  * Throws `BoondApiError` on a non-2xx that the policy does not retry (or once
  * retries are exhausted), the standard timeout `Error` when an attempt never
- * completed, and the raw network error otherwise.
+ * completed, `RequestCancelledError` (name `AbortError`) when the client
+ * cancelled — checked before each attempt, while waiting for a rate-limit
+ * token, during the fetch itself and during a backoff, and never retried —
+ * and the raw network error otherwise.
  */
 export async function send(path: string, options: SendOptions = {}): Promise<Response> {
   const method = options.method ?? "GET";
@@ -135,14 +144,23 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
   const retry = resolveRetryConfig();
   const totalAttempts = retry.maxRetries + 1;
   const limiter = getRateLimiter();
+  const signal = options.signal ?? currentRequestSignal();
 
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
+    throwIfCancelled(signal, method, path);
     // Acquire a token before each attempt so retries also count toward the
     // rate budget — this is what actually protects us from feedback loops
     // (transient 5xx → retry → transient 5xx → …) saturating the API.
-    if (limiter) await limiter.acquire();
+    if (limiter) {
+      try {
+        await limiter.acquire(signal);
+      } catch (err) {
+        throwIfCancelled(signal, method, path);
+        throw err;
+      }
+    }
 
     const authHeader = await auth();
     const headers: Record<string, string> = {
@@ -153,9 +171,10 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
     const fetchOptions: RequestInit = {
       method,
       headers,
-      // Each attempt gets its own abort signal — once a signal has fired it
-      // can't be reused for the next try.
-      signal: AbortSignal.timeout(timeoutMs),
+      // Each attempt gets its own timeout signal — once a signal has fired it
+      // can't be reused for the next try. The request's cancellation signal
+      // is composed in so `notifications/cancelled` aborts the socket too.
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     };
     if (options.body !== undefined) fetchOptions.body = options.body;
 
@@ -165,6 +184,9 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
     try {
       response = await fetch(url.toString(), fetchOptions);
     } catch (err) {
+      // A cancellation is not a network failure: no retry, and the error
+      // says "cancelled", not "timed out".
+      if (signal?.aborted) throw new RequestCancelledError(method, path, err);
       networkError = isAbortError(err)
         ? timeoutError(timeoutMs, method, path, err)
         : err instanceof Error
@@ -203,7 +225,11 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
       retryAfterMs !== null
         ? Math.min(retry.maxDelayMs, retryAfterMs)
         : computeBackoffMs(attempt, retry.baseDelayMs, retry.maxDelayMs);
-    await sleep(backoff);
+    try {
+      await sleep(backoff, signal);
+    } catch (err) {
+      throw new RequestCancelledError(method, path, err);
+    }
     lastError = attemptError;
   }
 

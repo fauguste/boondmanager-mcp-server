@@ -85,7 +85,23 @@ export function computeBackoffMs(
   return Math.floor(random() * capped);
 }
 
-export function sleep(ms: number): Promise<void> {
+/**
+ * Backoff sleep. With a `signal`, the wait ends the moment it fires — a
+ * cancelled caller does not sit out a 5 s `Retry-After` (issue #231); the
+ * rejection carries the signal's reason.
+ */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("aborted"));
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    function onAbort(): void {
+      clearTimeout(timer);
+      reject(signal!.reason ?? new Error("aborted"));
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
