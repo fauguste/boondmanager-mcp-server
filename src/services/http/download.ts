@@ -117,12 +117,12 @@ async function readDownloadBody(
     // chunks, and one notification each would be its own kind of flood.
     if (reporting && received - reported >= step) {
       reported = received;
-      onProgress!(received, totalBytes, `Téléchargement — ${formatBytes(received)} / ${formatBytes(totalBytes!)}`);
+      onProgress(received, totalBytes, `Téléchargement — ${formatBytes(received)} / ${formatBytes(totalBytes)}`);
     }
   }
 
   if (reporting && received > reported) {
-    onProgress!(received, totalBytes, `Téléchargement terminé — ${formatBytes(received)}`);
+    onProgress(received, totalBytes, `Téléchargement terminé — ${formatBytes(received)}`);
   }
   return Buffer.concat(chunks);
 }

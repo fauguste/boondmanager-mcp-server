@@ -83,7 +83,7 @@ function readPackageManifest(): { version?: unknown; description?: unknown } {
     // which run at module evaluation time — a `TypeError` there means the
     // server never starts, with an opaque import stack. Degrade instead.
     if (typeof parsed !== "object" || parsed === null) return {};
-    return parsed as { version?: unknown; description?: unknown };
+    return parsed;
   } catch {
     return {};
   }

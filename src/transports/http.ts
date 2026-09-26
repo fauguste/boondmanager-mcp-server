@@ -827,8 +827,7 @@ export async function startHttpTransport(
       // *because* we pointed it there from a 401 challenge — 403ing it would
       // dead-end the OAuth bootstrap the challenge just started.
       if (originPolicy.enabled && !isDiscoveryPath(req.url, options.path)) {
-        const originHeader = req.headers.origin;
-        const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+        const origin = req.headers.origin;
         if (origin && !isOriginAllowed(originPolicy, origin)) {
           reject(403, `Invalid Origin: ${origin}`);
           return;

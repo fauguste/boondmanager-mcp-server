@@ -128,3 +128,104 @@ describe("registerAbsenceTools", () => {
     );
   });
 });
+
+describe("absence handlers (#245)", () => {
+  let server: McpServer;
+  const handler = (name: string) =>
+    vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === name)![2] as (p: unknown) => Promise<unknown>;
+
+  beforeEach(() => {
+    server = createMockServer();
+    vi.mocked(apiRequest).mockClear();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "31", type: "absencesreport", attributes: {} } } as never);
+    registerAbsenceTools(server);
+  });
+
+  it("search converts resourceId into a COMP keyword and lists /absences-reports", async () => {
+    await handler("boond_absences_search")({ resourceId: "30888", startMonth: "2026-09", endMonth: "2026-09" });
+    const [path, method, , query] = vi.mocked(apiRequest).mock.calls[0];
+    expect(path).toBe("/absences-reports");
+    expect(method).toBe("GET");
+    expect(query).toMatchObject({ keywords: "COMP30888", startMonth: "2026-09", endMonth: "2026-09" });
+    expect(query).not.toHaveProperty("resourceId");
+  });
+
+  it("get reads /absences-reports/{id}", async () => {
+    await handler("boond_absences_get")({ id: "31" });
+    expect(vi.mocked(apiRequest).mock.calls[0][0]).toBe("/absences-reports/31");
+  });
+
+  it("create derives one period from the dates — inclusive day count, default work-unit type 2 — and the resource relationship", async () => {
+    await handler("boond_absences_create")({
+      resourceId: "30888",
+      typeOf: "Congé payé",
+      startDate: "2026-10-05",
+      endDate: "2026-10-07",
+      note: "vacances",
+    });
+    expect(apiRequest).toHaveBeenCalledWith("/absences-reports", "POST", {
+      data: {
+        type: "absencesreport",
+        attributes: {
+          informationComments: "vacances",
+          absencesPeriods: [
+            {
+              startDate: "2026-10-05",
+              endDate: "2026-10-07",
+              duration: 3,
+              title: "Congé payé",
+              workUnitType: { reference: 2 },
+            },
+          ],
+        },
+        relationships: { resource: { data: { id: "30888", type: "resource" } } },
+      },
+    });
+  });
+
+  it("create keeps an explicit duration, work-unit type and raw periods", async () => {
+    await handler("boond_absences_create")({
+      resourceId: "1",
+      typeOf: "RTT",
+      startDate: "2026-10-07",
+      endDate: "2026-10-05",
+      duration: 0.5,
+      workUnitTypeReference: 4,
+    });
+    const first = (vi.mocked(apiRequest).mock.calls[0][2] as { data: { attributes: { absencesPeriods: unknown[] } } })
+      .data.attributes.absencesPeriods[0];
+    expect(first).toMatchObject({ duration: 0.5, workUnitType: { reference: 4 } });
+
+    const raw = [{ startDate: "2026-11-02", endDate: "2026-11-02", duration: 1 }];
+    await handler("boond_absences_create")({
+      resourceId: "1",
+      typeOf: "x",
+      startDate: "2026-11-02",
+      endDate: "2026-11-02",
+      absencesPeriods: raw,
+    });
+    const second = vi.mocked(apiRequest).mock.calls[1][2] as { data: { attributes: { absencesPeriods: unknown[] } } };
+    expect(second.data.attributes.absencesPeriods).toEqual(raw);
+  });
+
+  it("an inverted or unparsable window counts as one day", async () => {
+    await handler("boond_absences_create")({
+      resourceId: "1",
+      typeOf: "x",
+      startDate: "2026-10-07",
+      endDate: "2026-10-05",
+    });
+    await handler("boond_absences_create")({ resourceId: "1", typeOf: "x", startDate: "nope", endDate: "2026-10-05" });
+    for (const call of vi.mocked(apiRequest).mock.calls) {
+      const body = call[2] as { data: { attributes: { absencesPeriods: Array<{ duration: number }> } } };
+      expect(body.data.attributes.absencesPeriods[0].duration).toBe(1);
+    }
+  });
+
+  it("update PUTs /absences-reports/{id} with the id in the body", async () => {
+    await handler("boond_absences_update")({ id: "31", note: "corrigé" });
+    expect(apiRequest).toHaveBeenCalledWith("/absences-reports/31", "PUT", {
+      data: { type: "absencesreport", id: "31", attributes: { note: "corrigé" } },
+    });
+  });
+});

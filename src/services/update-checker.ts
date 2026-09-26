@@ -17,7 +17,7 @@ function parseSemverCore(v: string): [number, number, number] | null {
   if (parts.length !== 3) return null;
   const nums = parts.map((p) => Number(p));
   if (nums.some((n) => !Number.isInteger(n) || n < 0)) return null;
-  return [nums[0]!, nums[1]!, nums[2]!];
+  return [nums[0], nums[1], nums[2]];
 }
 
 function isNewer(latest: string, current: string): boolean {
@@ -25,8 +25,8 @@ function isNewer(latest: string, current: string): boolean {
   const b = parseSemverCore(current);
   if (!a || !b) return false;
   for (let i = 0; i < 3; i++) {
-    if (a[i]! > b[i]!) return true;
-    if (a[i]! < b[i]!) return false;
+    if (a[i] > b[i]) return true;
+    if (a[i] < b[i]) return false;
   }
   return false;
 }

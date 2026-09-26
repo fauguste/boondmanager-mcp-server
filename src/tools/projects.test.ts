@@ -95,3 +95,72 @@ describe("registerProjectTools", () => {
     }
   });
 });
+
+describe("project handlers (#245)", () => {
+  let server: McpServer;
+  beforeEach(() => {
+    server = createMockServer();
+    registerProjectTools(server);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("create maps `name` to `title` and the three optional ids to relationships", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "12", type: "project", attributes: {} } } as never);
+    const result = (await getHandler(
+      server,
+      "boond_projects_create"
+    )({
+      name: "Refonte SI",
+      companyId: "5",
+      opportunityId: "8",
+      startDate: "2026-10-01",
+    })) as { structuredContent: unknown };
+    expect(apiSpy).toHaveBeenCalledWith("/projects", "POST", {
+      data: {
+        type: "project",
+        attributes: { title: "Refonte SI", startDate: "2026-10-01" },
+        relationships: {
+          company: { data: { id: "5", type: "company" } },
+          opportunity: { data: { id: "8", type: "opportunity" } },
+        },
+      },
+    });
+    expect(result.structuredContent).toEqual({ id: "12", type: "project" });
+  });
+
+  it("create without any id sends no relationships key", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "13", type: "project", attributes: {} } } as never);
+    await getHandler(server, "boond_projects_create")({ name: "Seul" });
+    expect(apiSpy.mock.calls[0][2]).toEqual({ data: { type: "project", attributes: { title: "Seul" } } });
+  });
+
+  it("update maps `name` to `title` and carries the id in the body", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "8", type: "project", attributes: {} } } as never);
+    await getHandler(server, "boond_projects_update")({ id: "8", name: "Nouveau nom" });
+    expect(apiSpy.mock.calls[0][2]).toEqual({
+      data: { type: "project", id: "8", attributes: { title: "Nouveau nom" } },
+    });
+  });
+
+  it("each tab tool reads `/projects/{id}/{tab}` with the API spelling", async () => {
+    const apiSpy = vi.spyOn(boondClient, "apiRequest").mockResolvedValue({ data: [] } as never);
+    await getHandler(server, "boond_projects_deliveries_groupments")({ id: "8" });
+    await getHandler(server, "boond_projects_simulation")({ id: "8" });
+    expect(apiSpy.mock.calls.map((c) => c[0])).toEqual(["/projects/8/deliveries-groupments", "/projects/8/simulation"]);
+  });
+
+  it("get with a tab reads the tab, without one the base record", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "8", type: "project", attributes: {} } } as never);
+    await getHandler(server, "boond_projects_get")({ id: "8", tab: "information" });
+    await getHandler(server, "boond_projects_get")({ id: "8" });
+    expect(apiSpy.mock.calls.map((c) => c[0])).toEqual(["/projects/8/information", "/projects/8"]);
+  });
+});

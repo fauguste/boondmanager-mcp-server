@@ -93,3 +93,48 @@ describe("registerContactTools", () => {
     }
   });
 });
+
+describe("contact handlers (#245)", () => {
+  let server: McpServer;
+  beforeEach(() => {
+    server = createMockServer();
+    registerContactTools(server);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("create attaches the company as a relationship when given, and only then", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "3", type: "contact", attributes: {} } } as never);
+    await getHandler(server, "boond_contacts_create")({ firstName: "Jean", lastName: "Dupont", companyId: "6420" });
+    await getHandler(server, "boond_contacts_create")({ firstName: "Sans", lastName: "Société" });
+    expect(apiSpy.mock.calls[0][2]).toEqual({
+      data: {
+        type: "contact",
+        attributes: { firstName: "Jean", lastName: "Dupont" },
+        relationships: { company: { data: { id: "6420", type: "company" } } },
+      },
+    });
+    expect(apiSpy.mock.calls[1][2]).toEqual({
+      data: { type: "contact", attributes: { firstName: "Sans", lastName: "Société" } },
+    });
+  });
+
+  it("update PUTs /contacts/{id}/information with the id in the body", async () => {
+    const apiSpy = vi
+      .spyOn(boondClient, "apiRequest")
+      .mockResolvedValue({ data: { id: "3", type: "contact", attributes: {} } } as never);
+    await getHandler(server, "boond_contacts_update")({ id: "3", email1: "j@x.fr" });
+    expect(apiSpy.mock.calls[0]).toEqual([
+      "/contacts/3/information",
+      "PUT",
+      { data: { type: "contact", id: "3", attributes: { email1: "j@x.fr" } } },
+    ]);
+  });
+
+  it("tab tools read `/contacts/{id}/{tab}`", async () => {
+    const apiSpy = vi.spyOn(boondClient, "apiRequest").mockResolvedValue({ data: [] } as never);
+    await getHandler(server, "boond_contacts_opportunities")({ id: "3" });
+    expect(apiSpy.mock.calls[0][0]).toBe("/contacts/3/opportunities");
+  });
+});

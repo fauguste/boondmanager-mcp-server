@@ -33,7 +33,7 @@ function declaredKeys(inputSchema: unknown): Set<string> {
   const shape = (inputSchema as { shape?: unknown }).shape ?? inputSchema;
   const resolved = typeof shape === "function" ? (shape as () => unknown)() : shape;
   if (resolved === null || typeof resolved !== "object") return new Set();
-  return new Set(Object.keys(resolved as Record<string, unknown>));
+  return new Set(Object.keys(resolved));
 }
 
 /**

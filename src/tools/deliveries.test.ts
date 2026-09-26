@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMockServer, registeredToolNames, toolCallback } from "./test-helpers.js";
-import { registerDeliveryTools } from "./deliveries.js";
+import { buildDeliveryBody, registerDeliveryTools } from "./deliveries.js";
 import { apiRequest, apiSearch } from "../services/boond-client.js";
 
 vi.mock("../services/boond-client.js", async (importOriginal) => {
@@ -89,5 +89,34 @@ describe("registerDeliveryTools", () => {
         },
       },
     });
+  });
+});
+
+describe("buildDeliveryBody (#245)", () => {
+  it("sends only the two mandatory relationships when no convenience field is given", () => {
+    expect(buildDeliveryBody({ projectId: "2", resourceId: "4" })).toEqual({
+      data: {
+        type: "delivery",
+        attributes: {},
+        relationships: {
+          project: { data: { id: "2", type: "project" } },
+          dependsOn: { data: { id: "4", type: "resource" } },
+        },
+      },
+    });
+  });
+
+  it("forces the daily price only when a unit price is supplied", () => {
+    const withPrice = buildDeliveryBody({ projectId: "2", resourceId: "4", unitPrice: 700 }) as {
+      data: { attributes: Record<string, unknown> };
+    };
+    expect(withPrice.data.attributes).toEqual({
+      averageDailyPriceExcludingTax: 700,
+      forceAverageDailyPriceExcludingTax: true,
+    });
+    const withQuantity = buildDeliveryBody({ projectId: "2", resourceId: "4", quantity: 10 }) as {
+      data: { attributes: Record<string, unknown> };
+    };
+    expect(withQuantity.data.attributes).toEqual({ numberOfDaysInvoicedOrQuantity: 10 });
   });
 });

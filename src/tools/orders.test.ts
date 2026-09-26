@@ -99,3 +99,74 @@ describe("registerOrderTools", () => {
     });
   });
 });
+
+describe("order body branches (#245)", () => {
+  let server: McpServer;
+  const handler = (name: string) =>
+    vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === name)![2] as (p: unknown) => Promise<unknown>;
+  const sentBody = (i = 0) => vi.mocked(apiRequest).mock.calls[i][2] as { data: Record<string, unknown> };
+
+  beforeEach(() => {
+    server = createMockServer();
+    vi.mocked(apiRequest).mockClear();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "1", type: "order", attributes: {} } } as never);
+    registerOrderTools(server);
+  });
+
+  it("create without ids sends no relationships, and maps the convenience names", async () => {
+    await handler("boond_orders_create")({
+      reference: "BC-1",
+      orderDate: "2026-09-01",
+      amountExcludingTax: 1000,
+      note: "n",
+    });
+    expect(sentBody().data).toEqual({
+      type: "order",
+      attributes: { number: "BC-1", date: "2026-09-01", turnoverOrderedExcludingTax: 1000, informationComments: "n" },
+    });
+  });
+
+  it("normalises schedules: amount fallbacks, date fallbacks, default title, id kept only as a string", async () => {
+    await handler("boond_orders_create")({
+      companyId: "5",
+      projectId: "9",
+      schedules: [
+        { id: "s1", date: "2026-10-31", title: "Acompte", amountExcludingTax: 400 },
+        { endDate: "2026-11-30", turnoverTermOfPaymentExcludingTax: 600 },
+        { startDate: "2026-12-01", turnoverQuotaExcludingTax: 50, forceTermOfPaymentExcludingTax: false },
+      ],
+    });
+    const { relationships, attributes } = sentBody().data as {
+      relationships: unknown;
+      attributes: { schedules: Array<Record<string, unknown>> };
+    };
+    expect(relationships).toEqual({
+      company: { data: { id: "5", type: "company" } },
+      project: { data: { id: "9", type: "project" } },
+    });
+    expect(attributes.schedules).toEqual([
+      {
+        id: "s1",
+        date: "2026-10-31",
+        title: "Acompte",
+        turnoverQuotaExcludingTax: 400,
+        turnoverTermOfPaymentExcludingTax: 400,
+        forceTermOfPaymentExcludingTax: true,
+      },
+      {
+        date: "2026-11-30",
+        title: "Echeance",
+        turnoverQuotaExcludingTax: 600,
+        turnoverTermOfPaymentExcludingTax: 600,
+        forceTermOfPaymentExcludingTax: true,
+      },
+      {
+        date: "2026-12-01",
+        title: "Echeance",
+        turnoverQuotaExcludingTax: 50,
+        turnoverTermOfPaymentExcludingTax: 0,
+        forceTermOfPaymentExcludingTax: false,
+      },
+    ]);
+  });
+});

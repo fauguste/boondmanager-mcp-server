@@ -964,7 +964,7 @@ export async function completeEntityArgument(kind: EntityKind, value: string): P
     });
     const rows = Array.isArray(response.data) ? response.data : response.data ? [response.data] : [];
     const labels = rows
-      .map((r) => labelOf((r?.attributes ?? {}) as Record<string, unknown>))
+      .map((r) => labelOf(r?.attributes ?? {}))
       .filter((l): l is string => !!l);
     return [...new Set(labels)].slice(0, MAX_COMPLETIONS);
   } catch {
@@ -991,7 +991,7 @@ export function registerAllPrompts(server: McpServer, policy?: AccessPolicy): vo
         description: p.description,
         argsSchema: p.argsSchema,
       },
-      async (args) => userMessage(p.build((args ?? {}) as Record<string, string | undefined>))
+      (args) => userMessage(p.build((args ?? {}) as Record<string, string | undefined>))
     );
   }
 }

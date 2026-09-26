@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerProviderInvoiceTools } from "./provider-invoices.js";
+import { buildProviderInvoiceBody, registerProviderInvoiceTools } from "./provider-invoices.js";
 import { apiRequest } from "../services/boond-client.js";
 
 vi.mock("../services/boond-client.js", async (importOriginal) => {
@@ -91,6 +91,20 @@ describe("registerProviderInvoiceTools", () => {
           providerCompany: { data: { id: "1", type: "company" } },
           providerContact: { data: { id: "2", type: "contact" } },
         },
+      },
+    });
+  });
+});
+
+describe("buildProviderInvoiceBody (#245)", () => {
+  it("keeps only the resource relationship when no provider company / contact is given", () => {
+    expect(
+      buildProviderInvoiceBody({ reference: "F-1", resourceId: "9", startDate: "2026-09-01", endDate: "2026-09-30" })
+    ).toEqual({
+      data: {
+        type: "providerinvoice",
+        attributes: { reference: "F-1", startDate: "2026-09-01", endDate: "2026-09-30" },
+        relationships: { resource: { data: { id: "9", type: "resource" } } },
       },
     });
   });

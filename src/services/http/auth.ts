@@ -22,14 +22,16 @@ let config: BoondConfig | null = null;
  * indicate that the transport layer forgot to wrap the request in
  * `oauthContext.run(...)`.
  */
-export const oauthContextAuth: BoondAuthProvider = async () => {
+export const oauthContextAuth: BoondAuthProvider = () => {
   const ctx = oauthContext.getStore();
   if (!ctx) {
-    throw new Error(
-      "No OAuth access token in request context. The HTTP transport requires an `Authorization: Bearer <boond_access_token>` header on every request."
+    return Promise.reject(
+      new Error(
+        "No OAuth access token in request context. The HTTP transport requires an `Authorization: Bearer <boond_access_token>` header on every request."
+      )
     );
   }
-  return { name: "Authorization", value: `Bearer ${ctx.accessToken}` };
+  return Promise.resolve({ name: "Authorization", value: `Bearer ${ctx.accessToken}` });
 };
 
 function base64url(data: string | Buffer): string {

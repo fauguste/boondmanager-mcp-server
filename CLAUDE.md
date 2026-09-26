@@ -59,7 +59,7 @@ npm run build               # TypeScript compilation (tsc)
 npm run dev                 # Watch mode (tsc --watch)
 npm start                   # Run server (node dist/index.js)
 npm test                    # Run all tests (vitest run)
-npm run test:coverage       # Tests + V8 coverage
+npm run test:coverage       # Tests + V8 coverage, fails under the per-folder / per-file thresholds (see Testing)
 npm run lint                # ESLint
 npm run lint:fix            # ESLint with auto-fix
 npm run typecheck           # tsc --noEmit
@@ -829,8 +829,19 @@ How it is wired, and why it is wired that way:
   4. For prompts: callback returns a non-empty user message that references
      the right tool names and filter shortcuts
   5. For resources: read callback hits the expected API path
-- **Coverage**: V8 provider, excludes test files and index.ts
-- **Current stats**: 66 test files, **1166 tests**
+- **Coverage**: V8 provider, excludes test files and index.ts. The thresholds
+  in `vitest.config.ts` are **per folder and per file**, not only global
+  (issue #245): a 92 % global figure used to hide `tab-tools.ts` at 50 % and
+  `projects.ts` at 55 %, because those suites asserted the registration and
+  never ran a handler. `src/tools/**`, `src/services/**` and
+  `src/transports/**` each have their own floor, and `perFile` (80 % lines,
+  65 % functions, 55 % branches) is what names the untested domain when a
+  new one lands with a registration-only suite. A handler test — invoke the
+  registered callback with a mocked `apiRequest` / `apiSearch` and assert the
+  path, method and body (`tab-tools.test.ts`, `projects.test.ts`,
+  `absences.test.ts`) — is what a domain needs to clear it; a `build*Body`
+  with optional relationships also needs its "absent" branch exercised.
+- **Current stats**: 89 test files, **1403 tests**
 
 ### Test file template (for read-only search+get domains):
 
@@ -1577,7 +1588,23 @@ Two traps this configuration must keep clear of, both of which produce the
 
 ## Code Style
 
-- ESLint 10 + typescript-eslint (recommended config)
+- ESLint 10 + typescript-eslint **`recommendedTypeChecked`** (issue #245) —
+  `parserOptions.project` was declared for years while only the untyped set
+  ran. What is on top: `no-floating-promises`, `switch-exhaustiveness-check`;
+  what is deliberately off, project-wide: `no-base-to-string` and
+  `restrict-template-expressions` (rendering `Record<string, unknown>`
+  attribute bags is the formatters' whole job; objects already go through
+  `renderAttributeValue()`); `prefer-promise-reject-errors` allows `any` /
+  `unknown` (`AbortSignal.reason`). `**/*.test.ts` and `test-helpers.ts` relax
+  the `no-unsafe-*`, `unbound-method`, `require-await` and
+  `no-unnecessary-type-assertion` rules — mocks at the module boundary trip
+  ~700 of them for no defect. Don't add a rule to that override to silence a
+  finding in `src/`; fix the site.
+- `tsconfig.json` carries `noImplicitOverride`, `noImplicitReturns`,
+  `noFallthroughCasesInSwitch` and `verbatimModuleSyntax` (zero cost when
+  enabled). `noUncheckedIndexedAccess` (25 errors) and
+  `exactOptionalPropertyTypes` (13) are tracked in
+  [issue #289](https://github.com/silamir/boondmanager-mcp-server/issues/289).
 - `@typescript-eslint/no-unused-vars` with `argsIgnorePattern: "^_"`
 - `@typescript-eslint/no-explicit-any` as warning
 - No semicolons preference not enforced (current code uses semicolons)
