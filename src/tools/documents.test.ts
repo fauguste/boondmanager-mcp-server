@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerDocumentTools } from "./documents.js";
 import { apiDownload, apiUploadForm, DownloadTooLargeError } from "../services/boond-client.js";
-import { MAX_DOCUMENT_BYTES } from "../constants.js";
+import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, CHARACTER_LIMIT } from "../constants.js";
+import { buildPdf, buildZip } from "../services/document-text.test.js";
 
 vi.mock("../services/boond-client.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/boond-client.js")>();
@@ -57,14 +58,14 @@ describe("registerDocumentTools", () => {
   });
 
   describe("boond_documents_get handler", () => {
-    it("returns binary documents as an embedded base64 resource", async () => {
+    it("returns binary documents as an embedded base64 resource in raw mode", async () => {
       vi.mocked(apiDownload).mockResolvedValue({
         data: Buffer.from("%PDF-1.4 fake"),
         contentType: "application/pdf",
         filename: "cv-dupont.pdf",
       });
       registerDocumentTools(server);
-      const result = await handlerOf(server, "boond_documents_get")({ id: "123" });
+      const result = await handlerOf(server, "boond_documents_get")({ id: "123", mode: "raw" });
       expect(apiDownload).toHaveBeenCalledWith("/documents/123", expect.any(Function), {
         maxBytes: MAX_DOCUMENT_BYTES,
       });
@@ -92,11 +93,98 @@ describe("registerDocumentTools", () => {
       expect(schema.shape.id.safeParse("123_resume").success).toBe(true);
       expect(schema.shape.id.safeParse("../invoices/5").success).toBe(false);
 
-      const result = await handlerOf(server, "boond_documents_get")({ id: "123_resume" });
+      const result = await handlerOf(server, "boond_documents_get")({ id: "123_resume", mode: "raw" });
       expect(apiDownload).toHaveBeenCalledWith("/documents/123_resume", expect.any(Function), {
         maxBytes: MAX_DOCUMENT_BYTES,
       });
       expect(result.content[1].resource!.uri).toBe("boond://documents/123_resume");
+    });
+
+    // Issue #263 — the default mode makes a document readable instead of a blob.
+    it("returns images as MCP image content (the shape hosts pass to the model's vision input)", async () => {
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: Buffer.from("png-bytes"),
+        contentType: "image/png",
+        filename: "ticket.png",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "7", mode: "text" });
+      expect(result.content[1]).toEqual({
+        type: "image",
+        data: Buffer.from("png-bytes").toString("base64"),
+        mimeType: "image/png",
+      });
+      expect(result.content[0].text).toContain("ticket.png");
+    });
+
+    it("falls back to an embedded resource with a note for an image over MAX_IMAGE_BYTES", async () => {
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: Buffer.alloc(MAX_IMAGE_BYTES + 1, 1),
+        contentType: "image/jpeg",
+        filename: "poster.jpg",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "8", mode: "text" });
+      expect(result.content[0].text).toContain("au-delà des 2 Mo");
+      expect(result.content[1].type).toBe("resource");
+    });
+
+    it("extracts the text of a PDF, with size and page count, in the default mode", async () => {
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: buildPdf("Jean Dupont Developpeur TypeScript"),
+        contentType: "application/pdf",
+        filename: "cv.pdf",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "9", mode: "text" });
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain("1 page(s)) — texte extrait :");
+      expect(result.content[0].text).toContain("Jean Dupont Developpeur TypeScript");
+    });
+
+    it("extracts the text of a DOCX through the native zip reader", async () => {
+      const xml = `<w:document><w:body><w:p><w:r><w:t>Profil DOCX</w:t></w:r></w:p></w:body></w:document>`;
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: buildZip([{ name: "word/document.xml", data: Buffer.from(xml), deflate: true }]),
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename: "cv.docx",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "10", mode: "text" });
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain("Profil DOCX");
+    });
+
+    it("returns the raw file with a warning when nothing can be extracted (scan, encrypted, malformed)", async () => {
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: Buffer.from("%PDF-1.4 fake"),
+        contentType: "application/pdf",
+        filename: "scan.pdf",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "11", mode: "text" });
+      expect(result.content[0].text).toContain("Extraction du texte impossible");
+      expect(result.content[1].type).toBe("resource");
+    });
+
+    it("truncates a long extracted text at CHARACTER_LIMIT and says how to get the whole file", async () => {
+      const xml = `<w:document><w:body><w:p><w:r><w:t>${"x".repeat(CHARACTER_LIMIT + 500)}</w:t></w:r></w:p></w:body></w:document>`;
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: buildZip([{ name: "word/document.xml", data: Buffer.from(xml) }]),
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename: "long.docx",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "12", mode: "text" });
+      expect(result.content[0].text).toContain(`[Texte tronqué à ${CHARACTER_LIMIT} caractères`);
+      expect(result.content[0].text.length).toBeLessThan(CHARACTER_LIMIT + 400);
+    });
+
+    it("defaults mode to text in the advertised schema", () => {
+      registerDocumentTools(server);
+      const config = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_documents_get")![1];
+      const schema = config.inputSchema as unknown as { parse: (v: unknown) => { mode: string } };
+      expect(schema.parse({ id: "1" }).mode).toBe("text");
     });
 
     it("mentions the suffix in its description so the id isn't truncated", () => {

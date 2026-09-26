@@ -209,9 +209,21 @@ crud-factory.ts builds the `{ data: { type, attributes } }` payload.
 Filters out undefined values.
 
 **Documents** (`src/tools/documents.ts`): `boond_documents_get` downloads a
-document (CV, justificatif…) via `apiDownload()` and returns it as an MCP
-embedded resource (base64 blob for binaries, plain text for text mimes;
-size cap `MAX_DOCUMENT_BYTES` = 5 MiB). The cap is handed to `apiDownload`
+document (CV, justificatif…) via `apiDownload()` and, since issue #263, makes
+it **readable** by default (`mode: "text"`): a PDF goes through `unpdf` (a
+serverless pdf.js build, ~2 MB, no native binary), a DOCX through
+`src/services/document-text.ts`'s own zip reader (`node:zlib` only,
+`word/document.xml` → paragraphs / tabs / decoded entities), both bounded at
+`CHARACTER_LIMIT` with the original size and page count in the header; an
+image (PNG / JPEG / GIF / WebP) is returned as MCP `image` content — the only
+shape hosts hand to the model's vision input; a blob is opaque — up to
+`MAX_IMAGE_BYTES` (2 MiB). A PDF from which nothing extracts (scan,
+encrypted, malformed) falls back to the raw embedded resource **with a
+warning line**, never an error. `mode: "raw"` is the previous behaviour
+(base64 blob for binaries, plain text for text mimes). Size cap on the
+download itself: `MAX_DOCUMENT_BYTES` = 5 MiB. Fixtures for the tests are
+built in code (`buildPdf`, `buildZip` in `document-text.test.ts`), no binary
+files in the repository. The cap is handed to `apiDownload`
 as `{ maxBytes }` and enforced **while downloading** (issue #235): a
 `Content-Length` above it is refused before a body byte is read, and a body
 without one is cancelled (`reader.cancel()`) the moment the running total
