@@ -32,6 +32,10 @@ above are asserted against a real client by `src/catalogue-counts.test.ts`.
   [issue #170](https://github.com/silamir/boondmanager-mcp-server/issues/170).
 - Keep this section honest when the SDK is bumped: the SDK's
   `LATEST_PROTOCOL_VERSION` is the only source of truth for what is negotiated.
+- **Minimum SDK is `^1.30.0`** (`package.json`, issue #246): the features
+  listed above (`ResourceTemplate`, the titled elicitation enum, the 2025-11-25
+  negotiation) do not exist in 1.29, so a looser range would let `npm install`
+  resolve a version the code does not run on.
 
 ## Server Identity & Instructions
 
@@ -414,6 +418,12 @@ and format via `LOG_FORMAT` (json vs pretty). Every HTTP request gets a
 to attach context and `logger.info({ key: value }, "message")` for
 structured output. In production (`NODE_ENV=production`), JSON is default;
 in dev, pino-pretty (colorized) is active unless `LOG_FORMAT=json`.
+`pino-pretty` is a **devDependency** (issue #246): the `.mcpb` bundle and the
+Docker image are built with `--omit=dev`, so `resolveLoggerConfig()` takes the
+pretty branch only when `isPrettyTransportAvailable()` resolves the module
+and falls back to JSON on stderr otherwise (pino would throw at logger
+creation on a missing transport target). Docker base image: the **active
+LTS** line (`node:24-alpine`), never current — policy in `README-docker.md`.
 
 **What is logged, and where the `corrId` comes from** (issue #236). Four
 sources, one id:

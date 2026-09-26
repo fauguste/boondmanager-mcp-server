@@ -1,6 +1,7 @@
 import pino from "pino";
 import { readString } from "../config/env.js";
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 
 /**
  * Redaction paths for the structured logger. Defence-in-depth: nothing in the
@@ -55,6 +56,24 @@ export function usePrettyOutput(env: NodeJS.ProcessEnv = process.env): boolean {
   return readString("LOG_FORMAT", env)?.trim() !== "json" && readString("NODE_ENV", env)?.trim() !== "production";
 }
 
+/**
+ * `pino-pretty` is a **devDependency** (issue #246): it only serves the
+ * human-readable output of a development shell, and the `.mcpb` bundle and
+ * the Docker image are built with `--omit=dev`. Pino loads a transport by
+ * module name in a worker thread and throws at logger creation when the
+ * target is missing, so the pretty branch is taken only when the module
+ * resolves — otherwise the logger silently falls back to JSON on stderr,
+ * which is the production shape anyway.
+ */
+export function isPrettyTransportAvailable(): boolean {
+  try {
+    createRequire(import.meta.url).resolve("pino-pretty");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type LoggerConfig =
   | { format: "pretty"; options: pino.LoggerOptions & { transport: pino.TransportSingleOptions } }
   | { format: "json"; options: pino.LoggerOptions; destinationFd: number };
@@ -66,12 +85,15 @@ export type LoggerConfig =
  * destination travels inside the pino-pretty options on one branch and as a
  * `pino.destination()` on the other.
  */
-export function resolveLoggerConfig(env: NodeJS.ProcessEnv = process.env): LoggerConfig {
+export function resolveLoggerConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  prettyAvailable: boolean = isPrettyTransportAvailable()
+): LoggerConfig {
   const base: pino.LoggerOptions = {
     level: resolveLogLevel(env),
     redact: { paths: REDACT_PATHS, censor: "[Redacted]" },
   };
-  if (usePrettyOutput(env)) {
+  if (usePrettyOutput(env) && prettyAvailable) {
     return {
       format: "pretty",
       options: {
