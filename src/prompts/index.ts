@@ -1287,6 +1287,29 @@ export const PROMPTS: PromptDefinition[] = [
   },
 
   {
+    name: "attention_du_jour",
+    title: "Qu'est-ce qui demande mon attention aujourd'hui ?",
+    description:
+      "Lit les alertes du tableau de bord calculées par BoondManager (fins de contrat, périodes d'essai, CRA manquants, factures en retard, " +
+      "prestations qui se terminent, opportunités sans action…), les classe par urgence et propose l'outil qui traite chacune.",
+    argsSchema: {},
+    domains: ["alerts", "application"],
+    build: (_args, now = new Date()) => {
+      const today = toIsoDate(now);
+      return [
+        `Fais le point sur ce qui demande mon attention aujourd'hui (${today}).`,
+        "",
+        "Étapes :",
+        "1. Lire la ressource `boond://alerts/me` (pas d'appel d'outil) — à défaut `boond_alerts_search`. Ce sont les alertes calculées par BoondManager pour mon tableau de bord : ne pas les recomposer avec des recherches.",
+        "2. Grouper par module / indicateur (`module`, `indicator`, `params`), et classer : **urgent** (échéance dépassée ou sous 7 jours), **à traiter cette semaine**, **à surveiller**.",
+        '3. Pour chaque groupe, proposer l\'outil qui permet d\'agir, sans l\'appeler d\'emblée : contrats et périodes d\'essai → `boond_contracts_search` (`period: "ending"` / `"probationEnding"`) ; CRA et absences en attente → `boond_validations_search` puis `boond_validations_update` ; factures en retard → `boond_invoices_search` (`period: "expectedPayment"`, `states` impayés) ; prestations qui se terminent → `boond_deliveries_search` (`period: "running"`) ; opportunités sans action → `boond_opportunities_search` + `boond_actions_search`.',
+        "4. Restituer une liste courte, du plus urgent au moins urgent : alerte | ce qu'elle signifie | délai | action proposée (outil + filtres). Terminer par les trois choses à faire en premier.",
+        "5. Si la ressource est vide, le dire tel quel — un tableau de bord sans alerte est une information, pas un échec.",
+      ].join("\n");
+    },
+  },
+
+  {
     name: "saisir_cra",
     title: "Saisir ou compléter un CRA",
     description:

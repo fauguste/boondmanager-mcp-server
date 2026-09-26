@@ -1,3 +1,4 @@
+import { resolveAccessPolicy } from "../config/access-policy.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAllResources, REGISTERED_RESOURCES } from "./index.js";
@@ -185,6 +186,39 @@ describe("registerAllResources", () => {
     const body = JSON.parse(result.contents[0].text);
     expect(body).toHaveProperty("error");
     expect(body.error).toMatch(/setting\.tool/);
+  });
+
+  it("exposes boond://alerts/me, reads GET /alerts and follows the alerts domain (issue #255)", async () => {
+    expect(REGISTERED_RESOURCES.map((r) => r.uri)).toContain("boond://alerts/me");
+    const searchSpy = vi.spyOn(boondClient, "apiSearch").mockResolvedValue({
+      data: [
+        {
+          id: "12",
+          type: "alert",
+          attributes: { module: "contracts", indicator: "probationEnd" },
+          links: { self: "x" },
+        },
+      ],
+    });
+    registerAllResources(server);
+    const call = vi.mocked(server.registerResource).mock.calls.find((c) => c[0] === "alerts/me");
+    expect(call?.[1]).toBe("boond://alerts/me");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cb = call![3] as any;
+    const result = await cb(new URL("boond://alerts/me"));
+    expect(searchSpy).toHaveBeenCalledWith("/alerts", {});
+    const body = JSON.parse(result.contents[0].text);
+    expect(body).toEqual({
+      count: 1,
+      alerts: [{ id: "12", type: "alert", attributes: { module: "contracts", indicator: "probationEnd" } }],
+    });
+
+    const finance = createMockServer();
+    registerAllResources(
+      finance,
+      resolveAccessPolicy({ BOOND_MCP_DOMAINS: "invoices,application" } as NodeJS.ProcessEnv)
+    );
+    expect(vi.mocked(finance.registerResource).mock.calls.map((c) => c[0])).not.toContain("alerts/me");
   });
 
   it("exposes the current-user rights view (issue #261)", () => {

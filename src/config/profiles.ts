@@ -48,6 +48,7 @@ const PROFILE_TABLE = {
     "resources",
     // `forms` (issue #256): interview / evaluation forms are a recruiting object.
     "forms",
+    "alerts",
     "application",
     "workflows",
   ],
@@ -73,6 +74,7 @@ const PROFILE_TABLE = {
     // `invoices` for `preparation_rdv_client` (issue #259): a salesperson reads
     // the client's overdue invoices before a meeting.
     "invoices",
+    "alerts",
     "application",
     "workflows",
   ],
@@ -93,6 +95,7 @@ const PROFILE_TABLE = {
     "reporting",
     "timesheets",
     "deliveries",
+    "alerts",
     "application",
     "workflows",
   ],
@@ -115,11 +118,23 @@ const PROFILE_TABLE = {
     "inactivities",
     "groupments",
     "forms",
+    "alerts",
     "application",
     "workflows",
   ],
   /** Administration de l'outil : référentiels d'organisation et journaux. */
-  admin: ["accounts", "agencies", "business-units", "poles", "roles", "logs", "webhooks", "flags", "application"],
+  admin: [
+    "accounts",
+    "agencies",
+    "business-units",
+    "poles",
+    "roles",
+    "logs",
+    "webhooks",
+    "flags",
+    "alerts",
+    "application",
+  ],
 } as const satisfies Record<string, readonly DomainName[]>;
 
 /** Profile name literals (`"recruiting" | "sales" | …`). */

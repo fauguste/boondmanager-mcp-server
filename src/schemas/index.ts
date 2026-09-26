@@ -2184,6 +2184,12 @@ export const GroupmentUpdateSchema = z
   })
   .strict();
 
+// ---- Alerts (issue #255) ----
+// `GET /alerts` ("Search alerts for user dashboard") documents no parameter at
+// all — not even the searchable / paginable traits — so the tool takes only
+// the client-side projection.
+export const AlertSearchSchema = z.object({ fields: fieldsField }).strict();
+
 // ---- Application schemas ----
 
 // ---- Validation schemas ----

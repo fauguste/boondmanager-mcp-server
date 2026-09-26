@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**233 tools** across **44 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
+**235 tools** across **45 domains** · **24 prompts** · **48 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -52,6 +52,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 |---|---|---|
 | `boond_agencies_get` | Détails d'un(e) agence | read · idempotent |
 | `boond_agencies_search` | Rechercher des agences | read · idempotent · open-world |
+
+### alerts (1)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_alerts_search` | Alertes du tableau de bord | read · idempotent |
 
 ### application (2)
 
@@ -434,12 +440,13 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_webhooks_get` | Détails d'un(e) webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
-### workflow (23)
+### workflow (24)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_workflow_absences_a_valider` | Demandes d'absence à valider | read · idempotent |
 | `boond_workflow_alertes_contrats` | Fins de contrat et périodes d'essai à venir | read · idempotent |
+| `boond_workflow_attention_du_jour` | Qu'est-ce qui demande mon attention aujourd'hui ? | read · idempotent |
 | `boond_workflow_candidats_pour_opportunite` | Candidats correspondant à une opportunité | read · idempotent |
 | `boond_workflow_cartographie_competences` | Cartographie des compétences d'un périmètre | read · idempotent |
 | `boond_workflow_cvs_a_mettre_a_jour` | Audit fraîcheur des CV / dossiers techniques | read · idempotent |
@@ -462,7 +469,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_workflow_synthese_equipe` | Synthèse d'une équipe | read · idempotent |
 | `boond_workflow_traiter_note_de_frais` | Traiter un justificatif en note de frais | read · idempotent |
 
-## Prompts (23)
+## Prompts (24)
 
 Pre-orchestrated workflows surfaced via the MCP prompts API.
 
@@ -470,6 +477,7 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 |---|---|---|
 | `absences_a_valider` | Demandes d'absence à valider | `mois?` `manager_id?` |
 | `alertes_contrats` | Fins de contrat et périodes d'essai à venir | `horizon_jours?` `manager_id?` |
+| `attention_du_jour` | Qu'est-ce qui demande mon attention aujourd'hui ? | — |
 | `candidats_pour_opportunite` | Candidats correspondant à une opportunité | `opportunity_id` |
 | `cartographie_competences` | Cartographie des compétences d'un périmètre | `manager_id?` `agency_id?` `top_n?` |
 | `cvs_a_mettre_a_jour` | Audit fraîcheur des CV / dossiers techniques | `seuil_mois?` `manager_id?` |
@@ -492,12 +500,13 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |
 | `traiter_note_de_frais` | Traiter un justificatif en note de frais | `resource_id?` `project_id?` `term?` `contexte?` |
 
-## Resources (47)
+## Resources (48)
 
 Reference data exposed as MCP resources.
 
 | URI | Title |
 |---|---|
+| `boond://alerts/me` | Alertes du tableau de bord |
 | `boond://application/current-user` | Utilisateur courant |
 | `boond://application/current-user/rights` | Droits et périmètre de l'utilisateur |
 | `boond://dictionary/actions/candidates` | Types d'action — candidats |

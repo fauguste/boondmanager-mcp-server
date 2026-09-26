@@ -146,6 +146,8 @@ export const API_PATHS = {
   inactivities: "/inactivities",
   forms: "/forms",
   groupments: "/groupments",
+  // Issue #255 — the user's dashboard alerts (alerts/search.raml: get only, no parameter).
+  alerts: "/alerts",
 } as const;
 
 // Canonical list of tool domains exposed by the server, in registration order.
@@ -194,6 +196,8 @@ export const REGISTERED_DOMAINS = [
   "inactivities",
   "forms",
   "groupments",
+  // Issue #255
+  "alerts",
   "documents",
   "workflows",
 ] as const;

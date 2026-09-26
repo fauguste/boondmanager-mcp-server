@@ -5,6 +5,8 @@ import { getDictionaryOverrides } from "../config/dictionary-overrides.js";
 import { identityIcons, iconsForDomain, referenceIcons } from "../icons.js";
 import { isDomainAllowed, type AccessPolicy } from "../config/access-policy.js";
 import { ENTITY_TEMPLATES, readEntityAggregate, type EntityTemplate } from "./templates.js";
+import { MAX_RESOURCE_BYTES } from "../constants.js";
+import { projectEntity } from "../services/format/detail.js";
 import { logger } from "../services/logger.js";
 
 /** Ids offered per `completions/complete` call. The spec caps `values` at 100. */
@@ -335,6 +337,8 @@ const DICTIONARY_URI_PREFIX = "boond://dictionary/";
 const CURRENT_USER_URI = "boond://application/current-user";
 /** URI of the derived rights / perimeter view of the same payload (issue #261). */
 const CURRENT_USER_RIGHTS_URI = "boond://application/current-user/rights";
+/** The authenticated user's dashboard alerts (issue #255). */
+const ALERTS_ME_URI = "boond://alerts/me";
 /** URI of the static dictionary-overrides resource (no API call behind it). */
 const OVERRIDES_URI = "boond://dictionary/overrides";
 
@@ -356,6 +360,7 @@ export const REGISTERED_RESOURCES = [
     uri: CURRENT_USER_RIGHTS_URI,
     title: "Droits et périmètre de l'utilisateur",
   },
+  { name: "alerts/me", uri: ALERTS_ME_URI, title: "Alertes du tableau de bord" },
 ];
 
 interface Included {
@@ -638,6 +643,36 @@ export function registerAllResources(server: McpServer, policy?: AccessPolicy): 
       };
     }
   );
+
+  // Issue #255: the dashboard alerts as a resource — the natural first read
+  // of a session. Domain-gated like the entity templates (it is business
+  // data, not a code table).
+  if (!policy || isDomainAllowed(policy, "alerts")) {
+    server.registerResource(
+      "alerts/me",
+      ALERTS_ME_URI,
+      {
+        title: "Alertes du tableau de bord",
+        description:
+          "Alertes calculées par BoondManager pour l'utilisateur authentifié (fins de contrat / période d'essai, CRA manquants, factures en retard, prestations qui se terminent, opportunités sans action…) — `GET /alerts`. " +
+          "À lire en premier pour « qu'est-ce qui demande mon attention ? » ; `boond_alerts_search` rend la même liste en texte.",
+        mimeType: "application/json",
+        icons: iconsForDomain("alerts"),
+      },
+      async () => {
+        const response = await apiSearch("/alerts", {});
+        const rows = Array.isArray(response.data) ? response.data : response.data ? [response.data] : [];
+        const alerts = rows.map(projectEntity);
+        let body: Record<string, unknown> = { count: alerts.length, alerts };
+        let text = JSON.stringify(body, null, 2);
+        if (Buffer.byteLength(text, "utf8") > MAX_RESOURCE_BYTES) {
+          body = { count: alerts.length, alerts: alerts.slice(0, 200), _omitted: [`alerts[200..${alerts.length}]`] };
+          text = JSON.stringify(body, null, 2);
+        }
+        return { contents: [{ uri: ALERTS_ME_URI, mimeType: "application/json", text }] };
+      }
+    );
+  }
 
   registerEntityTemplates(server, policy);
 }

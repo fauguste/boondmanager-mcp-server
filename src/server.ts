@@ -42,6 +42,7 @@ import {
   registerInactivityTools,
   registerFormTools,
   registerGroupmentTools,
+  registerAlertTools,
   registerDocumentTools,
   registerWorkflowTools,
 } from "./tools/index.js";
@@ -172,6 +173,7 @@ export const TOOL_REGISTRARS: ReadonlyArray<readonly [DomainName, (server: McpSe
     ["inactivities", registerInactivityTools],
     ["forms", registerFormTools],
     ["groupments", registerGroupmentTools],
+    ["alerts", registerAlertTools],
     ["documents", registerDocumentTools],
     ["workflows", registerWorkflowTools],
   ];
