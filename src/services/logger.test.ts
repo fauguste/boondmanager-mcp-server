@@ -8,6 +8,7 @@ import {
   resolveLoggerConfig,
   resolveLogLevel,
   usePrettyOutput,
+  isPrettyTransportAvailable,
 } from "./logger.js";
 
 describe("logger", () => {
@@ -61,6 +62,18 @@ describe("log destination (issue #225)", () => {
     expect(config.format).toBe("json");
     if (config.format !== "json") throw new Error("unreachable");
     expect(config.destinationFd).toBe(LOG_DESTINATION_FD);
+  });
+
+  it("falls back to JSON on stderr when pino-pretty is not installed (devDependency, issue #246)", () => {
+    const config = resolveLoggerConfig({}, false);
+    expect(config.format).toBe("json");
+    if (config.format !== "json") throw new Error("unreachable");
+    expect(config.destinationFd).toBe(LOG_DESTINATION_FD);
+    expect(config.options.transport).toBeUndefined();
+  });
+
+  it("detects pino-pretty in this (dev) checkout", () => {
+    expect(isPrettyTransportAvailable()).toBe(true);
   });
 
   it("keeps the redaction paths on both branches", () => {

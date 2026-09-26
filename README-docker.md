@@ -9,6 +9,10 @@ Serveur MCP (Model Context Protocol) pour l'API BoondManager en mode HTTP transp
 
 **158 outils, 6 prompts, 20 ressources** exposés via une API HTTP/SSE. Documentation complète sur [GitHub](https://github.com/silamir/boondmanager-mcp-server).
 
+## Image de base
+
+L'image est construite sur **`node:<LTS actif>-alpine`**, épinglée par digest multi-arch (Dependabot rafraîchit le digest chaque semaine). Politique : la ligne Node en **Active LTS** au moment de la release — jamais la ligne « current ». Node 24 est LTS depuis octobre 2025 ; Node 26 ne le devient qu'en octobre 2026, date à laquelle le `Dockerfile` passera à `node:26-alpine`. Le serveur lui-même exige Node ≥ 22 (`engines`), donc l'image de prod tourne toujours sur une version que la CI teste (matrice 22 / 24 / 26).
+
 ## Images disponibles
 
 Deux registres, même image multi-architecture (`linux/amd64` + `linux/arm64`) :

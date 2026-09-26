@@ -11,6 +11,13 @@ updates:
       - "fauguste"
     labels:
       - "dependencies"
+    ignore:
+      # TypeScript 7 (native, Go-based) is not supported by typescript-eslint
+      # yet (`typescript <6.1` peer range): the major-bump PR sat red for two
+      # months (#152, issue #246). Lift this when typescript-eslint declares
+      # support for 7.x.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: "development"
