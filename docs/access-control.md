@@ -59,17 +59,17 @@ ces regroupements, prêts à l'emploi — définis dans
 
 | Profil | Domaines | Outils | Prompts |
 |--------|----------|--------|---------|
-| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, application, workflows | 93 | 12 |
-| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, invoices, application, workflows | 124 | 13 |
-| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, timesheets, deliveries, application, workflows | 87 | 5 |
-| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, contracts, application, workflows | 68 | 9 |
-| `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 18 | 0 |
-| *(aucun)* | tous | 212 | 22 |
+| `recruiting` | candidates, positionings, opportunities, contacts, companies, documents, actions, resources, forms, application, workflows | 98 | 13 |
+| `sales` | opportunities, companies, contacts, actions, projects, orders, products, reporting, resources, absences, timesheets, invoices, application, workflows | 127 | 14 |
+| `finance` | invoices, payments, orders, purchases, provider-invoices, expenses, projects, companies, reporting, timesheets, deliveries, application, workflows | 88 | 5 |
+| `delivery` | projects, deliveries, resources, timesheets, absences, planning-absences, validations, contracts, inactivities, groupments, forms, application, workflows | 80 | 9 |
+| `admin` | accounts, agencies, business-units, poles, roles, logs, webhooks, flags, application | 23 | 0 |
+| *(aucun)* | tous | 233 | 23 |
 
 Comptages **générés** depuis les registrations réelles (les mêmes que celles
 qu'un client voit dans `tools/list`), profil seul, toutes opérations — recalculés
-le 2026-09-26 (issue #259). Avec `BOOND_MCP_READ_ONLY=true` en plus :
-`recruiting` 66, `sales` 88, `finance` 58, `delivery` 47, `admin` 18. Pour
+le 2026-09-26 (issue #256). Avec `BOOND_MCP_READ_ONLY=true` en plus :
+`recruiting` 70, `sales` 91, `finance` 59, `delivery` 55, `admin` 20. Pour
 recalculer : `npm run build`, puis `registerAll()` sur un serveur factice avec
 `resolveAccessPolicy({ BOOND_MCP_PROFILE: … })` (voir `src/server.test.ts`).
 

@@ -46,6 +46,8 @@ const PROFILE_TABLE = {
     "documents",
     "actions",
     "resources",
+    // `forms` (issue #256): interview / evaluation forms are a recruiting object.
+    "forms",
     "application",
     "workflows",
   ],
@@ -108,6 +110,11 @@ const PROFILE_TABLE = {
     "planning-absences",
     "validations",
     "contracts",
+    // Issue #256: bench periods, delivery groupments (multi-delivery billing) and
+    // end-of-mission / annual forms.
+    "inactivities",
+    "groupments",
+    "forms",
     "application",
     "workflows",
   ],

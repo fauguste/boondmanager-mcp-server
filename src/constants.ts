@@ -142,6 +142,10 @@ export const API_PATHS = {
   reportingSynthesis: "/reporting-synthesis",
   reportingProductionPlans: "/reporting-production-plans",
   documents: "/documents",
+  // Issue #256 — create-only collections (search.raml documents `post`), plus default / rights.
+  inactivities: "/inactivities",
+  forms: "/forms",
+  groupments: "/groupments",
 } as const;
 
 // Canonical list of tool domains exposed by the server, in registration order.
@@ -186,6 +190,10 @@ export const REGISTERED_DOMAINS = [
   "poles",
   "reporting",
   "planning-absences",
+  // Issue #256
+  "inactivities",
+  "forms",
+  "groupments",
   "documents",
   "workflows",
 ] as const;

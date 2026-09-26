@@ -159,6 +159,9 @@ export const DOMAIN_ICONS: Readonly<Record<DomainName, Icon[]>> = {
   poles: [PIN],
   reporting: [CHART],
   "planning-absences": [CALENDAR],
+  inactivities: [CLOCK],
+  forms: [CHECK],
+  groupments: [BRIEFCASE],
   documents: [DOCUMENT],
   workflows: [LIST],
 };
