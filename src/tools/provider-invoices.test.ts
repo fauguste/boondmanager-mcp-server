@@ -25,7 +25,7 @@ describe("registerProviderInvoiceTools", () => {
 
   it("should register 3 provider invoice tools", () => {
     registerProviderInvoiceTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(3);
+    expect(server.registerTool).toHaveBeenCalledTimes(5);
   });
 
   it("should register all expected tool names", () => {
@@ -106,6 +106,23 @@ describe("buildProviderInvoiceBody (#245)", () => {
         attributes: { reference: "F-1", startDate: "2026-09-01", endDate: "2026-09-30" },
         relationships: { resource: { data: { id: "9", type: "resource" } } },
       },
+    });
+  });
+});
+
+describe("boond_provider_invoices_update / _delete (issue #252)", () => {
+  it("PUTs the attributes on /provider-invoices/{id}", async () => {
+    const server = createMockServer();
+    vi.mocked(apiRequest).mockClear();
+    registerProviderInvoiceTools(server);
+    const names = vi.mocked(server.registerTool).mock.calls.map((c) => c[0]);
+    expect(names).toEqual(expect.arrayContaining(["boond_provider_invoices_update", "boond_provider_invoices_delete"]));
+    const handler = vi
+      .mocked(server.registerTool)
+      .mock.calls.find((c) => c[0] === "boond_provider_invoices_update")![2] as (p: unknown) => Promise<unknown>;
+    await handler({ id: "11", paidDate: "2026-09-26", state: 3 });
+    expect(apiRequest).toHaveBeenCalledWith("/provider-invoices/11", "PUT", {
+      data: { type: "providerinvoice", id: "11", attributes: { paidDate: "2026-09-26", state: 3 } },
     });
   });
 });

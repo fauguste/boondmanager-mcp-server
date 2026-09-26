@@ -12,6 +12,14 @@ import {
   PositioningUpdateSchema,
   TimesheetCreateSchema,
   TimesheetUpdateSchema,
+  DeliveryCreateSchema,
+  DeliveryUpdateSchema,
+  PaymentCreateSchema,
+  PaymentUpdateSchema,
+  ProviderInvoiceCreateSchema,
+  ProviderInvoiceUpdateSchema,
+  PurchaseCreateSchema,
+  PurchaseUpdateSchema,
 } from "./index.js";
 
 type Shape = { shape: Record<string, unknown> };
@@ -77,6 +85,37 @@ const TABLE: ReadonlyArray<{
     update: OrderUpdateSchema,
     writable: true,
     verified: "read, 2026-09-25: integer of setting.state.order — write path NOT verified",
+  },
+  // Issue #252: the finance / delivery entities keep a dictionary state
+  // (`setting.state.{delivery,payment,providerinvoice,purchase}` all exist,
+  // read 2026-09-26); `stateField` replaced the bare `z.number()` they had.
+  {
+    entity: "delivery",
+    create: DeliveryCreateSchema,
+    update: DeliveryUpdateSchema,
+    writable: true,
+    verified: "read, 2026-09-26: integer of setting.state.delivery — write path NOT verified",
+  },
+  {
+    entity: "payment",
+    create: PaymentCreateSchema,
+    update: PaymentUpdateSchema,
+    writable: true,
+    verified: "read, 2026-09-26: integer of setting.state.payment — write path NOT verified",
+  },
+  {
+    entity: "providerinvoice",
+    create: ProviderInvoiceCreateSchema,
+    update: ProviderInvoiceUpdateSchema,
+    writable: true,
+    verified: "read, 2026-09-26: integer of setting.state.providerinvoice — write path NOT verified",
+  },
+  {
+    entity: "purchase",
+    create: PurchaseCreateSchema,
+    update: PurchaseUpdateSchema,
+    writable: true,
+    verified: "read, 2026-09-26: integer of setting.state.purchase — write path NOT verified",
   },
   {
     entity: "positioning",

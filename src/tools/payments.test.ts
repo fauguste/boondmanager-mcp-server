@@ -22,7 +22,7 @@ describe("registerPaymentTools", () => {
 
   it("should register 3 payment tools", () => {
     registerPaymentTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(3);
+    expect(server.registerTool).toHaveBeenCalledTimes(5);
   });
 
   it("should register all expected tool names", () => {
@@ -92,5 +92,32 @@ describe("registerPaymentTools", () => {
     expect(query.keywords).toContain("CSOC2");
     expect(query.keywords).toContain("PRJ3");
     expect(query.keywords).toContain("COMP4");
+  });
+});
+
+describe("boond_payments_update / _delete (issue #252)", () => {
+  let server: McpServer;
+  beforeEach(() => {
+    server = createMockServer();
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "9", type: "payment", attributes: {} } } as never);
+  });
+
+  it("PUTs the mapped attributes on /payments/{id}, never a purchase relationship", async () => {
+    registerPaymentTools(server);
+    expect(registeredToolNames(server)).toEqual(
+      expect.arrayContaining(["boond_payments_update", "boond_payments_delete"])
+    );
+    await toolCallback(
+      server,
+      "boond_payments_update"
+    )({ id: "9", performedDate: "2026-09-30", amount: 1200, state: 1 });
+    expect(apiRequest).toHaveBeenCalledWith("/payments/9", "PUT", {
+      data: {
+        type: "payment",
+        id: "9",
+        attributes: { performedDate: "2026-09-30", amountExcludingTax: 1200, state: 1 },
+      },
+    });
   });
 });

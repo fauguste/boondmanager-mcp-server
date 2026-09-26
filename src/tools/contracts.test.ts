@@ -22,9 +22,9 @@ describe("registerContractTools", () => {
     server = createMockServer();
   });
 
-  it("should register 3 contract tools", () => {
+  it("should register 4 contract tools", () => {
     registerContractTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(3);
+    expect(server.registerTool).toHaveBeenCalledTimes(4);
   });
 
   it("should register all expected tool names", () => {
@@ -78,10 +78,12 @@ describe("registerContractTools", () => {
 
   it("names only tools that exist as siblings (#229, #253)", () => {
     registerContractTools(server);
+    const registered = vi.mocked(server.registerTool).mock.calls.map((c) => String(c[0]));
+    const known = [...registered, "boond_resources_contracts"];
     for (const call of vi.mocked(server.registerTool).mock.calls) {
       const description = String(call[1].description);
       for (const sibling of description.match(/boond_[a-z_]+/g) ?? []) {
-        expect(["boond_contracts_search", "boond_contracts_get", "boond_resources_contracts"]).toContain(sibling);
+        expect(known, `${String(call[0])} names ${sibling}`).toContain(sibling);
       }
     }
   });
@@ -205,6 +207,19 @@ describe("filterContracts / contractSummary", () => {
       "[contract #2] | Ressource: Bob Roy (#2) | Type: 1 | 2026-09-01 → 2026-12-31 | Fin PE: 2026-10-10 (état 0)"
     );
     expect(contractSummary(cdi)).toBe("[contract #1] | Type: 0 | 2020-01-01 → en cours | Fin PE: 2020-04-01");
+  });
+});
+
+describe("boond_contracts_update (issue #252)", () => {
+  it("PUTs the attributes on /contracts/{id}, note mapped to informationComments, no resource relationship", async () => {
+    const server = createMockServer();
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "77", type: "contract", attributes: {} } } as never);
+    registerContractTools(server);
+    await toolCallback(server, "boond_contracts_update")({ id: "77", endDate: "2027-06-30", note: "renouvelé" });
+    expect(apiRequest).toHaveBeenCalledWith("/contracts/77", "PUT", {
+      data: { type: "contract", id: "77", attributes: { endDate: "2027-06-30", informationComments: "renouvelé" } },
+    });
   });
 });
 

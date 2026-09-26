@@ -1,6 +1,17 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ProviderInvoiceCreateSchema, ProviderInvoiceSearchSchema } from "../schemas/index.js";
-import { buildJsonApiBody, registerCreateTool, registerGetTool, registerSearchTool } from "./crud-factory.js";
+import {
+  ProviderInvoiceCreateSchema,
+  ProviderInvoiceSearchSchema,
+  ProviderInvoiceUpdateSchema,
+} from "../schemas/index.js";
+import {
+  buildJsonApiBody,
+  registerCreateTool,
+  registerDeleteTool,
+  registerGetTool,
+  registerSearchTool,
+  registerUpdateTool,
+} from "./crud-factory.js";
 import { composeDescription } from "./description-builders.js";
 
 const OPTS = {
@@ -48,4 +59,17 @@ export function registerProviderInvoiceTools(server: McpServer): void {
   });
 
   registerGetTool(server, OPTS, { withTab: false, title: "Détails d'une facture fournisseur" });
+
+  // Issue #252: mark a provider invoice paid (paidDate / state), fix a period or an amount.
+  registerUpdateTool(
+    server,
+    OPTS,
+    ProviderInvoiceUpdateSchema,
+    (params) => {
+      const { id, ...attrs } = params;
+      return buildJsonApiBody("providerinvoice", attrs, String(id));
+    },
+    { method: "PUT", title: "Modifier une facture fournisseur" }
+  );
+  registerDeleteTool(server, OPTS, { title: "Supprimer une facture fournisseur" });
 }

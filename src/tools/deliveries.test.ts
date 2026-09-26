@@ -22,7 +22,7 @@ describe("registerDeliveryTools", () => {
 
   it("should register 3 delivery tools", () => {
     registerDeliveryTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(3);
+    expect(server.registerTool).toHaveBeenCalledTimes(5);
   });
 
   it("should register all expected tool names", () => {
@@ -118,5 +118,51 @@ describe("buildDeliveryBody (#245)", () => {
       data: { attributes: Record<string, unknown> };
     };
     expect(withQuantity.data.attributes).toEqual({ numberOfDaysInvoicedOrQuantity: 10 });
+  });
+});
+
+describe("boond_deliveries_update / _delete (issue #252)", () => {
+  let server: McpServer;
+  beforeEach(() => {
+    server = createMockServer();
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "21", type: "delivery", attributes: {} } } as never);
+  });
+
+  it("PUTs the mapped attributes on /deliveries/{id}, without touching the project / resource attachment", async () => {
+    registerDeliveryTools(server);
+    expect(registeredToolNames(server)).toEqual(
+      expect.arrayContaining(["boond_deliveries_update", "boond_deliveries_delete"])
+    );
+    const result = (await toolCallback(
+      server,
+      "boond_deliveries_update"
+    )({
+      id: "21",
+      endDate: "2026-12-31",
+      unitPrice: 650,
+      note: "prolongation",
+    })) as { structuredContent?: Record<string, unknown> };
+    expect(apiRequest).toHaveBeenCalledWith("/deliveries/21", "PUT", {
+      data: {
+        type: "delivery",
+        id: "21",
+        attributes: {
+          endDate: "2026-12-31",
+          averageDailyPriceExcludingTax: 650,
+          forceAverageDailyPriceExcludingTax: true,
+          informationComments: "prolongation",
+        },
+      },
+    });
+    expect(result.structuredContent).toEqual({ id: "21", type: "delivery" });
+  });
+
+  it("delete is destructive and update idempotent", () => {
+    registerDeliveryTools(server);
+    const call = (name: string) => vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === name)?.[1];
+    expect(call("boond_deliveries_delete")?.annotations?.destructiveHint).toBe(true);
+    expect(call("boond_deliveries_update")?.annotations?.idempotentHint).toBe(true);
+    expect(call("boond_deliveries_update")?.annotations?.readOnlyHint).toBe(false);
   });
 });
