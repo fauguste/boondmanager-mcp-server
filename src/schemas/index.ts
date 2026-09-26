@@ -1334,14 +1334,34 @@ export const DeliveryCreateSchema = z
     projectId: EntityIdSchema.describe("ID du projet"),
     resourceId: EntityIdSchema.describe("ID de la ressource portée par la prestation"),
     title: z.string().optional().describe("Titre de la prestation/livraison"),
-    typeOf: z.number().int().optional().describe("Type de prestation"),
-    state: z.number().int().optional().describe("État"),
+    typeOf: z.number().int().optional().describe("Type de prestation : ID de `boond://dictionary/typeOf/deliveries`"),
+    state: stateField("delivery", "État de la prestation : ID de `boond://dictionary/states/deliveries`"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     quantity: z.number().optional().describe("Nombre de jours / quantité"),
     unitPrice: z.number().optional().describe("Prix journalier HT"),
     averageDailyCost: z.number().optional().describe("Coût journalier moyen"),
     forceAverageDailyPriceExcludingTax: z.boolean().optional().describe("Forcer le prix journalier HT"),
+    note: z.string().optional().describe("Notes, mappées vers informationComments"),
+  })
+  .strict();
+
+// PUT /deliveries/{id} — attributes only, the project / resource attachment
+// is not moved by an update (issue #252; write path not exercised, see CLAUDE.md).
+export const DeliveryUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID de la prestation à modifier"),
+    title: z.string().optional().describe("Titre de la prestation"),
+    typeOf: z.number().int().optional().describe("Type de prestation : ID de `boond://dictionary/typeOf/deliveries`"),
+    state: stateField("delivery", "État de la prestation : ID de `boond://dictionary/states/deliveries`"),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z
+      .string()
+      .optional()
+      .describe("Date de fin (YYYY-MM-DD) — prolonger une prestation = repousser cette date"),
+    quantity: z.number().optional().describe("Nombre de jours / quantité (`numberOfDaysInvoicedOrQuantity`)"),
+    unitPrice: z.number().optional().describe("Prix journalier HT (`averageDailyPriceExcludingTax`, forcé)"),
+    averageDailyCost: z.number().optional().describe("Coût journalier moyen"),
     note: z.string().optional().describe("Notes, mappées vers informationComments"),
   })
   .strict();
@@ -1706,10 +1726,30 @@ export const PaymentCreateSchema = z
     endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
     amount: z.number().optional().describe("Montant HT du paiement, mappé vers amountExcludingTax"),
     amountExcludingTax: z.number().optional().describe("Montant HT du paiement"),
-    state: z.number().int().optional().describe("État du paiement / achat"),
-    paymentMethod: z.number().int().optional().describe("Méthode de paiement"),
+    state: stateField("payment", "État du paiement : ID de `boond://dictionary/states/payments`"),
+    paymentMethod: z.number().int().optional().describe("Mode de paiement : ID de `boond://dictionary/paymentMethods`"),
     taxRates: z.array(z.number()).optional().describe("Taux de taxes Boond"),
     reference: z.string().optional().describe("Référence bancaire ou règlement"),
+    note: z.string().optional().describe("Note interne, mappée vers informationComments"),
+  })
+  .strict();
+
+// PUT /payments/{id} — issue #252 (write path not exercised, see CLAUDE.md).
+export const PaymentUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID du paiement à modifier"),
+    paymentDate: z.string().optional().describe("Date du paiement (YYYY-MM-DD), mappée vers date"),
+    performedDate: z.string().optional().describe("Date de paiement effectif (YYYY-MM-DD) — régulariser un règlement"),
+    expectedDate: z.string().optional().describe("Date de paiement attendu (YYYY-MM-DD)"),
+    startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
+    amount: z.number().optional().describe("Montant HT, mappé vers amountExcludingTax"),
+    amountExcludingTax: z.number().optional().describe("Montant HT"),
+    amountIncludingTax: z.number().optional().describe("Montant TTC"),
+    state: stateField("payment", "État du paiement : ID de `boond://dictionary/states/payments`"),
+    paymentMethod: z.number().int().optional().describe("Mode de paiement : ID de `boond://dictionary/paymentMethods`"),
+    taxRates: z.array(z.number()).optional().describe("Taux de taxes Boond"),
+    reference: z.string().optional().describe("Référence bancaire ou règlement (`number`)"),
     note: z.string().optional().describe("Note interne, mappée vers informationComments"),
   })
   .strict();
@@ -1731,10 +1771,35 @@ export const PurchaseCreateSchema = z
     companyId: EntityIdSchema.optional().describe("ID de la société fournisseur"),
     contactId: EntityIdSchema.optional().describe("ID du contact fournisseur"),
     projectId: EntityIdSchema.optional().describe("ID du projet associé"),
-    state: z.number().int().optional().describe("État de l'achat"),
+    state: stateField("purchase", "État de l'achat : ID de `boond://dictionary/states/purchases`"),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     note: z.string().optional().describe("Notes / commentaires"),
+  })
+  .strict();
+
+// PUT /purchases/{id}/information (RAML `purchases/information.raml`, issue #252).
+export const PurchaseUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID de l'achat à modifier"),
+    title: z.string().optional().describe("Titre de l'achat/sous-traitance"),
+    typeOf: z.number().int().optional().describe("Type d'achat : ID de `boond://dictionary/typeOf/purchases`"),
+    state: stateField("purchase", "État de l'achat : ID de `boond://dictionary/states/purchases`"),
+    companyId: EntityIdSchema.optional().describe("ID de la société fournisseur"),
+    contactId: EntityIdSchema.optional().describe("ID du contact fournisseur"),
+    projectId: EntityIdSchema.optional().describe("ID du projet associé"),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
+    quantity: z.number().optional().describe("Quantité"),
+    amountExcludingTax: z.number().optional().describe("Montant unitaire HT"),
+    taxRate: z.number().optional().describe("Taux de TVA (%) — `boond://dictionary/taxRates`"),
+    paymentMethod: z.number().int().optional().describe("Mode de paiement : ID de `boond://dictionary/paymentMethods`"),
+    paymentTerm: z
+      .number()
+      .int()
+      .optional()
+      .describe("Condition de paiement : ID de `boond://dictionary/paymentTerms`"),
+    note: z.string().optional().describe("Notes / commentaires (`informationComments`)"),
   })
   .strict();
 
@@ -1764,7 +1829,29 @@ export const ProviderInvoiceCreateSchema = z
     exchangeRate: z.number().optional().describe("Taux de change"),
     currencyAgency: z.number().optional().describe("Devise agence"),
     exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
-    state: z.number().int().optional().describe("État de la facture fournisseur"),
+    state: stateField(
+      "providerinvoice",
+      "État de la facture fournisseur : ID de `boond://dictionary/states/provider-invoices`"
+    ),
+  })
+  .strict();
+
+// PUT /provider-invoices/{id} — issue #252 (write path not exercised, see CLAUDE.md).
+export const ProviderInvoiceUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID de la facture fournisseur à modifier"),
+    reference: z.string().optional().describe("Référence de la facture fournisseur"),
+    invoiceDate: z.string().optional().describe("Date de facture (YYYY-MM-DD)"),
+    startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
+    dueDate: z.string().optional().describe("Date d'échéance (YYYY-MM-DD)"),
+    paidDate: z.string().optional().describe("Date de règlement (YYYY-MM-DD) — marquer la facture payée"),
+    amountExcludingTax: z.number().optional().describe("Montant HT"),
+    amountIncludingTax: z.number().optional().describe("Montant TTC"),
+    state: stateField(
+      "providerinvoice",
+      "État de la facture fournisseur : ID de `boond://dictionary/states/provider-invoices`"
+    ),
   })
   .strict();
 
@@ -1782,7 +1869,24 @@ export const ContractCreateSchema = z
       ),
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    note: z.string().optional().describe("Notes / commentaires"),
+    note: z.string().optional().describe("Notes / commentaires (`informationComments`)"),
+  })
+  .strict();
+
+// PUT /contracts/{id} — issue #252 (write path not exercised, see CLAUDE.md).
+export const ContractUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID du contrat à modifier"),
+    typeOf: z.number().int().optional().describe("Type de contrat : ID de `boond://dictionary/typeOf/contracts`"),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD) — prolonger un CDD = repousser cette date"),
+    endReason: z.number().int().optional().describe("Motif de fin : ID de `boond://dictionary/contractEndReasons`"),
+    probationEndDate: z.string().optional().describe("Fin de période d'essai initiale (YYYY-MM-DD)"),
+    renewalProbationEndDate: z.string().optional().describe("Fin de période d'essai renouvelée (YYYY-MM-DD)"),
+    monthlySalary: z.number().optional().describe("Salaire mensuel"),
+    annualSalary: z.number().optional().describe("Salaire annuel"),
+    numberOfWorkingDays: z.number().optional().describe("Nombre de jours ouvrés annuel"),
+    note: z.string().optional().describe("Notes / commentaires (`informationComments`)"),
   })
   .strict();
 

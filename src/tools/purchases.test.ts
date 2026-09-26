@@ -21,9 +21,9 @@ describe("registerPurchaseTools", () => {
     server = createMockServer();
   });
 
-  it("should register 5 purchase tools (search/get/create/delete + information tab)", () => {
+  it("should register 6 purchase tools (search/get/create/update/delete + information tab)", () => {
     registerPurchaseTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(5);
+    expect(server.registerTool).toHaveBeenCalledTimes(6);
   });
 
   it("should register all expected tool names", () => {
@@ -118,5 +118,26 @@ describe("purchase handlers (#245)", () => {
       },
     });
     expect(result.structuredContent).toEqual({ id: "77", type: "purchase" });
+  });
+});
+
+describe("boond_purchases_update (issue #252)", () => {
+  it("PUTs on /purchases/{id}/information (RAML purchases/information.raml) with id on data.id", async () => {
+    const server = createMockServer();
+    vi.mocked(apiRequest).mockReset();
+    vi.mocked(apiRequest).mockResolvedValue({ data: { id: "8002", type: "purchase", attributes: {} } } as never);
+    registerPurchaseTools(server);
+    const handler = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_purchases_update")![2] as (
+      p: unknown
+    ) => Promise<unknown>;
+    await handler({ id: "8002", endDate: "2027-03-31", note: "avenant", projectId: "5" });
+    expect(apiRequest).toHaveBeenCalledWith("/purchases/8002/information", "PUT", {
+      data: {
+        type: "purchase",
+        id: "8002",
+        attributes: { endDate: "2027-03-31", informationComments: "avenant" },
+        relationships: { project: { data: { id: "5", type: "project" } } },
+      },
+    });
   });
 });

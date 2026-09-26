@@ -1,23 +1,40 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { PaymentCreateSchema, PaymentSearchSchema } from "../schemas/index.js";
-import { buildJsonApiBody, registerCreateTool, registerGetTool, registerSearchTool } from "./crud-factory.js";
+import { PaymentCreateSchema, PaymentSearchSchema, PaymentUpdateSchema } from "../schemas/index.js";
+import {
+  buildJsonApiBody,
+  registerCreateTool,
+  registerDeleteTool,
+  registerGetTool,
+  registerSearchTool,
+  registerUpdateTool,
+} from "./crud-factory.js";
 import { composeDescription } from "./description-builders.js";
 
 const OPTS = { entityName: "paiement", entityNamePlural: "paiements", apiPath: "/payments", prefix: "boond_payments" };
 
 /** `/payments` payload: convenience names → API attributes, `purchaseId` → the mandatory `purchase` relationship. */
-export function buildPaymentBody(params: Record<string, unknown>): unknown {
-  const { purchaseId, paymentDate, amount, reference, note, ...attrs } = params;
-  const apiAttrs = {
+function paymentAttributes(params: Record<string, unknown>): Record<string, unknown> {
+  const { paymentDate, amount, reference, note, ...attrs } = params;
+  return {
     ...attrs,
     ...(paymentDate ? { date: paymentDate } : {}),
     ...(amount !== undefined && attrs.amountExcludingTax === undefined ? { amountExcludingTax: amount } : {}),
     ...(reference ? { number: reference } : {}),
     ...(note ? { informationComments: note } : {}),
   };
-  return buildJsonApiBody("payment", apiAttrs, undefined, {
+}
+
+export function buildPaymentBody(params: Record<string, unknown>): unknown {
+  const { purchaseId, ...rest } = params;
+  return buildJsonApiBody("payment", paymentAttributes(rest), undefined, {
     purchase: { id: String(purchaseId), type: "purchase" },
   });
+}
+
+/** PUT /payments/{id}: attributes only — the purchase attachment is never moved by an update (issue #252). */
+export function buildPaymentUpdateBody(params: Record<string, unknown>): unknown {
+  const { id, ...rest } = params;
+  return buildJsonApiBody("payment", paymentAttributes(rest), String(id));
 }
 
 export function registerPaymentTools(server: McpServer): void {
@@ -51,4 +68,8 @@ export function registerPaymentTools(server: McpServer): void {
   });
 
   registerGetTool(server, OPTS, { withTab: false });
+
+  // Issue #252: regularise a payment (performed date, amount, state).
+  registerUpdateTool(server, OPTS, PaymentUpdateSchema, buildPaymentUpdateBody, { method: "PUT" });
+  registerDeleteTool(server, OPTS);
 }

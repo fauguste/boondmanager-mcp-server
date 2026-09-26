@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ContractCreateSchema, ContractSearchSchema } from "../schemas/index.js";
+import { ContractCreateSchema, ContractSearchSchema, ContractUpdateSchema } from "../schemas/index.js";
 import type { ContractSearchInput } from "../schemas/index.js";
 import { apiRequest, apiSearch, buildSearchQuery, formatListResponse } from "../services/boond-client.js";
 import { renderAttributeValue } from "../services/format/summary.js";
@@ -10,18 +10,28 @@ import {
   buildListStructured,
   registerCreateTool,
   registerGetTool,
+  registerUpdateTool,
   SearchOutputSchema,
 } from "./crud-factory.js";
 import { composeDescription } from "./description-builders.js";
 
 const OPTS = { entityName: "contrat", entityNamePlural: "contrats", apiPath: "/contracts", prefix: "boond_contracts" };
 
-/** `/contracts` payload: the resource id becomes the `resource` relationship. */
+/**
+ * `/contracts` payload: the resource id becomes the `resource` relationship,
+ * `note` the `informationComments` attribute (`models.contract` has no `note`),
+ * and `id` — present on update — lands on `data.id`.
+ */
 export function buildContractBody(params: Record<string, unknown>): unknown {
-  const { resourceId, ...attrs } = params;
-  return buildJsonApiBody("contract", attrs, undefined, {
-    resource: resourceId ? { id: String(resourceId), type: "resource" } : undefined,
-  });
+  const { id, resourceId, note, ...attrs } = params;
+  return buildJsonApiBody(
+    "contract",
+    { ...attrs, ...(note !== undefined ? { informationComments: note } : {}) },
+    typeof id === "string" ? id : undefined,
+    {
+      resource: resourceId ? { id: String(resourceId), type: "resource" } : undefined,
+    }
+  );
 }
 
 /**
@@ -232,4 +242,9 @@ export function registerContractTools(server: McpServer): void {
       returns: "confirmation et fiche du contrat créé, avec son ID dans `structuredContent.id`.",
     }),
   });
+
+  // PUT /contracts/{id}: attributes only (issue #252). The RAML has no
+  // information.raml for contracts, so the base resource is the PUT target —
+  // the pattern /actions/{id} and /times-reports/{id} follow.
+  registerUpdateTool(server, OPTS, ContractUpdateSchema, buildContractBody, { method: "PUT" });
 }

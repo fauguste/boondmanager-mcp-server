@@ -1,6 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { DeliveryCreateSchema, DeliverySearchSchema } from "../schemas/index.js";
-import { buildJsonApiBody, registerCreateTool, registerGetTool, registerSearchTool } from "./crud-factory.js";
+import { DeliveryCreateSchema, DeliverySearchSchema, DeliveryUpdateSchema } from "../schemas/index.js";
+import {
+  buildJsonApiBody,
+  registerCreateTool,
+  registerDeleteTool,
+  registerGetTool,
+  registerSearchTool,
+  registerUpdateTool,
+} from "./crud-factory.js";
 import { composeDescription } from "./description-builders.js";
 
 const OPTS = {
@@ -15,19 +22,29 @@ const OPTS = {
  * `note`) map onto the API attributes, and the two mandatory ids become the
  * `project` / `dependsOn` relationships.
  */
-export function buildDeliveryBody(params: Record<string, unknown>): unknown {
-  const { projectId, resourceId, quantity, unitPrice, note, ...attrs } = params;
-  const apiAttrs = {
+function deliveryAttributes(params: Record<string, unknown>): Record<string, unknown> {
+  const { quantity, unitPrice, note, ...attrs } = params;
+  return {
     ...attrs,
     ...(quantity !== undefined ? { numberOfDaysInvoicedOrQuantity: quantity } : {}),
     ...(unitPrice !== undefined ? { averageDailyPriceExcludingTax: unitPrice } : {}),
     ...(unitPrice !== undefined ? { forceAverageDailyPriceExcludingTax: true } : {}),
     ...(note ? { informationComments: note } : {}),
   };
-  return buildJsonApiBody("delivery", apiAttrs, undefined, {
+}
+
+export function buildDeliveryBody(params: Record<string, unknown>): unknown {
+  const { projectId, resourceId, ...rest } = params;
+  return buildJsonApiBody("delivery", deliveryAttributes(rest), undefined, {
     project: { id: String(projectId), type: "project" },
     dependsOn: { id: String(resourceId), type: "resource" },
   });
+}
+
+/** PUT /deliveries/{id}: attributes only — the project / resource attachment is never moved by an update (issue #252). */
+export function buildDeliveryUpdateBody(params: Record<string, unknown>): unknown {
+  const { id, ...rest } = params;
+  return buildJsonApiBody("delivery", deliveryAttributes(rest), String(id));
 }
 
 export function registerDeliveryTools(server: McpServer): void {
@@ -62,4 +79,11 @@ Returns: Liste des livraisons correspondantes.`,
   );
 
   registerGetTool(server, OPTS, { withTab: false, title: "Détails d'une livraison / CRA" });
+
+  // Issue #252: extend a delivery (endDate), change a daily rate, close it.
+  registerUpdateTool(server, OPTS, DeliveryUpdateSchema, buildDeliveryUpdateBody, {
+    method: "PUT",
+    title: "Modifier une prestation/livraison",
+  });
+  registerDeleteTool(server, OPTS, { title: "Supprimer une prestation/livraison" });
 }
