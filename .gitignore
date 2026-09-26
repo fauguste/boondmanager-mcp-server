@@ -19,3 +19,7 @@ Thumbs.db
 # API monitoring workflow artifacts
 changes.json
 issue-body.md
+
+# Local scratch directories (CRM extracts, one-off scripts) — never commit
+.crm-cleaning-tmp/
+*-tmp/
