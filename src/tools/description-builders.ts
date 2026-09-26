@@ -151,6 +151,19 @@ export function defaultSearchDescription(opts: EntityWording): string {
 }
 
 /** Default detail description; `withTab` mirrors `registerGetTool`. */
+/** The six entities `boond_find` resolves (issue #262); the hint is only true for them. */
+const FIND_PREFIXES = new Set([
+  "boond_candidates",
+  "boond_resources",
+  "boond_contacts",
+  "boond_companies",
+  "boond_opportunities",
+  "boond_projects",
+]);
+function findHint(prefix: string): string {
+  return FIND_PREFIXES.has(prefix) ? ", ou `boond_find` pour résoudre un nom / un e-mail en ID" : "";
+}
+
 export function defaultGetDescription(opts: EntityWording & { withTab: boolean }): string {
   const behaviour: string[] = [
     `Un ID inconnu remonte l'erreur BoondManager telle quelle — l'ID doit venir de \`${opts.prefix}_search\`, jamais d'une supposition.`,
@@ -164,7 +177,7 @@ export function defaultGetDescription(opts: EntityWording & { withTab: boolean }
   return composeDescription({
     purpose: `Récupère la fiche complète d'un(e) ${opts.entityName} par son ID numérique.`,
     when: `après un \`${opts.prefix}_search\`, pour obtenir les attributs qui n'apparaissent pas dans le résumé de liste.`,
-    instead: `\`${opts.prefix}_search\` si l'ID n'est pas connu (cet outil n'accepte pas de nom).`,
+    instead: `\`${opts.prefix}_search\` si l'ID n'est pas connu (cet outil n'accepte pas de nom)${findHint(opts.prefix)}.`,
     behaviour,
     returns: `JSON de l'entité (attributs + relations) tel que renvoyé par l'API. Lecture seule.`,
   });
@@ -187,7 +200,7 @@ export function defaultUpdateDescription(opts: EntityWording): string {
   return composeDescription({
     purpose: `Met à jour un(e) ${opts.entityName} existant(e), identifié(e) par son ID.`,
     when: `pour modifier quelques champs d'un enregistrement déjà en base.`,
-    instead: `\`${opts.prefix}_create\` si l'enregistrement n'existe pas encore.`,
+    instead: `\`${opts.prefix}_create\` si l'enregistrement n'existe pas encore${findHint(opts.prefix)}.`,
     behaviour: [
       "Mise à jour partielle : seuls les champs fournis sont écrits, les autres sont laissés en place.",
       "Attention aux champs de type tableau, qui sont **remplacés** et non fusionnés.",

@@ -1,4 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { AccessPolicy } from "../config/access-policy.js";
+import { registerFindTool } from "./find.js";
 import { DictionaryGetSchema } from "../schemas/index.js";
 import type { DictionaryGetInput } from "../schemas/index.js";
 import { CHARACTER_LIMIT } from "../constants.js";
@@ -13,7 +15,11 @@ function formatDictionaryNode(node: unknown): string {
   return text;
 }
 
-export function registerApplicationTools(server: McpServer): void {
+export function registerApplicationTools(server: McpServer, policy?: AccessPolicy): void {
+  // Cross-entity name → id resolver (issue #262). Lives in this domain because
+  // `application` is in every profile; the entities it offers follow the policy.
+  registerFindTool(server, policy);
+
   // Get dictionary
   server.registerTool(
     "boond_application_dictionary",
