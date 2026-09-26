@@ -42,6 +42,15 @@ describe("registerAllPrompts", () => {
         "recherche_profil_competences",
         "traiter_note_de_frais",
         "alertes_contrats",
+        // Issue #259
+        "relance_cra",
+        "absences_a_valider",
+        "marge_projet",
+        "preparation_entretien",
+        "preparation_rdv_client",
+        "relance_devis",
+        "purge_rgpd_candidats",
+        "preparation_facturation",
       ])
     );
   });
@@ -294,6 +303,62 @@ describe("registerAllPrompts", () => {
       },
       {
         name: "alertes_contrats",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "relance_cra",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "marge_projet",
+        args: { project_id: "Refonte SI" },
+        expectTool: "boond_projects_search",
+        expectQuoted: "Refonte SI",
+        expectPlaceholder: "<PROJET_ID>",
+      },
+      {
+        name: "preparation_entretien",
+        args: { candidate_id: "Ana Silva" },
+        expectTool: "boond_candidates_search",
+        expectQuoted: "Ana Silva",
+        expectPlaceholder: "<CANDIDAT_ID>",
+      },
+      {
+        name: "preparation_rdv_client",
+        args: { society_id: "ACME Corp" },
+        expectTool: "boond_companies_search",
+        expectQuoted: "ACME Corp",
+        expectPlaceholder: "<SOCIETE_ID>",
+      },
+      {
+        name: "relance_devis",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "purge_rgpd_candidats",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "absences_a_valider",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "preparation_facturation",
         args: { manager_id: "Claire Petit" },
         expectTool: "boond_resources_search",
         expectQuoted: "Claire Petit",
@@ -595,6 +660,112 @@ describe("registerAllPrompts", () => {
 
     it("defaults the horizon to 45 days on a non-integer", () => {
       expect(build({ horizon_jours: "bientôt" })).toContain("45 prochains jours");
+    });
+  });
+
+  describe("the eight ESN routines (#259)", () => {
+    const NOW = new Date(2026, 8, 26); // 2026-09-26
+    const build = (name: string, args: Record<string, string | undefined>) =>
+      PROMPTS.find((p) => p.name === name)!.build(args, NOW);
+
+    it("relance_cra crosses team, CRA states and pending validations, and decides one at a time", () => {
+      const text = build("relance_cra", { mois: "mois dernier" });
+      expect(text).toContain('startMonth: "2026-08"');
+      expect(text).toContain('documentTypes: ["timesReport"]');
+      expect(text).toContain('validationStates: ["waitingForValidation"]');
+      expect(text).toContain("savedAndNoValidation");
+      expect(text).toContain("boond_validations_update");
+      expect(text).toContain("une décision à la fois");
+      expect(text).toContain("perimeterDynamic: ['managers']");
+    });
+
+    it("absences_a_valider reads the pending absence validations and the validated absences of the team", () => {
+      const text = build("absences_a_valider", {});
+      expect(text).toContain('documentTypes: ["absencesReport"]');
+      expect(text).toContain('startMonth: "2026-09"');
+      expect(text).toContain('validationStates: ["validated"]');
+      expect(text).toContain("boond_absences_get");
+      expect(text).toContain("boond_validations_update");
+    });
+
+    it("marge_projet compares simulation, productivity and the reporting on the resolved project", () => {
+      const text = build("marge_projet", { project_id: "123", periode: "2026-01-01..2026-06-30" });
+      expect(text).toContain("boond_projects_simulation");
+      expect(text).toContain("boond_projects_productivity");
+      expect(text).toContain("boond_projects_deliveries_groupments");
+      expect(text).toContain("`boond_reporting_projects` avec `projects: [123]`");
+      expect(text).toContain('startDate: "2026-01-01"');
+      expect(text).not.toContain("<PROJET_ID>");
+    });
+
+    it("preparation_entretien reads the candidate aggregate, the resume and the positionings, and the need when given", () => {
+      const text = build("preparation_entretien", { candidate_id: "55", opportunity_id: "9" });
+      expect(text).toContain("boond://candidate/55");
+      expect(text).toContain("boond_documents_get");
+      expect(text).toContain("boond_candidates_positionings");
+      expect(text).toContain("`boond_opportunities_get` sur `9`");
+      expect(text).toContain("8 à 10 questions");
+      expect(build("preparation_entretien", { candidate_id: "55" })).toContain("Sans opportunité visée");
+    });
+
+    it("preparation_rdv_client filters unpaid invoices on the API and bounds the action history", () => {
+      const text = build("preparation_rdv_client", { society_id: "6221", horizon_jours: "30" });
+      expect(text).toContain("boond://company/6221");
+      expect(text).toContain('companyId: "6221"');
+      expect(text).toContain('period: "expectedPayment"');
+      expect(text).toContain('startDate: "2026-08-27"');
+      expect(text).toContain('endDate: "2026-09-26"');
+      expect(text).toContain("boond_companies_contacts");
+      expect(text).toContain("5 sujets à aborder");
+    });
+
+    it("relance_devis resolves the states from the dictionary and checks the silence window per opportunity", () => {
+      const text = build("relance_devis", { jours_sans_action: "10" });
+      expect(text).toContain("boond://dictionary/states/opportunities");
+      expect(text).toContain("opportunityStates: [<IDs de l'étape 1>]");
+      expect(text).toContain('startDate: "2026-09-16"');
+      expect(text).toContain("boond_opportunities_actions");
+      expect(build("relance_devis", { jours_sans_action: "x" })).toContain("depuis 15 jours");
+    });
+
+    it("purge_rgpd_candidats paginates the stale candidates, excludes active ones, and deletes one by one after consent", () => {
+      const text = build("purge_rgpd_candidats", { mois_inactivite: "12" });
+      expect(text).toContain('endDate: "2025-09-26"');
+      expect(text).toContain('period: "updated"');
+      expect(text).toContain("paginer jusqu'au bout");
+      expect(text).toContain("boond_candidates_positionings");
+      expect(text).toContain("attendre la validation explicite");
+      expect(text).toContain("un candidat par appel");
+      expect(build("purge_rgpd_candidats", {})).toContain("depuis 24 mois");
+    });
+
+    it("preparation_facturation starts from running deliveries and validated CRA, then reads the remaining amount per order", () => {
+      const text = build("preparation_facturation", { mois: "2026-08" });
+      expect(text).toContain('period: "running"');
+      expect(text).toContain('startDate: "2026-08-01"');
+      expect(text).toContain('endDate: "2026-08-31"');
+      expect(text).toContain('startMonth: "2026-08"');
+      expect(text).toContain("boond_orders_invoices");
+      expect(text).toContain("deltaInvoicedExcludingTax");
+      expect(text).toContain("relance_cra");
+      expect(text).toContain("Ne pas créer les factures ici");
+    });
+
+    it("every routine declares the domains its runbook orchestrates", () => {
+      const expected: Record<string, string[]> = {
+        relance_cra: ["validations", "timesheets", "resources"],
+        absences_a_valider: ["validations", "absences"],
+        marge_projet: ["projects", "reporting"],
+        preparation_entretien: ["candidates", "opportunities", "documents"],
+        preparation_rdv_client: ["companies", "contacts", "opportunities", "projects", "invoices", "actions"],
+        relance_devis: ["opportunities", "actions"],
+        purge_rgpd_candidats: ["candidates"],
+        preparation_facturation: ["timesheets", "deliveries", "orders", "invoices"],
+      };
+      for (const [name, domains] of Object.entries(expected)) {
+        const prompt = PROMPTS.find((p) => p.name === name)!;
+        expect(prompt.domains, name).toEqual(expect.arrayContaining(domains));
+      }
     });
   });
 

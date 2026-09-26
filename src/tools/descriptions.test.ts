@@ -427,8 +427,9 @@ describe("tool/prompt/resource description lengths", () => {
   });
 
   it("registers a few prompts (sanity check)", () => {
+    // 22 since #259 (eight ESN routines); the ceiling guards a runaway generator.
     expect(prompts.length).toBeGreaterThanOrEqual(6);
-    expect(prompts.length).toBeLessThan(20);
+    expect(prompts.length).toBeLessThan(40);
   });
 
   it("every resource carries a description the cap can measure", () => {

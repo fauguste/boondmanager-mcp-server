@@ -69,7 +69,7 @@ function periodLine(bounds: PeriodBounds | null, rawArg: string | undefined, now
  * comme filtre. Cela évite à l'utilisateur de chercher l'ID en amont — la
  * majorité des appels passent en une seule formulation naturelle.
  */
-type EntityKind = "resource" | "society" | "opportunity" | "agency" | "project";
+type EntityKind = "resource" | "society" | "opportunity" | "agency" | "project" | "candidate" | "contact";
 
 const SEARCH_TOOL_BY_KIND: Record<EntityKind, string> = {
   resource: "boond_resources_search",
@@ -77,6 +77,8 @@ const SEARCH_TOOL_BY_KIND: Record<EntityKind, string> = {
   opportunity: "boond_opportunities_search",
   agency: "boond_agencies_search",
   project: "boond_projects_search",
+  candidate: "boond_candidates_search",
+  contact: "boond_contacts_search",
 };
 
 const LABEL_BY_KIND: Record<EntityKind, string> = {
@@ -85,6 +87,8 @@ const LABEL_BY_KIND: Record<EntityKind, string> = {
   opportunity: "opportunité",
   agency: "agence",
   project: "projet",
+  candidate: "candidat",
+  contact: "contact",
 };
 
 interface Resolved {
@@ -121,6 +125,37 @@ const ID_OR_NAME_HINT_AGENCY =
   "Accepte soit l'ID numérique, soit le nom de l'agence (résolution auto via `boond_agencies_search`).";
 const ID_OR_NAME_HINT_PROJECT =
   "Accepte soit l'ID numérique, soit le libellé du projet (résolution auto via `boond_projects_search`).";
+const ID_OR_NAME_HINT_CANDIDATE =
+  "Accepte soit l'ID numérique, soit « Prénom Nom » du candidat (résolution auto via `boond_candidates_search`).";
+
+/** Manager scope shared by the team-level runbooks: explicit `perimeterManagers` or the caller's own N-1. */
+function managerScope(manager_id: string | undefined): { scope: string; preamble: string } {
+  if (manager_id) {
+    const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+    return { scope: `\`perimeterManagers: [${r.idForFilter}]\``, preamble: r.preamble };
+  }
+  return { scope: "`perimeterDynamic: ['managers']`", preamble: "" };
+}
+
+function positiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const MANAGER_ARG = (what: string) =>
+  z
+    .string()
+    .optional()
+    .describe(
+      `Manager pour restreindre à son équipe (${what}). ` +
+        ID_OR_NAME_HINT_RESOURCE +
+        " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
+    );
+const MONTH_ARG = (what: string) =>
+  z
+    .string()
+    .optional()
+    .describe(`${what} : \`YYYY-MM\`, « ce mois », « mois dernier », « avril 2026 »… Défaut : le mois en cours.`);
 
 export const PROMPTS: PromptDefinition[] = [
   {
@@ -910,6 +945,285 @@ export const PROMPTS: PromptDefinition[] = [
   },
 
   {
+    name: "relance_cra",
+    title: "Relance des CRA du mois",
+    description:
+      "Pour un mois et une équipe : qui n'a pas saisi son CRA, qui l'a saisi sans le soumettre, et quels CRA attendent " +
+      "la validation du manager — avec la liste à relancer et les validations à traiter.",
+    argsSchema: { mois: MONTH_ARG("Mois du CRA"), manager_id: MANAGER_ARG("les CRA de ses N-1") },
+    domains: ["validations", "timesheets", "resources", "application"],
+    build: ({ mois, manager_id }, now = new Date()) => {
+      const bounds = periodBounds(mois, now, "month");
+      const month = bounds ? bounds.startMonth : "<MOIS>";
+      const { scope, preamble } = managerScope(manager_id);
+      const lines = [`Relance des CRA du mois ${month}.`, ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
+        periodLine(bounds, mois, now),
+        `Périmètre : ${scope}.`,
+        "",
+        "Étapes :",
+        `1. \`boond_resources_search\` avec ${scope}, \`resourceStates\` limités aux états « actif » (\`boond://dictionary/states/resources\`), \`pageSize: 200\` → l'équipe attendue.`,
+        `2. \`boond_timesheets_search\` avec \`startMonth: "${month}"\`, \`endMonth: "${month}"\`, ${scope}, \`pageSize: 200\` → les CRA existants et leur \`state\` (chaîne du workflow : \`savedAndNoValidation\` = saisi non soumis, \`waitingForValidation\`, \`validated\`, \`rejected\`).`,
+        `3. \`boond_validations_search\` avec \`startMonth: "${month}"\`, \`endMonth: "${month}"\`, \`documentTypes: ["timesReport"]\`, \`validationStates: ["waitingForValidation"]\`, ${scope} → les CRA qui attendent ma validation, avec l'ID de **validation** (différent de l'ID du CRA).`,
+        "4. Croiser : membre sans CRA → **à relancer (saisie)** ; CRA `savedAndNoValidation` → **à relancer (soumission)** ; `rejected` → **à corriger** ; `waitingForValidation` → **à valider par moi**.",
+        '5. Pour chaque CRA à valider : relire `boond_timesheets_get` (jours, absences, cohérence avec le planning), puis proposer `boond_validations_update` avec `decision: "validate"` — ou `"reject"` + `reason` — **une décision à la fois, après accord explicite de l\'utilisateur**.',
+        "6. Restituer deux tableaux : à relancer (ressource | situation | dernière mise à jour) et à valider (ressource | ID de validation | jours saisis | décision proposée), puis un message de relance prêt à envoyer."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "absences_a_valider",
+    title: "Demandes d'absence à valider",
+    description:
+      "Liste les demandes d'absence en attente de validation sur une équipe, les recoupe avec les absences déjà posées " +
+      "sur la période, et prépare la décision (validation ou refus motivé) pour chacune.",
+    argsSchema: { mois: MONTH_ARG("Mois des absences"), manager_id: MANAGER_ARG("les demandes de ses N-1") },
+    domains: ["validations", "absences", "application"],
+    build: ({ mois, manager_id }, now = new Date()) => {
+      const bounds = periodBounds(mois, now, "month");
+      const startMonth = bounds ? bounds.startMonth : "<MOIS_DEBUT>";
+      const endMonth = bounds ? bounds.endMonth : "<MOIS_FIN>";
+      const { scope, preamble } = managerScope(manager_id);
+      const lines = ["Traite les demandes d'absence en attente de validation.", ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
+        periodLine(bounds, mois, now),
+        `Périmètre : ${scope}.`,
+        "",
+        "Étapes :",
+        `1. \`boond_validations_search\` avec \`startMonth: "${startMonth}"\`, \`endMonth: "${endMonth}"\`, \`documentTypes: ["absencesReport"]\`, \`validationStates: ["waitingForValidation"]\`, ${scope}, \`pageSize: 100\` → les demandes en attente (ID de validation + demande liée).`,
+        "2. Pour chaque demande : `boond_absences_get` sur l'ID de la demande (`documentId`) → dates, type, durée, motif.",
+        `3. \`boond_absences_search\` avec \`startMonth: "${startMonth}"\`, \`endMonth: "${endMonth}"\`, \`validationStates: ["validated"]\`, ${scope}, \`pageSize: 200\` → les absences déjà validées de l'équipe, pour repérer les chevauchements (plusieurs personnes absentes le même jour).`,
+        "4. Restituer un tableau : ressource | type | dates | durée | ID de validation | chevauchements dans l'équipe | décision proposée.",
+        '5. **Décider une demande à la fois, après accord explicite** : `boond_validations_update` avec `decision: "validate"`, ou `"reject"` + `reason` (le refus demande une confirmation à l\'utilisateur). Ne jamais enchaîner les décisions sans accord.'
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "marge_projet",
+    title: "Marge d'un projet : simulé vs réalisé",
+    description:
+      "Compare le chiffre d'affaires, les coûts et la marge simulés d'un projet à son réalisé (productivité, reporting), " +
+      "prestation par prestation, et explique l'écart.",
+    argsSchema: {
+      project_id: z.string().describe("Projet à analyser. " + ID_OR_NAME_HINT_PROJECT),
+      periode: z
+        .string()
+        .optional()
+        .describe(
+          "Fenêtre du reporting : `YYYY-MM-DD..YYYY-MM-DD`, « ce mois », « 2026 »… Défaut : toute la vie du projet."
+        ),
+    },
+    domains: ["projects", "reporting", "application"],
+    build: ({ project_id, periode }, now = new Date()) => {
+      const r = resolveEntity(project_id ?? "", "project", "<PROJET_ID>");
+      const bounds = periode ? periodBounds(periode, now, "month") : null;
+      const lines = [`Analyse la marge du projet \`${r.idForFilter}\` : simulé vs réalisé.`, ""];
+      if (r.preamble) lines.push(r.preamble);
+      if (periode) lines.push(periodLine(bounds, periode, now));
+      const window = bounds
+        ? `\`startDate: "${bounds.startDate}"\`, \`endDate: "${bounds.endDate}"\``
+        : "sans bornes de dates (`startDate` / `endDate` = début et fin du projet lus à l'étape 1)";
+      lines.push(
+        "",
+        "Étapes :",
+        `1. \`boond_projects_get\` sur \`${r.idForFilter}\` → client, dates, mode (régie / forfait), responsable.`,
+        `2. \`boond_projects_simulation\` → CA, coûts et marge **simulés** ; \`boond_projects_deliveries_groupments\` → les prestations avec TJM (\`averageDailyPriceExcludingTax\`), CJM (\`averageDailyCost\`) et jours prévus.`,
+        `3. \`boond_projects_productivity\` → le **réalisé** par prestation (jours produits, CA, coûts).`,
+        `4. \`boond_reporting_projects\` avec \`projects: [${r.idForFilter}]\`, ${window} → les agrégats BoondManager (CA facturé, coûts, marge, taux de marge) sur la fenêtre.`,
+        "5. Restituer : un tableau par prestation (ressource | TJM | CJM | jours prévus / produits | CA simulé / réalisé | marge simulée / réalisée), puis le total projet et le **taux de marge** — en nommant les écarts (jours non produits, TJM revu, sous-traitance plus chère) et ce qui reste à facturer.",
+        "6. Ne pas recalculer ce que BoondManager fournit : reprendre ses montants, et signaler quand deux sources divergent."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "preparation_entretien",
+    title: "Préparer un entretien candidat",
+    description:
+      "Rassemble en une fiche tout ce que BoondManager sait d'un candidat (parcours, compétences, CV, positionnements, " +
+      "historique des échanges) et, si une opportunité est visée, confronte le profil au besoin pour lister les points à creuser.",
+    argsSchema: {
+      candidate_id: z.string().describe("Candidat reçu en entretien. " + ID_OR_NAME_HINT_CANDIDATE),
+      opportunity_id: z
+        .string()
+        .optional()
+        .describe("Opportunité visée, pour comparer profil et besoin. " + ID_OR_NAME_HINT_OPPORTUNITY),
+    },
+    domains: ["candidates", "opportunities", "documents", "application"],
+    build: ({ candidate_id, opportunity_id }) => {
+      const c = resolveEntity(candidate_id ?? "", "candidate", "<CANDIDAT_ID>");
+      const lines = [`Prépare l'entretien du candidat \`${c.idForFilter}\`.`, ""];
+      if (c.preamble) lines.push(c.preamble);
+      let opp: ReturnType<typeof resolveEntity> | undefined;
+      if (opportunity_id) {
+        opp = resolveEntity(opportunity_id, "opportunity", "<OPPORTUNITE_ID>");
+        if (opp.preamble) lines.push(opp.preamble);
+      }
+      lines.push(
+        "Étapes :",
+        `1. Lire la ressource \`boond://candidate/${c.idForFilter}\` (fiche + informations + compétences en une lecture) — à défaut \`boond_candidates_get\`, \`boond_candidates_information\` et \`boond_candidates_technical_data\`.`,
+        "2. Le CV : dans les relations `resumes` de la fiche, prendre le document le plus récent et l'ouvrir avec `boond_documents_get` (ID suffixé, ex. `123_resume`). S'il est absent, le dire.",
+        `3. \`boond_candidates_positionings\` → positionnements en cours et passés (opportunités, états, dates) ; \`boond_candidates_actions\` → l'historique des échanges (dernier contact, promesses faites, disponibilité, prétentions).`,
+        opp
+          ? `4. Le besoin : \`boond_opportunities_get\` sur \`${opp.idForFilter}\` et \`boond_opportunities_information\` → compétences attendues (\`tools\`, \`expertiseAreas\`), expérience, mobilité, TJM cible, dates.`
+          : "4. Sans opportunité visée : s'en tenir au profil, et repérer les opportunités ouvertes proches via `boond_opportunities_search` (`keywords` sur les compétences principales) pour orienter l'entretien.",
+        "5. Restituer une **fiche de préparation** : synthèse du profil (5 lignes) | compétences déclarées vs attendues (✓ / ✗ / à vérifier) | parcours et dates à confirmer | disponibilité, mobilité, prétentions connues | historique des échanges | **8 à 10 questions ciblées** (trous du CV, compétences non prouvées, motivation, contraintes).",
+        "6. Ne rien affirmer que la fiche ne dit pas : un champ vide est « non renseigné », pas une supposition."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "preparation_rdv_client",
+    title: "Préparer un rendez-vous client",
+    description:
+      "Brief de rendez-vous pour une société cliente : contacts, opportunités en cours, projets et prestations, factures impayées, " +
+      "derniers échanges — et les sujets à aborder.",
+    argsSchema: {
+      society_id: z.string().describe("Société cliente. " + ID_OR_NAME_HINT_SOCIETY),
+      horizon_jours: z
+        .string()
+        .optional()
+        .describe("Profondeur de l'historique des échanges en jours — entier (défaut: 90)."),
+    },
+    domains: ["companies", "contacts", "opportunities", "projects", "invoices", "actions", "application"],
+    build: ({ society_id, horizon_jours }, now = new Date()) => {
+      const s = resolveEntity(society_id ?? "", "society", "<SOCIETE_ID>");
+      const horizon = positiveInt(horizon_jours, 90);
+      const since = toIsoDate(addDays(now, -horizon));
+      const today = toIsoDate(now);
+      const lines = [`Prépare le rendez-vous avec la société \`${s.idForFilter}\`.`, ""];
+      if (s.preamble) lines.push(s.preamble);
+      lines.push(
+        `Date de référence : aujourd'hui = ${today}.`,
+        "",
+        "Étapes :",
+        `1. Lire la ressource \`boond://company/${s.idForFilter}\` (fiche + informations) — à défaut \`boond_companies_get\`.`,
+        `2. \`boond_companies_contacts\` → interlocuteurs (fonction, e-mail, téléphone) ; \`boond_companies_opportunities\` → opportunités et leur état (lire \`boond://dictionary/states/opportunities\` pour les libellés) ; \`boond_companies_projects\` → projets en cours et prestations.`,
+        `3. Factures : lire \`boond://dictionary/states/invoices\` puis \`boond_invoices_search\` avec \`companyId: "${s.idForFilter}"\`, \`states: [<états impayés>]\`, \`period: "expectedPayment"\`, \`endDate: "${today}"\` → les impayés échus à évoquer (ou à ne pas évoquer, selon le contexte).`,
+        `4. \`boond_actions_search\` avec \`companyId: "${s.idForFilter}"\`, \`period: "started"\`, \`startDate: "${since}"\`, \`endDate: "${today}"\`, \`sort: "startDate"\`, \`order: "desc"\`, \`pageSize: 50\` → les ${horizon} derniers jours d'échanges (qui a parlé à qui, engagements pris).`,
+        "5. Restituer le **brief** : la société en 3 lignes | qui on rencontre et qui on connaît | opportunités ouvertes (montant, étape, prochaine action) | projets / consultants en place et fins de prestation proches | impayés (montant, ancienneté) | derniers échanges | **5 sujets à aborder** et les questions à poser.",
+        "6. Proposer, après le rendez-vous, de tracer le compte rendu avec `boond_actions_create` rattaché au contact rencontré (`contactId` + `companyId`)."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "relance_devis",
+    title: "Devis et propositions à relancer",
+    description:
+      "Trouve les opportunités en phase de proposition envoyée / négociation sans action depuis N jours sur un périmètre, " +
+      "et prépare les relances.",
+    argsSchema: {
+      jours_sans_action: z
+        .string()
+        .optional()
+        .describe("Silence minimal en jours pour relancer — entier (défaut: 15)."),
+      manager_id: MANAGER_ARG("les opportunités de ses N-1"),
+    },
+    domains: ["opportunities", "actions", "application"],
+    build: ({ jours_sans_action, manager_id }, now = new Date()) => {
+      const days = positiveInt(jours_sans_action, 15);
+      const cutoff = toIsoDate(addDays(now, -days));
+      const today = toIsoDate(now);
+      const { scope, preamble } = managerScope(manager_id);
+      const lines = [`Liste les propositions commerciales à relancer (aucune action depuis ${days} jours).`, ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
+        `Date de référence : aujourd'hui = ${today} ; seuil = ${cutoff}. Périmètre : ${scope}.`,
+        "",
+        "Étapes :",
+        "1. Lire `boond://dictionary/states/opportunities` (pas d'appel d'outil) et retenir les IDs des états « proposition envoyée », « en négociation », « soutenance » — les états où le client a la balle.",
+        `2. \`boond_opportunities_search\` avec \`opportunityStates: [<IDs de l'étape 1>]\`, ${scope}, \`pageSize: 100\` → les propositions en cours (société, montant, date de clôture prévue).`,
+        `3. Pour chaque opportunité : \`boond_actions_search\` avec \`opportunityId\`, \`period: "started"\`, \`startDate: "${cutoff}"\`, \`endDate: "${today}"\`, \`pageSize: 1\` → aucune ligne = **à relancer** ; sinon noter la dernière action.`,
+        "4. Pour les opportunités à relancer : `boond_opportunities_actions` (dernier échange, promesse faite, interlocuteur) pour rédiger une relance pertinente.",
+        "5. Restituer un tableau trié par montant décroissant : opportunité | société | montant | état | date de clôture | dernier échange | interlocuteur | relance proposée (canal + angle).",
+        "6. Proposer de tracer chaque relance faite avec `boond_actions_create` (`opportunityId`, `typeOf` via `boond://dictionary/actions/opportunities`) — après accord de l'utilisateur, jamais en lot silencieux."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "purge_rgpd_candidats",
+    title: "Purge RGPD des candidats inactifs",
+    description:
+      "Identifie les candidats sans mise à jour ni positionnement actif depuis N mois, présente la liste à confirmer, " +
+      "puis supprime candidat par candidat avec confirmation — jamais en lot silencieux.",
+    argsSchema: {
+      mois_inactivite: z
+        .string()
+        .optional()
+        .describe("Ancienneté minimale de la dernière mise à jour, en mois — entier (défaut: 24)."),
+      manager_id: MANAGER_ARG("les candidats suivis par ses N-1"),
+    },
+    domains: ["candidates", "application"],
+    build: ({ mois_inactivite, manager_id }, now = new Date()) => {
+      const months = positiveInt(mois_inactivite, 24);
+      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
+      const cutoff = toIsoDate(cutoffDate);
+      const { scope, preamble } = managerScope(manager_id);
+      const lines = [
+        `Purge RGPD : candidats sans activité depuis ${months} mois (dernière mise à jour avant le ${cutoff}).`,
+        "",
+      ];
+      if (preamble) lines.push(preamble);
+      lines.push(
+        `Périmètre : ${scope}.`,
+        "",
+        "Étapes :",
+        `1. \`boond_candidates_search\` avec \`period: "updated"\`, \`startDate: "2000-01-01"\`, \`endDate: "${cutoff}"\`, ${scope}, \`sort: "updateDate"\`, \`order: "asc"\`, \`pageSize: 100\`, \`fields: ["firstName", "lastName", "updateDate", "state"]\` — **paginer jusqu'au bout**.`,
+        "2. Exclure d'office : les candidats dont l'état signifie « en cours de recrutement » ou « embauché » (`boond://dictionary/states/candidates`), et ceux qui ont un positionnement encore ouvert — vérifier avec `boond_candidates_positionings` sur chaque candidat restant en état ambigu.",
+        "3. Restituer la liste à purger : candidat | dernière mise à jour | état | positionnements | motif de conservation éventuel — et **attendre la validation explicite** de l'utilisateur, ligne par ligne ou en bloc, avant toute suppression.",
+        "4. Supprimer avec `boond_candidates_delete`, **un candidat par appel** : l'outil demande une confirmation (elicitation) et un refus annule l'appel (`deleted: false`). Ne pas contourner, ne pas grouper.",
+        "5. Restituer le bilan : supprimés | conservés (avec le motif) | refusés à la confirmation. Rappeler que les documents (CV) rattachés partent avec le candidat et qu'aucune restauration n'est possible côté API."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
+    name: "preparation_facturation",
+    title: "Préparation de la facturation mensuelle",
+    description:
+      "Pour un mois : CRA validés, prestations en cours et commandes concernées, reste à facturer par commande, factures déjà émises — " +
+      "et la liste de ce qui bloque (CRA manquants ou non validés).",
+    argsSchema: { mois: MONTH_ARG("Mois à facturer"), manager_id: MANAGER_ARG("les projets de ses N-1") },
+    domains: ["timesheets", "deliveries", "orders", "invoices", "application"],
+    build: ({ mois, manager_id }, now = new Date()) => {
+      const bounds = periodBounds(mois, now, "month");
+      const month = bounds ? bounds.startMonth : "<MOIS>";
+      const startDate = bounds ? bounds.startDate : "<DATE_DEBUT>";
+      const endDate = bounds ? bounds.endDate : "<DATE_FIN>";
+      const { scope, preamble } = managerScope(manager_id);
+      const lines = [`Prépare la facturation du mois ${month}.`, ""];
+      if (preamble) lines.push(preamble);
+      lines.push(
+        periodLine(bounds, mois, now),
+        `Périmètre : ${scope}.`,
+        "",
+        "Étapes :",
+        `1. \`boond_deliveries_search\` avec \`period: "running"\`, \`startDate: "${startDate}"\`, \`endDate: "${endDate}"\`, ${scope}, \`pageSize: 200\` → les prestations actives sur le mois (ressource, projet, TJM, jours prévus).`,
+        `2. \`boond_timesheets_search\` avec \`startMonth: "${month}"\`, \`endMonth: "${month}"\`, ${scope}, \`pageSize: 200\` → les CRA du mois et leur \`state\` ; seuls les \`validated\` sont facturables. Un CRA absent ou non validé sur une prestation active = **bloquant**, à lister.`,
+        `3. \`boond_orders_search\` avec \`period: "period"\`, \`startDate: "${startDate}"\`, \`endDate: "${endDate}"\`, ${scope}, \`pageSize: 200\` → les bons de commande couvrant le mois ; pour chacun, \`boond_orders_invoices\` → les totaux BoondManager : commandé HT, facturé HT, **\`deltaInvoicedExcludingTax\` = reste à facturer**.`,
+        `4. \`boond_invoices_search\` avec \`period: "period"\`, \`startDate: "${startDate}"\`, \`endDate: "${endDate}"\`, ${scope}, \`pageSize: 200\` → les factures déjà émises sur le mois, pour ne rien facturer deux fois.`,
+        "5. Restituer : (a) **à facturer** — commande | client | prestations / ressources | jours validés × TJM | reste à facturer sur la commande | déjà émis ; (b) **bloqué** — prestation | ressource | CRA manquant ou en attente de validation (renvoyer vers `relance_cra`) ; (c) **commandes épuisées** (reste à facturer ≤ 0 alors que des jours sont validés) → avenant ou nouvelle commande à demander.",
+        "6. Ne pas créer les factures ici : `boond_invoices_create` s'utilise ensuite, commande par commande, après validation du tableau par l'utilisateur."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
     name: "saisir_cra",
     title: "Saisir ou compléter un CRA",
     description:
@@ -992,6 +1306,8 @@ const COMPLETION_KIND_BY_ARG: Record<string, EntityKind> = {
   opportunity_id: "opportunity",
   agency_id: "agency",
   project_id: "project",
+  candidate_id: "candidate",
+  contact_id: "contact",
 };
 
 const SEARCH_PATH_BY_KIND: Record<EntityKind, string> = {
@@ -1000,6 +1316,8 @@ const SEARCH_PATH_BY_KIND: Record<EntityKind, string> = {
   opportunity: "/opportunities",
   agency: "/agencies",
   project: "/projects",
+  candidate: "/candidates",
+  contact: "/contacts",
 };
 
 const MAX_COMPLETIONS = 8;
