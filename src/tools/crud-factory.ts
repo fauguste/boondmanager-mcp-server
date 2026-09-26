@@ -180,12 +180,32 @@ function isElicitationResponseRejected(error: unknown): boolean {
   return error.code === ErrorCode.InternalError && /elicitation response/i.test(error.message);
 }
 
-export async function confirmDeletion(
+export interface ConfirmChoiceOptions {
+  /** Question shown to the end user. */
+  message: string;
+  /** Title of the single-select field. */
+  title: string;
+  /** Help text under the field. */
+  description: string;
+  /** Label of the option that confirms the irreversible action. */
+  confirmTitle: string;
+  /** `true` when the operator opted out of this confirmation through its env flag. */
+  disabled: boolean;
+}
+
+/**
+ * Generic titled single-select confirmation (the mechanics documented on
+ * `confirmDeletion`, which is its first caller). Issue #251 reuses it for the
+ * rejection of a validation: "reject" is not destructive in the delete sense,
+ * but it is a decision the workflow does not undo by itself, so it gets the
+ * same safe-default prompt. The confirm value is always `"delete"` on the wire
+ * so a client built against the delete schema keeps answering correctly.
+ */
+export async function confirmChoice(
   server: McpServer,
-  entityName: string,
-  id: string
+  options: ConfirmChoiceOptions
 ): Promise<{ confirmed: boolean; reason?: string }> {
-  if (deleteConfirmationDisabled()) return { confirmed: true };
+  if (options.disabled) return { confirmed: true };
 
   let supportsElicitation: boolean;
   try {
@@ -197,16 +217,16 @@ export async function confirmDeletion(
 
   try {
     const result = await server.server.elicitInput({
-      message: `Confirmer la suppression définitive de ${entityName} #${id} dans BoondManager ? Cette action est irréversible.`,
+      message: options.message,
       requestedSchema: {
         type: "object",
         properties: {
           confirmation: {
             type: "string",
-            title: `Suppression de ${entityName} #${id}`,
-            description: "Choisir « Supprimer définitivement » pour confirmer, sinon rien ne sera supprimé.",
+            title: options.title,
+            description: options.description,
             oneOf: [
-              { const: CONFIRM_DELETE_VALUE, title: "Supprimer définitivement" },
+              { const: CONFIRM_DELETE_VALUE, title: options.confirmTitle },
               { const: CANCEL_DELETE_VALUE, title: "Annuler" },
             ],
             default: CANCEL_DELETE_VALUE,
@@ -225,12 +245,26 @@ export async function confirmDeletion(
       reason: typeof content.confirmation === "string" ? `confirmation=${content.confirmation}` : "not-confirmed",
     };
   } catch (error) {
-    // An off-schema answer is a refusal, not a broken round-trip: never delete.
+    // An off-schema answer is a refusal, not a broken round-trip: never proceed.
     if (isElicitationResponseRejected(error)) {
       return { confirmed: false, reason: "invalid-confirmation-response" };
     }
     return { confirmed: true };
   }
+}
+
+export async function confirmDeletion(
+  server: McpServer,
+  entityName: string,
+  id: string
+): Promise<{ confirmed: boolean; reason?: string }> {
+  return confirmChoice(server, {
+    disabled: deleteConfirmationDisabled(),
+    message: `Confirmer la suppression définitive de ${entityName} #${id} dans BoondManager ? Cette action est irréversible.`,
+    title: `Suppression de ${entityName} #${id}`,
+    description: "Choisir « Supprimer définitivement » pour confirmer, sinon rien ne sera supprimé.",
+    confirmTitle: "Supprimer définitivement",
+  });
 }
 
 export function registerSearchTool(

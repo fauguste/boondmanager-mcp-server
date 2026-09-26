@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**203 tools** across **39 domains** · **14 prompts** · **47 resources** · **6 resource templates**.
+**204 tools** across **39 domains** · **14 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -374,12 +374,13 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_todolists_get` | Détails d'un(e) todolist | read · idempotent |
 | `boond_todolists_search` | Rechercher des todolists | read · idempotent · open-world |
 
-### validations (2)
+### validations (3)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_validations_get` | Détails d'une validation | read · idempotent |
 | `boond_validations_search` | Rechercher des validations | read · idempotent · open-world |
+| `boond_validations_update` | Valider ou refuser un CRA / une note de frais / une absence | write · idempotent |
 
 ### webhooks (2)
 
