@@ -217,7 +217,12 @@ serverless pdf.js build, ~2 MB, no native binary), a DOCX through
 `CHARACTER_LIMIT` with the original size and page count in the header; an
 image (PNG / JPEG / GIF / WebP) is returned as MCP `image` content — the only
 shape hosts hand to the model's vision input; a blob is opaque — up to
-`MAX_IMAGE_BYTES` (2 MiB). A PDF from which nothing extracts (scan,
+`MAX_IMAGE_BYTES` (2 MiB). BoondManager serves `.docx` resumes as
+**`application/msword`** (observed 2026-09-26, #311), so `isDocxMime` also
+accepts a `.docx` extension or the zip signature `PK\x03\x04` on a Word /
+octet-stream mime; and its plain `filename="…"` carries UTF-8 (NFD) bytes
+that `fetch` decodes as Latin-1 — `repairUtf8Filename` re-decodes and NFC-
+normalises them ("FreÌdeÌric" → "Frédéric"). A PDF from which nothing extracts (scan,
 encrypted, malformed) falls back to the raw embedded resource **with a
 warning line**, never an error. `mode: "raw"` is the previous behaviour
 (base64 blob for binaries, plain text for text mimes). Size cap on the
@@ -282,18 +287,21 @@ unless `BOOND_MCP_CONFIRM_REJECT=0|false|no|off`. `structuredContent` carries
 the response's `dependsOn`. The `id` is the **validation's**, listed by
 `boond_validations_search`, not the report's.
 
-**Alerts** (issue #255, domain `alerts`, 42 in total): `GET /alerts` is the
-user's dashboard alerts as BoondManager computes them (contract and probation
-ends, missing CRA, overdue invoices, deliveries ending, opportunities without
-action) — the right first read of a session instead of recomposing those
-rules with searches. `boond_alerts_search` (no query parameter: the RAML
-documents none, not even the pagination trait; only the client-side
-`fields`), the resource `boond://alerts/me` (same list as JSON, domain-gated,
+**Alerts** (issue #255, domain `alerts`, 42 in total; semantics fixed by
+#311 after the live read): `GET /alerts` returns the **configuration** of the
+user's dashboard indicators, not computed occurrences — one row per indicator
+(`module`: `actions` | `activityExpenses` | `resources`…; `indicator`:
+`contractsEndedUpcoming`, `resourcesProbationaryDateUpcoming`,
+`timesReportsWithNoValidation`, `actionsUpcoming`…) with `params.period`
+(days, `-1` = last month), `X` / `Y` (state or type ids) and `perimeter`
+(`dynamic_data`); no `/alerts/{id}` (404), no filter, no pagination. So the
+list says *what* to watch with which thresholds, and the matching `*_search`
+gives the items — `boond_alerts_search` (only the client-side `fields`), the
+resource `boond://alerts/me` (same rows as JSON, domain-gated,
 `MAX_RESOURCE_BYTES` by dropping rows past 200 into `_omitted`) and the
-prompt `attention_du_jour` (read the resource, group by urgency, map each
-module to the tool that acts). `alertSummary` renders `models.alert`
-(`module`, `indicator`, `state`, `params`, daily / weekly) — **not exercised
-live** (maintenance window); the domain is in every profile.
+prompt `attention_du_jour` (indicator → search with its thresholds → triage)
+all say so. `alertSummary` renders `period=… X=[…] perimeter=…`. The domain
+is in every profile.
 
 **Inactivities, forms, groupments** (issue #256, three new domains, 41 in
 total): all three collections document `post` only (no list GET) plus
@@ -336,13 +344,18 @@ tenant names the missing attribute, fix the schema then.
 absence type codes (`workUnitTypeReference`) are published — on the included
 resource's `workUnitTypesAllowed`, production types filtered out;
 `AbsenceCreateSchema.workUnitTypeReference` points at it. Its rendering was
-written from the CRA default's shape (#249) and the RAML, **not from a live
-response** (maintenance window): if a tenant answers with a different
-`included`, `formatAbsenceDefaults` degrades to the report's scalars. 
+confirmed live on 2026-09-26 (#311): the included resource carries
+`workUnitTypesAllowed` and the seven absence types of the agency come out
+with their `reference` (3 sans solde, 4 RTT, 5 maladie, …), production types
+filtered. 
 `boond_rights_get(entity, id)` (`src/tools/rights.ts`, registered by
 `registerApplicationTools`, enum narrowed by the access policy) reads
 `GET /{collection}/{id}/rights` for the 21 entities whose `rights.raml`
-exists and renders the payload as-is (keys undocumented, not normalised).
+exists and renders the payload as-is. Observed live (#311): `{ id:
+"resource_18081", type: "rights", attributes: { actions: { share, addAbsence,
+sendClientMail, … }, apis: { entity: { read, write }, information: { read,
+write }, actions: {…}, attachedFlags: {…}, … } } }` — `apis.<tab>.write` is
+the flag to check before a `*_update`, `actions.*` the workflow actions.
 The update / delete templates mention it (`rightsHint`) for those prefixes
 only.
 

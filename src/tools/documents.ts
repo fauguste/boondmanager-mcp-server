@@ -109,7 +109,7 @@ Un ID inconnu est rejeté explicitement plutôt que de renvoyer la page d'accuei
       }
 
       // Issue #263 — a 5 MiB PDF is ~6.6 MB of base64 for a few KB of text.
-      if (isPdfMime(doc.contentType) || isDocxMime(doc.contentType, doc.filename)) {
+      if (isPdfMime(doc.contentType) || isDocxMime(doc.contentType, doc.filename, doc.data)) {
         let extracted: ExtractedText;
         try {
           extracted = isPdfMime(doc.contentType) ? await extractPdfText(doc.data) : extractDocxText(doc.data);

@@ -112,5 +112,10 @@ describe("mime helpers", () => {
     expect(isDocxMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe(true);
     expect(isDocxMime("application/octet-stream", "cv.docx")).toBe(true);
     expect(isDocxMime("application/octet-stream", "cv.pdf")).toBe(false);
+    // BoondManager serves .docx as the legacy Word mime (#311).
+    expect(isDocxMime("application/msword", "CV_Silamir_AA.docx")).toBe(true);
+    expect(isDocxMime("application/msword", "cv.doc")).toBe(false);
+    expect(isDocxMime("application/msword", undefined, Buffer.from("PK\x03\x04rest"))).toBe(true);
+    expect(isDocxMime("application/msword", undefined, Buffer.from("\xd0\xcf\x11\xe0ole", "latin1"))).toBe(false);
   });
 });

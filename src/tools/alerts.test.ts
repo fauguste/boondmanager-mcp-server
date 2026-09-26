@@ -18,7 +18,7 @@ const ALERT = {
     state: 1,
     isDaily: true,
     isWeekly: false,
-    params: { days: 15 },
+    params: { period: 15 },
   },
 };
 
@@ -40,11 +40,27 @@ describe("registerAlertTools (issue #255)", () => {
     expect(vi.mocked(apiSearch).mock.calls[0]?.[0]).toBe("/alerts");
     expect(vi.mocked(apiSearch).mock.calls[0]?.[1]).toEqual({});
     expect(result.content[0]?.text).toContain(
-      "[alert #12] | Module: contracts | Indicateur: probationEnd | État: 1 | Rapport: quotidien"
+      "[alert #12] | Module: contracts | Indicateur: probationEnd | État: 1 | Rapport: quotidien | Paramètres: period=15"
     );
     expect(result.structuredContent.items[0]?.summary).toContain("Indicateur: probationEnd");
     const annotations = vi.mocked(server.registerTool).mock.calls[0]?.[1].annotations;
     expect(annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+  });
+
+  it("renders the live params shape: period, state ids and perimeter (#311)", () => {
+    expect(
+      alertSummary({
+        id: "5",
+        type: "alert",
+        attributes: {
+          module: "resources",
+          indicator: "contractsEndedUpcoming",
+          params: { period: "20", X: [], Y: [1], perimeter: ["dynamic_data"] },
+        },
+      })
+    ).toBe(
+      "[alert #5] | Module: resources | Indicateur: contractsEndedUpcoming | Paramètres: period=20 Y=[1] perimeter=dynamic_data"
+    );
   });
 
   it("alertSummary prints what models.alert publishes and any extra label it finds", () => {

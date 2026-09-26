@@ -654,8 +654,8 @@ export function registerAllResources(server: McpServer, policy?: AccessPolicy): 
       {
         title: "Alertes du tableau de bord",
         description:
-          "Alertes calculées par BoondManager pour l'utilisateur authentifié (fins de contrat / période d'essai, CRA manquants, factures en retard, prestations qui se terminent, opportunités sans action…) — `GET /alerts`. " +
-          "À lire en premier pour « qu'est-ce qui demande mon attention ? » ; `boond_alerts_search` rend la même liste en texte.",
+          "Indicateurs d'alerte configurés sur le tableau de bord de l'utilisateur authentifié — `GET /alerts` : une ligne par indicateur (`module`, `indicator`) avec ses seuils (`params.period` en jours, `X` / `Y` = IDs d'états ou de types, `perimeter`). " +
+          "Ce sont les règles à surveiller, pas des occurrences : la recherche du module concerné donne les éléments (`boond_alerts_search` liste les correspondances ; prompt `attention_du_jour`).",
         mimeType: "application/json",
         icons: iconsForDomain("alerts"),
       },

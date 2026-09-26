@@ -155,6 +155,19 @@ describe("registerDocumentTools", () => {
       expect(result.content[0].text).toContain("Profil DOCX");
     });
 
+    it("extracts a .docx served as application/msword (BoondManager's mime for resumes, #311)", async () => {
+      const xml = `<w:document><w:body><w:p><w:r><w:t>Profil msword</w:t></w:r></w:p></w:body></w:document>`;
+      vi.mocked(apiDownload).mockResolvedValue({
+        data: buildZip([{ name: "word/document.xml", data: Buffer.from(xml) }]),
+        contentType: "application/msword",
+        filename: "CV_Silamir_AA.docx",
+      });
+      registerDocumentTools(server);
+      const result = await handlerOf(server, "boond_documents_get")({ id: "13", mode: "text" });
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain("Profil msword");
+    });
+
     it("returns the raw file with a warning when nothing can be extracted (scan, encrypted, malformed)", async () => {
       vi.mocked(apiDownload).mockResolvedValue({
         data: Buffer.from("%PDF-1.4 fake"),

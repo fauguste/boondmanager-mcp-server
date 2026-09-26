@@ -24,7 +24,22 @@ export function parseContentDispositionFilename(header: string | null): string |
     }
   }
   const plain = header.match(/filename\s*=\s*"([^"]+)"/) ?? header.match(/filename\s*=\s*([^;]+)/);
-  return plain?.[1]?.trim();
+  const name = plain?.[1]?.trim();
+  return name === undefined ? undefined : repairUtf8Filename(name);
+}
+
+/**
+ * BoondManager writes the plain `filename="…"` form with UTF-8 bytes (often
+ * NFD: `e` + combining acute), and `fetch` decodes header bytes as Latin-1 as
+ * the spec says — so "Frédéric" arrives as "FreÌdeÌric" (observed live on
+ * 2026-09-26, issue #311). Re-decode those bytes as UTF-8 when that yields a
+ * clean string, and normalise to NFC so the name compares like a normal one.
+ */
+export function repairUtf8Filename(name: string): string {
+  if (!/[\u0080-\u00ff]/.test(name)) return name;
+  const decoded = Buffer.from(name, "latin1").toString("utf8");
+  if (decoded.includes("\ufffd")) return name.normalize("NFC");
+  return decoded.normalize("NFC");
 }
 
 export interface DownloadedDocument {
