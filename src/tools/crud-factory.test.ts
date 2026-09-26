@@ -326,6 +326,33 @@ describe("registerSearchTool handler", () => {
   });
 });
 
+describe("registerSearchTool summaryFn override (#238)", () => {
+  it("renders the bespoke summary in the text and in structuredContent alike", async () => {
+    const server = createMockServer();
+    registerSearchTool(
+      server,
+      {
+        entityName: "feuille de temps",
+        entityNamePlural: "feuilles de temps",
+        apiPath: "/times-reports",
+        prefix: "boond_ts",
+      },
+      { summaryFn: (e) => `custom:${e.id}` }
+    );
+    vi.mocked(apiSearch).mockResolvedValue({
+      data: [{ id: "7", type: "timesreport", attributes: {} }],
+      meta: { totals: { rows: 1 } },
+    } as never);
+    const cb = vi.mocked(server.registerTool).mock.calls.find((c) => c[0] === "boond_ts_search")![2] as (
+      p: unknown,
+      extra?: unknown
+    ) => Promise<{ content: Array<{ text: string }>; structuredContent: { items: Array<{ summary?: string }> } }>;
+    const result = await cb({});
+    expect(result.content[0].text).toContain("custom:7");
+    expect(result.structuredContent.items[0].summary).toBe("custom:7");
+  });
+});
+
 describe("buildListStructured", () => {
   it("handles single-resource responses and missing meta", () => {
     const structured = buildListStructured({ data: { id: "7", type: "project", attributes: { name: "X" } } });

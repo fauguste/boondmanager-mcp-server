@@ -35,6 +35,12 @@ interface SearchToolOverrides {
   schema?: z.ZodType;
   title?: string;
   description?: string;
+  /**
+   * Bespoke one-line summary for rows the generic summary renders poorly
+   * (`/times-reports` rows have no name / title — `timesheetSummary`). Used
+   * for the text output and for `structuredContent.items[].summary` alike.
+   */
+  summaryFn?: (entity: JsonApiResource) => string;
 }
 
 // ---- Structured output schemas (MCP outputSchema / structuredContent) ----
@@ -71,7 +77,11 @@ export const DeleteOutputSchema = z.object({
 });
 
 /** Build the compact structured payload for a search result page. Exported for unit testing. */
-export function buildListStructured(response: JsonApiResponse, fields?: string[]): z.infer<typeof SearchOutputSchema> {
+export function buildListStructured(
+  response: JsonApiResponse,
+  fields?: string[],
+  summaryFn?: (entity: JsonApiResource) => string
+): z.infer<typeof SearchOutputSchema> {
   const data = (Array.isArray(response.data) ? response.data : [response.data]).filter(
     (e): e is JsonApiResource => e !== null && e !== undefined
   );
@@ -92,7 +102,9 @@ export function buildListStructured(response: JsonApiResponse, fields?: string[]
       }
       item.attributes = selected;
     } else {
-      item.summary = formatEntitySummary(entity);
+      // Resolved here, not as a default parameter: hand-rolled tools that only
+      // ever project `fields` are tested against a mock without the formatter.
+      item.summary = (summaryFn ?? formatEntitySummary)(entity);
     }
     return item;
   });
@@ -254,10 +266,10 @@ export function registerSearchTool(
       // reporter is a no-op unless the client sent a progressToken, and
       // apiSearch only uses it on the chunked path.
       const response = await apiSearch(opts.apiPath, query, progressReporterFrom(extra));
-      const text = formatListResponse(response, opts.entityName, p.fields);
+      const text = formatListResponse(response, opts.entityName, p.fields, overrides.summaryFn);
       return {
         content: [{ type: "text" as const, text }],
-        structuredContent: buildListStructured(response, p.fields),
+        structuredContent: buildListStructured(response, p.fields, overrides.summaryFn),
       };
     }
   );

@@ -3,12 +3,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerProviderInvoiceTools } from "./provider-invoices.js";
 import { apiRequest } from "../services/boond-client.js";
 
-vi.mock("../services/boond-client.js", () => ({
-  apiRequest: vi.fn().mockResolvedValue({ data: { id: "11", type: "providerinvoice", attributes: {} } }),
-  buildSearchQuery: vi.fn((params: Record<string, unknown>) => params),
-  formatListResponse: vi.fn().mockReturnValue(""),
-  formatDetailResponse: vi.fn().mockReturnValue(""),
-}));
+vi.mock("../services/boond-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/boond-client.js")>();
+  return { ...actual, apiRequest: vi.fn(), apiSearch: vi.fn() };
+});
 
 function createMockServer() {
   return {

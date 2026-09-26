@@ -4,15 +4,10 @@ import { formatListResponse } from "../services/boond-client.js";
 import { registerAbsenceTools } from "./absences.js";
 import { registerActionTools } from "./actions.js";
 import { registerAdvantageTools } from "./advantages.js";
-import { registerDeliveryTools } from "./deliveries.js";
 import { registerInvoiceTools } from "./invoices.js";
 import { registerNotificationTools } from "./notifications.js";
-import { registerPaymentTools } from "./payments.js";
 import { registerPlanningAbsenceTools } from "./planning-absences.js";
 import { registerPositioningTools } from "./positionings.js";
-import { registerProviderInvoiceTools } from "./provider-invoices.js";
-import { registerPurchaseTools } from "./purchases.js";
-import { registerTimesheetTools } from "./timesheets.js";
 import { registerValidationTools } from "./validations.js";
 
 vi.mock("../services/boond-client.js", () => ({
@@ -46,28 +41,14 @@ const HAND_ROLLED_SEARCH_TOOLS: ReadonlyArray<{
   { register: registerAbsenceTools, tool: "boond_absences_search", entityName: "absence" },
   { register: registerActionTools, tool: "boond_actions_search", entityName: "action" },
   { register: registerAdvantageTools, tool: "boond_advantages_search", entityName: "avantage" },
-  { register: registerDeliveryTools, tool: "boond_deliveries_search", entityName: "livraison" },
   { register: registerInvoiceTools, tool: "boond_invoices_search", entityName: "facture" },
   { register: registerNotificationTools, tool: "boond_notifications_search", entityName: "notification" },
-  { register: registerPaymentTools, tool: "boond_payments_search", entityName: "paiement" },
   {
     register: registerPlanningAbsenceTools,
     tool: "boond_planning_absences_search",
     entityName: "planning absence",
   },
   { register: registerPositioningTools, tool: "boond_positionings_search", entityName: "positionnement" },
-  {
-    register: registerProviderInvoiceTools,
-    tool: "boond_provider_invoices_search",
-    entityName: "facture fournisseur",
-  },
-  { register: registerPurchaseTools, tool: "boond_purchases_search", entityName: "achat" },
-  {
-    register: registerTimesheetTools,
-    tool: "boond_timesheets_search",
-    entityName: "feuille de temps",
-    ownSummary: true,
-  },
   { register: registerValidationTools, tool: "boond_validations_search", entityName: "validation" },
 ];
 
@@ -106,6 +87,8 @@ describe("fields projection forwarding (hand-rolled search tools)", () => {
     // Guard against a new hand-rolled search tool being added without a row
     // above. The `boond_reporting_*` family is deliberately absent: it renders
     // through its own formatters.
-    expect(HAND_ROLLED_SEARCH_TOOLS).toHaveLength(13);
+    // deliveries, payments, provider-invoices, purchases and timesheets moved
+    // to the crud-factory in #238 and left this table.
+    expect(HAND_ROLLED_SEARCH_TOOLS).toHaveLength(8);
   });
 });

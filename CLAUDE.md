@@ -152,11 +152,25 @@ scripts/generate-plugin-manifest.mjs      # Generates both (npm run plugin:manif
 
 **CRUD Factory** (`src/tools/crud-factory.ts`): Generic functions to register
 search/get/create/update/delete tools. Used by: candidates, resources,
-contacts, companies, opportunities, projects, products. Call signature:
-`registerSearchTool(server, opts, overrides?)` where
+contacts, companies, opportunities, projects, products, orders, expenses,
+and — since issue #238 — contracts, deliveries, payments, purchases,
+provider-invoices and timesheets (`boond_timesheets_default` and
+`boond_resources_timesheets` stay hand-rolled: they are not CRUD). Call
+signature: `registerSearchTool(server, opts, overrides?)` where
 `opts = { entityName, entityNamePlural, apiPath, prefix }` and `overrides`
-optionally swaps the default `SearchSchema` for a per-entity schema and
-overrides the title/description.
+optionally swaps the default `SearchSchema` for a per-entity schema, overrides
+the title/description, and hands a `summaryFn` to the list formatter *and* to
+`structuredContent` (timesheets). A domain whose list and detail live on
+different routes passes a different `apiPath` per registration (deliveries:
+`/deliveries-groupments` for search, `/deliveries` for get). Relationships go
+through `buildJsonApiBody`'s fourth argument in the domain's `build*Body`
+function — never by casting `body.data.relationships` afterwards, which is
+what six files used to do eleven times, without `outputSchema`, and on
+`/payments` and `/provider-invoices` through `apiRequest` instead of
+`apiSearch` (no chunking, no progress). Migrating a domain means: move its
+schemas to `src/schemas/index.ts`, keep its hand-written descriptions as
+`overrides.description` where they carry endpoint vocabulary, and remove its
+row from `fields-projection.test.ts` (the factory forwards `fields` centrally).
 
 **Tab tools** (`src/tools/tab-tools.ts`): Major entities (candidates, resources,
 contacts, companies, opportunities, projects) register one extra tool per tab

@@ -2,14 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMockServer, registeredToolNames, toolCallback } from "./test-helpers.js";
 import { registerPaymentTools } from "./payments.js";
-import { apiRequest } from "../services/boond-client.js";
+import { apiRequest, apiSearch } from "../services/boond-client.js";
 
-vi.mock("../services/boond-client.js", () => ({
-  apiRequest: vi.fn().mockResolvedValue({ data: { id: "9", type: "payment", attributes: {} } }),
-  buildSearchQuery: vi.fn((params: Record<string, unknown>) => params),
-  formatListResponse: vi.fn().mockReturnValue(""),
-  formatDetailResponse: vi.fn().mockReturnValue(""),
-}));
+vi.mock("../services/boond-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/boond-client.js")>();
+  return { ...actual, apiRequest: vi.fn(), apiSearch: vi.fn() };
+});
 
 describe("registerPaymentTools", () => {
   let server: McpServer;
@@ -18,6 +16,8 @@ describe("registerPaymentTools", () => {
     server = createMockServer();
     vi.mocked(apiRequest).mockReset();
     vi.mocked(apiRequest).mockResolvedValue({ data: { id: "9", type: "payment", attributes: {} } } as never);
+    vi.mocked(apiSearch).mockReset();
+    vi.mocked(apiSearch).mockResolvedValue({ data: [] } as never);
   });
 
   it("should register 3 payment tools", () => {
@@ -86,7 +86,8 @@ describe("registerPaymentTools", () => {
       pageSize: 20,
     });
 
-    const query = vi.mocked(apiRequest).mock.calls[0][3] as Record<string, unknown>;
+    // Search goes through apiSearch (per-route maxResults chunking + progress) since #238.
+    const query = vi.mocked(apiSearch).mock.calls[0][1] as Record<string, unknown>;
     expect(query.keywords).toContain("ACH1");
     expect(query.keywords).toContain("CSOC2");
     expect(query.keywords).toContain("PRJ3");
