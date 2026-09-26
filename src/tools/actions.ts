@@ -45,10 +45,7 @@ export function registerActionTools(server: McpServer): void {
       title: "Rechercher des actions",
       description: `Recherche des actions (appels, emails, RDV, notes) dans BoondManager avec filtres optionnels par candidat, ressource, contact ou société.
 
-Args:
-  - keywords (string, optional): Termes de recherche
-  - candidateId, resourceId, contactId, companyId (string, optional): Filtrer par entité liée — convertis en références keywords CAND<id> / COMP<id> / CCON<id> / CSOC<id> (l'API n'a pas de paramètre dédié)
-  - page, pageSize: Pagination
+Les filtres \`candidateId\` / \`resourceId\` / \`contactId\` / \`companyId\` sont convertis en références \`keywords\` (CAND<id> / COMP<id> / CCON<id> / CSOC<id>) : l'API n'a pas de paramètre dédié.
 
 Returns: Liste des actions correspondantes.`,
       inputSchema: ActionSearchSchema,
@@ -103,13 +100,7 @@ Returns: Liste des actions correspondantes.`,
       description:
         buildActionCreateDescription(`Crée une nouvelle action (appel, email, RDV, note) dans BoondManager, rattachée à un contact, candidat, ressource, opportunité ou projet (relation dependsOn, obligatoire).
 
-Args:
-  - typeOf (number, requis): ID numérique du type d'action (dictionnaire setting.action.*, via boond_application_dictionary)
-  - title, text (string, optional): Titre et contenu de l'action
-  - startDate, endDate (string, optional): Dates ISO avec timezone (ex: 2026-06-05T10:00:00+0200)
-  - contactId | candidateId | resourceId | opportunityId | projectId (string, un requis): Entité de rattachement
-  - companyId (string, optional): Société, uniquement en complément d'un contactId
-  - positioningId (string, optional): Positionnement à lier — requis par l'API pour les types d'action liés aux positionnements (ex. RQ)
+Exactement une entité de rattachement parmi \`contactId\` / \`candidateId\` / \`resourceId\` / \`opportunityId\` / \`projectId\` est requise (422 sinon) ; \`companyId\` n'est accepté qu'en complément d'un \`contactId\`, et \`positioningId\` est exigé par l'API pour les types d'action liés aux positionnements (ex. RQ).
 
 Returns: L'action créée avec son ID.`),
       inputSchema: ActionCreateSchema,
@@ -204,14 +195,7 @@ Returns: L'action créée avec son ID.`),
       title: "Modifier une action",
       description: `Met à jour une action existante dans BoondManager (PUT partiel, seuls les champs fournis sont modifiés).
 
-⚠️ Aucune relation n'est envoyée : le rattachement (dependsOn), le positionnement et la synchronisation calendrier (event Outlook/Teams, invités) sont préservés. Idéal pour ajouter un compte-rendu sans casser l'agenda — contrairement à delete + recreate qui supprime l'événement.
-
-Args:
-  - id (string, requis): ID de l'action à modifier
-  - typeOf (number, optional): Nouveau type (ID numérique du dictionnaire setting.action.*)
-  - title (string, optional): Nouveau titre
-  - text (string, optional): Nouveau contenu / notes (remplace l'existant, pas d'ajout)
-  - startDate, endDate (string, optional): Dates ISO avec timezone (ex: 2026-06-05T10:00:00+0200)
+⚠️ Aucune relation n'est envoyée : le rattachement (dependsOn), le positionnement et la synchronisation calendrier (event Outlook/Teams, invités) sont préservés. Idéal pour ajouter un compte-rendu sans casser l'agenda — contrairement à delete + recreate qui supprime l'événement. \`text\` remplace le contenu existant (pas d'ajout).
 
 Returns: L'action mise à jour.`,
       inputSchema: ActionUpdateSchema,

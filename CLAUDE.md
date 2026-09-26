@@ -835,7 +835,15 @@ Where descriptions come from, in order of coverage:
 
 - **No `Args:` block that paraphrases the schema.** The client already received
   the JSON Schema with its `.describe()`-d properties; restating it costs bytes
-  and adds nothing. The templates dropped theirs.
+  and adds nothing — and it *drifts*: `boond_payments_search` documented an
+  `invoiceId` the schema no longer accepted, `boond_application_dictionary`'s
+  schema still advertised the slash form its own description called invalid.
+  The templates dropped theirs first; since issue #241 the rule is asserted on
+  the **advertised** descriptions (`Args:` / `Arguments :` / `Paramètres :`, real
+  client), so a hand-written body cannot reintroduce one. An endpoint trap that
+  used to live in such a block (`/actions` create wants exactly one `dependsOn`
+  id, `*Id` search filters become `keywords` references) is now a behaviour
+  sentence, or the field's own `.describe()`.
 - **`fields` and `page`/`pageSize` are disclosed wherever the schema accepts
   them** — 32 and 38 tools. Both carry semantics a JSON Schema cannot express:
   `fields` is applied *client-side* and never forwarded to BoondManager, and

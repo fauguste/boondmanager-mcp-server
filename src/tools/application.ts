@@ -23,8 +23,7 @@ export function registerApplicationTools(server: McpServer): void {
 
 L'API expose un seul endpoint \`/application/dictionary\` qui renvoie tout — le serveur le cache (TTL 1h, configurable via \`BOOND_DICTIONARY_TTL_MS\`) et extrait un sous-arbre par chemin dotté.
 
-Args:
-  - dictionaryType (string): Chemin dans la réponse (relatif à \`data\`). Exemples :
+Chemins usuels de \`dictionaryType\` (relatifs à \`data\`) :
     - "setting.state.{resource,candidate,contact,company,opportunity,project,invoice,order,positioning}" → états par entité
     - "setting.typeOf.{resource,contact,project}" → types par entité
     - "setting.action.{candidate,resource,opportunity,project,...}" → actions disponibles

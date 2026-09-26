@@ -40,11 +40,9 @@ export function registerPurchaseTools(server: McpServer): void {
     "boond_purchases_search",
     {
       title: "Rechercher des achats/sous-traitance",
-      description: `Recherche des achats et sous-traitances dans BoondManager.
+      description: `Recherche des achats et sous-traitances dans BoondManager, avec filtres par société et projet.
 
-Args:
-  - keywords, companyId, projectId: Filtres — companyId / projectId sont convertis en références keywords CSOC<id> / PRJ<id> (l'API n'a pas de paramètre dédié)
-  - page, pageSize: Pagination
+\`companyId\` / \`projectId\` sont convertis en références \`keywords\` (CSOC<id> / PRJ<id>) : l'API n'a pas de paramètre dédié.
 
 Returns: Liste des achats correspondants.`,
       inputSchema: PurchaseSearchSchema,

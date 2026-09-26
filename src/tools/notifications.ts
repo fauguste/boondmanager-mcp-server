@@ -19,11 +19,6 @@ export function registerNotificationTools(server: McpServer): void {
 
 ⚠️ Le paramètre \`category\` est REQUIS par l'API (singulier, pas de tableau).
 
-Args:
-  - category (string, requis): 'activity' | 'thread' | 'corporate'
-  - state (string, optional): 'new' | 'read'
-  - parentType (string[], optional): types de modules parents (ex: 'contract', 'global')
-
 Returns: Liste des notifications correspondantes.`,
       inputSchema: NotificationSearchSchema,
       annotations: {

@@ -305,12 +305,7 @@ export function registerTimesheetTools(server: McpServer): void {
     "boond_resources_timesheets",
     {
       title: "Feuilles de temps d'une ressource",
-      description: `Récupère les feuilles de temps (times reports) d'une ressource par son ID, avec filtre optionnel par mois/année.
-
-Args:
-  - resourceId (string): ID de la ressource
-  - month (number, optional): Mois (1-12), défaut: mois courant
-  - year (number, optional): Année (ex: 2025), défaut: année courante
+      description: `Récupère les feuilles de temps (times reports) d'une ressource par son ID, avec filtre optionnel par mois/année (défaut : mois courant).
 
 Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut.`,
       inputSchema: ResourceTimesheetSchema,
@@ -343,11 +338,6 @@ Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut
 
 ⚠️ \`startMonth\` et \`endMonth\` (format YYYY-MM) sont requis par l'API — passer YYYY-MM-DD ou les omettre renvoie un 422.
 
-Args:
-  - startMonth (string, requis): Mois de début YYYY-MM (ex: '2025-01')
-  - endMonth (string, requis): Mois de fin YYYY-MM (ex: '2025-03')
-  - keywords (string, optional): Mots-clés
-
 Returns: Liste des feuilles de temps correspondantes (une ligne par CRA : mois, période, statut, totaux).`,
       inputSchema: TimesheetSearchSchema,
       annotations: {
@@ -372,10 +362,7 @@ Returns: Liste des feuilles de temps correspondantes (une ligne par CRA : mois, 
     "boond_timesheets_get",
     {
       title: "Détails d'une feuille de temps",
-      description: `Récupère les informations détaillées d'une feuille de temps par son ID.
-
-Args:
-  - id (string): Identifiant unique de la feuille de temps
+      description: `Récupère les informations détaillées d'une feuille de temps (CRA mensuel) par son ID.
 
 Returns: Données JSON complètes de la feuille de temps (jours, heures, statut, détails).`,
       inputSchema: TimesheetGetSchema,

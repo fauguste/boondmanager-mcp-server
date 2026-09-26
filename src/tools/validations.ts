@@ -19,14 +19,6 @@ export function registerValidationTools(server: McpServer): void {
 
 ⚠️ \`startMonth\` et \`endMonth\` (YYYY-MM) sont requis par l'API.
 
-Args:
-  - startMonth (string, requis): YYYY-MM (ex: '2025-01')
-  - endMonth (string, requis): YYYY-MM
-  - documentTypes (string[], optional): 'absencesReport' | 'timesReport' | 'expensesReport'
-  - validationStates (string[], optional): 'waitingForValidation' | 'validated' | 'rejected'
-  - resourceTypes (number[], optional)
-  - keywords (string, optional): préfixes 'TPS', 'EXP', 'ABS', 'COMP'
-
 Returns: Liste des validations correspondantes.`,
       inputSchema: ValidationSearchSchema,
       annotations: {

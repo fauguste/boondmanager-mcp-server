@@ -1744,7 +1744,7 @@ export const DictionaryGetSchema = z
       .string()
       .min(1)
       .describe(
-        "Type de dictionnaire (ex: typeOf/actions, typeOf/absences, states/candidates, states/resources, states/opportunities, states/projects, states/invoices, countries, currencies, languages...)"
+        "Chemin dotté relatif à `data` de /application/dictionary (ex: setting.state.resource, setting.typeOf.project, setting.action.candidate, setting.tool, country, languages). La forme « states/resources » (slash) n'est pas valide."
       ),
   })
   .strict();

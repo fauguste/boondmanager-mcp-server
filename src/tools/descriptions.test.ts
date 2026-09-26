@@ -178,6 +178,17 @@ describe("advertised tool descriptions", () => {
     expect(missing.map((t) => t.name)).toEqual([]);
   });
 
+  it("never paraphrases its own schema in an `Args:` block", () => {
+    // The client already holds the JSON Schema with every `.describe()`; a
+    // block restating it costs bytes on every turn and — the worse half —
+    // drifts: `boond_payments_search` documented an `invoiceId` the schema no
+    // longer accepted. The factory templates dropped theirs long ago
+    // (`description-builders.test.ts`); this is the same rule on the 100 % of
+    // the catalogue a client actually receives, hand-written bodies included.
+    const paraphrasing = advertised.filter((t) => /^(Args|Arguments|Param[èe]tres)\s*:/im.test(t.description));
+    expect(paraphrasing.map((t) => t.name)).toEqual([]);
+  });
+
   it("states what every tool returns", () => {
     const missing = advertised.filter((t) => !/^Returns\s*:/m.test(t.description));
     expect(missing.map((t) => t.name)).toEqual([]);

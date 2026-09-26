@@ -18,12 +18,7 @@ export function registerPositioningTools(server: McpServer): void {
       title: "Rechercher des positionnements",
       description: `Recherche des positionnements (placement de candidats/ressources sur des projets/opportunités) dans BoondManager.
 
-L'API ne propose pas de paramètres de filtre dédiés : le filtrage par entité liée passe par des références dans \`keywords\` (AO<id>=opportunité, CAND<id>=candidat, COMP<id>=ressource, CSOC<id>=société, CCON<id>=contact, PROD<id>=produit). Les filtres *Id ci-dessous sont convertis automatiquement en ces références.
-
-Args:
-  - keywords (string, optional): Termes de recherche (références d'entités acceptées)
-  - candidateId, resourceId, opportunityId, companyId, contactId, productId (string, optional): Filtrer par entité liée (convertis en références keywords)
-  - page, pageSize: Pagination
+L'API ne propose pas de paramètres de filtre dédiés : le filtrage par entité liée passe par des références dans \`keywords\` (AO<id>=opportunité, CAND<id>=candidat, COMP<id>=ressource, CSOC<id>=société, CCON<id>=contact, PROD<id>=produit). Les filtres *Id du schéma sont convertis automatiquement en ces références.
 
 Returns: Liste des positionnements correspondants.`,
       inputSchema: PositioningSearchSchema,
@@ -127,14 +122,7 @@ Returns: Liste des positionnements correspondants.`,
     "boond_positionings_update",
     {
       title: "Modifier un positionnement",
-      description: `Met à jour un positionnement existant dans BoondManager (PUT /positionings/{id}). Seuls les champs fournis sont modifiés.
-
-Args:
-  - id (string): ID du positionnement
-  - state (number, optional): État du positionnement (ID du dictionnaire setting.state.positioning)
-  - stateReasonTypeOf, stateReasonDetail (optional): Motif d'état (repliés en stateReason {typeOf, detail})
-  - startDate, endDate (string, optional): Dates au format YYYY-MM-DD (chaîne vide pour effacer)
-  - informationComments (string, optional): Commentaires (max 250 caractères)
+      description: `Met à jour un positionnement existant dans BoondManager (PUT /positionings/{id}). Seuls les champs fournis sont modifiés ; \`stateReasonTypeOf\` / \`stateReasonDetail\` sont repliés en \`stateReason: { typeOf, detail }\`.
 
 Returns: Données mises à jour du positionnement.`,
       inputSchema: PositioningUpdateSchema,
