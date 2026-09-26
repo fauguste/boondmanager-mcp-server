@@ -235,7 +235,7 @@ export function tabDescription(spec: TabDescriptionSpec): string {
     purpose: `Récupère ${scope} d'un(e) ${spec.entityName}, par son ID.`,
     when: `pour ne charger que cette section, sans le reste de la fiche.`,
     instead: `\`${spec.prefix}_get\` pour la fiche de base, ou \`${spec.prefix}_search\` si l'ID est inconnu.`,
-    behaviour: spec.behaviour,
+    ...(spec.behaviour !== undefined ? { behaviour: spec.behaviour } : {}),
     returns: `${spec.returns} Lecture seule.`,
   });
 }

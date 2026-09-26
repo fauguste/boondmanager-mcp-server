@@ -179,5 +179,5 @@ export async function apiDownload(
   }
 
   const data = await readDownloadBody(response, path, maxBytes, onProgress);
-  return { data, contentType, filename };
+  return { data, contentType, ...(filename !== undefined ? { filename } : {}) };
 }

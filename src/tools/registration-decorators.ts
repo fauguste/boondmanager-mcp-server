@@ -110,10 +110,11 @@ export function instrumentHandlers(server: McpServer): McpServer {
         const wrapped = (...handlerArgs: unknown[]) => {
           const extra = handlerArgs[handlerArgs.length - 1];
           const trace = traceparentFrom(extra);
+          const signal = requestSignalFrom(extra);
           const context: RequestContext = {
-            signal: requestSignalFrom(extra),
+            ...(signal !== undefined ? { signal } : {}),
             corrId: trace?.traceId ?? currentCorrId() ?? generateCorrelationId(),
-            traceparent: trace?.header,
+            ...(trace !== undefined ? { traceparent: trace.header } : {}),
           };
           return runWithRequestContext(context, () => {
             const call = () => (handler as (...a: unknown[]) => unknown)(...handlerArgs);

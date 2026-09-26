@@ -1,6 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse, type Server } from "node:http";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger, generateCorrelationId } from "../services/logger.js";
@@ -350,6 +351,22 @@ function extractHostname(hostHeader: string | string[] | undefined): string | un
   }
 }
 
+/** `{ [key]: value }` when the value is defined, `{}` otherwise — keeps optional keys absent rather than `undefined`. */
+function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  return value === undefined ? {} : ({ [key]: value } as { [P in K]?: V });
+}
+
+/**
+ * SDK 1.30 declares `Transport.onclose` as `onclose?: () => void` but the
+ * `StreamableHTTPServerTransport` accessor as `(() => void) | undefined`. The
+ * SDK assigns one to the other internally; under `exactOptionalPropertyTypes`
+ * the two are incompatible at *our* call sites only. Delete this adapter when
+ * the SDK aligns the two declarations.
+ */
+function asTransport(transport: StreamableHTTPServerTransport): Transport {
+  return transport as unknown as Transport;
+}
+
 export function resolveHttpOptions(): HttpTransportOptions {
   const portRaw = readString("MCP_HTTP_PORT")?.trim();
   const port = portRaw ? Number.parseInt(portRaw, 10) : 3000;
@@ -374,11 +391,11 @@ export function resolveHttpOptions(): HttpTransportOptions {
     sessionTtlMs: readPositiveInt("MCP_HTTP_SESSION_TTL_MS", DEFAULT_SESSION_TTL_MS),
     sessionSweepIntervalMs: readPositiveInt("MCP_HTTP_SESSION_SWEEP_INTERVAL_MS", DEFAULT_SESSION_SWEEP_INTERVAL_MS),
     maxSessions: readPositiveInt("MCP_HTTP_MAX_SESSIONS", DEFAULT_MAX_SESSIONS),
-    allowedHosts: readAllowedHosts(),
-    allowedOrigins: readAllowedOrigins(),
-    publicUrl: readUrl("MCP_HTTP_PUBLIC_URL"),
+    ...optional("allowedHosts", readAllowedHosts()),
+    ...optional("allowedOrigins", readAllowedOrigins()),
+    ...optional("publicUrl", readUrl("MCP_HTTP_PUBLIC_URL")),
     staticAuth,
-    apiKey,
+    ...optional("apiKey", apiKey),
     insecureStaticAuth,
     keepAliveTimeoutMs: readPositiveInt("MCP_HTTP_KEEP_ALIVE_TIMEOUT_MS", DEFAULT_KEEP_ALIVE_TIMEOUT_MS),
     headersTimeoutMs: readPositiveInt("MCP_HTTP_HEADERS_TIMEOUT_MS", DEFAULT_HEADERS_TIMEOUT_MS),
@@ -887,8 +904,10 @@ export async function startHttpTransport(
         }
 
         if (options.stateless) {
+          // No `sessionIdGenerator` = stateless mode (the SDK documents the
+          // key as `undefined`; omitting it is the same and type-checks under
+          // exactOptionalPropertyTypes).
           const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined,
             enableJsonResponse: options.enableJsonResponse,
           });
           const server = createServerFactory();
@@ -896,7 +915,7 @@ export async function startHttpTransport(
             void transport.close();
             void server.close();
           });
-          await server.connect(transport);
+          await server.connect(asTransport(transport));
           await transport.handleRequest(req, res, parsedBody);
           return;
         }
@@ -982,7 +1001,7 @@ export async function startHttpTransport(
         };
 
         const server = createServerFactory();
-        await server.connect(transport);
+        await server.connect(asTransport(transport));
         await transport.handleRequest(req, res, body);
       };
 

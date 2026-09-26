@@ -293,8 +293,8 @@ export async function apiRequest(
     body && (method === "POST" || method === "PUT" || method === "PATCH") ? JSON.stringify(body) : undefined;
   const response = await send(path, {
     method,
-    query: queryParams,
-    body: serialized,
+    ...(queryParams !== undefined ? { query: queryParams } : {}),
+    ...(serialized !== undefined ? { body: serialized } : {}),
     headers: { Accept: "application/json", "Content-Type": "application/json" },
   });
   return readJsonApi(response, method, path);

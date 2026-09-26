@@ -49,7 +49,9 @@ export function currentRequestContext(): RequestContext | undefined {
 
 /** Run `fn` with `signal` as the current request's cancellation signal; the rest of the context is kept. */
 export function runWithRequestSignal<T>(signal: AbortSignal | undefined, fn: () => T): T {
-  return storage.run({ ...(storage.getStore() ?? {}), signal }, fn);
+  // Drop the enclosing signal rather than storing `undefined` under the key.
+  const { signal: _enclosing, ...rest } = storage.getStore() ?? {};
+  return storage.run(signal ? { ...rest, signal } : rest, fn);
 }
 
 /** Run `fn` with no cancellation signal, for work whose result other requests share. Correlation is kept. */

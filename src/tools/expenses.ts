@@ -7,7 +7,7 @@ import {
 } from "../schemas/index.js";
 import type { ExpenseDefaultInput, ExpenseLineInput } from "../schemas/index.js";
 import { apiRequest } from "../services/boond-client.js";
-import type { JsonApiResource, JsonApiResponse } from "../types.js";
+import type { JsonApiResponse } from "../types.js";
 import {
   buildJsonApiBody,
   registerSearchTool,
@@ -89,7 +89,7 @@ interface DefaultRef {
  * two ids a line cannot omit.
  */
 function formatExpenseDefaults(response: JsonApiResponse): string {
-  const entity = (Array.isArray(response.data) ? response.data[0] : response.data) as JsonApiResource | undefined;
+  const entity = Array.isArray(response.data) ? response.data[0] : response.data;
   if (!entity) return "Aucune donnée par défaut retournée pour cette ressource / ce mois.";
 
   const attrs = entity.attributes ?? {};
