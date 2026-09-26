@@ -400,6 +400,38 @@ to attach context and `logger.info({ key: value }, "message")` for
 structured output. In production (`NODE_ENV=production`), JSON is default;
 in dev, pino-pretty (colorized) is active unless `LOG_FORMAT=json`.
 
+**What is logged, and where the `corrId` comes from** (issue #236). Four
+sources, one id:
+
+- **HTTP access log** (`src/transports/http.ts`): one line per request on
+  `finish` / `close` — `{ corrId, method, path, status, durationMs }`, plus
+  `reason` on the rejections the handler writes itself (401 / 403 / 413 / 400 /
+  404 session / 405 / 503) at `warn`, 5xx at `error`, `/healthz` at `debug`,
+  `aborted: true` when the client left first. `path` is the URL **without its
+  query string**, on purpose.
+- **Tool log** (`src/tools/registration-decorators.ts::instrumentHandlers`):
+  `{ corrId, tool, durationMs, ok, chars }` at `info` for every `tools/call`
+  (`ok` is false on an `isError` result), `warn` + rethrow on a throwing
+  handler. One wrapper for ~185 tools; prompts and resources get the context
+  but no line.
+- **BoondManager client** (`src/services/http/transport.ts::send()`): `debug`
+  per completed attempt `{ corrId, method, path, attempt, status, durationMs }`;
+  `warn` on a retried attempt (`status` or `reason: "timeout" | "network"`,
+  `totalAttempts`, `backoffMs`), on a final 429 and on a timeout; an ordinary
+  final 4xx stays at `debug` (the tool log already says `ok: false`). Never the
+  query string, never a header.
+- **Correlation**: the id is, in order, the W3C `trace-id` of a
+  `_meta.traceparent` the client sent (SEP-414, validated by `parseTraceparent`),
+  the id the HTTP transport generated for the connection
+  (`runWithRequestContext({ corrId }, dispatch)`), or a fresh
+  `generateCorrelationId()` on stdio. `send()` forwards it to BoondManager as
+  `X-Request-Id`, and `traceparent` verbatim when present — header propagation
+  only, no tracing SDK. **`_meta.baggage` is never read and never logged** (it
+  may carry end-user identifiers); pinned in `registration-decorators.test.ts`
+  and `http/observability.test.ts`. The transport → tool → client chain is
+  asserted end-to-end in `http.test.ts` (the `X-Request-Id` BoondManager
+  receives equals the access-log `corrId`).
+
 **Every log line goes to stderr, on both transports** (`LOG_DESTINATION_FD`,
 issue #225). On stdio, stdout *is* the JSON-RPC stream: anything else written
 there corrupts a frame and the client drops the connection. Pino defaults to
@@ -588,11 +620,12 @@ reaches the socket: a cancelled `/actions` chunked search, reporting query or
 and BoondManager quota nobody will read.
 
 - **The signal travels in an `AsyncLocalStorage`**
-  (`src/services/request-context.ts`), not as a parameter: `propagateRequestSignal()`
+  (`src/services/request-context.ts`), not as a parameter: `instrumentHandlers()`
   (`src/tools/registration-decorators.ts`) is the innermost server wrapper in
   `registerAll` and runs every tool, prompt and resource handler inside
-  `runWithRequestSignal(extra.signal, …)`; `send()` reads it back with
-  `currentRequestSignal()`. Same pattern as the OAuth token — ~180 handler
+  `runWithRequestContext({ signal, corrId, traceparent }, …)`; `send()` reads
+  it back with `currentRequestContext()`. The same context carries the
+  correlation id (see *Structured logging*). Same pattern as the OAuth token — ~180 handler
   signatures and the client helpers are untouched. `SendOptions.signal` is an
   explicit override for a caller that holds its own.
 - **Where it is checked**: before each attempt (`throwIfCancelled`), while

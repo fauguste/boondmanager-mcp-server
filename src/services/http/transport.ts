@@ -18,7 +18,8 @@ import { getConfig } from "./auth.js";
 import { BoondApiError, formatApiError, nonJsonResponseError, timeoutError } from "./errors.js";
 import { getRateLimiter } from "./rate-limit.js";
 import { computeBackoffMs, isRetryable, parseRetryAfter, resolveRetryConfig, sleep } from "./retry.js";
-import { currentRequestSignal, RequestCancelledError, throwIfCancelled } from "../request-context.js";
+import { currentRequestContext, RequestCancelledError, throwIfCancelled } from "../request-context.js";
+import { logger } from "../logger.js";
 
 export type QueryValue = string | number | Array<string | number> | undefined;
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -144,7 +145,16 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
   const retry = resolveRetryConfig();
   const totalAttempts = retry.maxRetries + 1;
   const limiter = getRateLimiter();
-  const signal = options.signal ?? currentRequestSignal();
+  const context = currentRequestContext();
+  const signal = options.signal ?? context?.signal;
+  const corrId = context?.corrId;
+  // Correlation towards BoondManager (#236): the request id every log line
+  // carries, and the client's W3C trace context when it sent one. Header
+  // propagation only — no tracing SDK.
+  const correlationHeaders: Record<string, string> = {
+    ...(corrId ? { "X-Request-Id": corrId } : {}),
+    ...(context?.traceparent ? { traceparent: context.traceparent } : {}),
+  };
 
   let lastError: Error | undefined;
 
@@ -165,8 +175,10 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
     const authHeader = await auth();
     const headers: Record<string, string> = {
       [authHeader.name]: authHeader.value,
+      ...correlationHeaders,
       ...options.headers,
     };
+    const attemptStartedAt = Date.now();
 
     const fetchOptions: RequestInit = {
       method,
@@ -194,7 +206,14 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
           : new Error(String(err));
     }
 
-    if (response && response.ok) return response;
+    // The query string is deliberately left out of every log line: `keywords`
+    // and the perimeter filters are end-user data.
+    const logFields = { corrId, method, path, attempt: attempt + 1, durationMs: Date.now() - attemptStartedAt };
+
+    if (response && response.ok) {
+      logger.debug({ ...logFields, status: response.status }, "boondmanager request");
+      return response;
+    }
 
     let attemptError: Error;
     let isNetworkOrTimeout = false;
@@ -213,7 +232,16 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
     }
 
     const hasMoreAttempts = attempt < totalAttempts - 1;
+    const timedOut = isNetworkOrTimeout && isAbortError((networkError as Error & { cause?: unknown }).cause);
+    const failure = response ? { status: response.status } : { reason: timedOut ? "timeout" : "network" };
     if (!hasMoreAttempts || !isRetryable(method, response?.status, isNetworkOrTimeout)) {
+      // A final 429 or timeout is worth a warning on its own; any other final
+      // failure reaches the tool log as `ok: false` and the tool's error text.
+      if (response?.status === 429 || timedOut) {
+        logger.warn({ ...logFields, ...failure, totalAttempts }, "boondmanager request failed");
+      } else {
+        logger.debug({ ...logFields, ...failure, totalAttempts }, "boondmanager request failed");
+      }
       throw attemptError;
     }
 
@@ -225,6 +253,7 @@ export async function send(path: string, options: SendOptions = {}): Promise<Res
       retryAfterMs !== null
         ? Math.min(retry.maxDelayMs, retryAfterMs)
         : computeBackoffMs(attempt, retry.baseDelayMs, retry.maxDelayMs);
+    logger.warn({ ...logFields, ...failure, totalAttempts, backoffMs: backoff }, "boondmanager request retried");
     try {
       await sleep(backoff, signal);
     } catch (err) {

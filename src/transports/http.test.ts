@@ -22,6 +22,7 @@ import {
 import { createMcpServer } from "../server.js";
 import { initClientWithAuth, oauthContextAuth, resetClientForTests } from "../services/boond-client.js";
 import { resetRateLimiterForTests } from "../services/boond-client.js";
+import { logger } from "../services/logger.js";
 
 /**
  * Performs a low-level HTTP POST so we can override the Host header (which
@@ -1731,5 +1732,148 @@ describe("startHttpTransport (integration)", () => {
     expect(res.status).toBe(401);
     const challenge = res.headers.get("www-authenticate") ?? "";
     expect(challenge).toContain('resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"');
+  });
+});
+
+/**
+ * HTTP access log and end-to-end correlation (#236). The child logger the
+ * transport creates per request is captured through `logger.child`, so the
+ * assertions read the exact bindings and fields a log aggregator would see.
+ */
+describe("access log and correlation (#236)", () => {
+  let handle: HttpServerHandle | undefined;
+  type FakeLogger = {
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+  };
+  let children: Array<{ bindings: Record<string, unknown>; log: FakeLogger }>;
+
+  beforeEach(async () => {
+    clearEnv();
+    children = [];
+    vi.spyOn(logger, "child").mockImplementation(((bindings: Record<string, unknown>) => {
+      const log: FakeLogger & { child: ReturnType<typeof vi.fn> } = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+        child: vi.fn(),
+      };
+      log.child.mockReturnValue(log);
+      children.push({ bindings, log });
+      return log;
+    }) as never);
+    resetClientForTests();
+    resetRateLimiterForTests();
+    initClientWithAuth(oauthContextAuth);
+    handle = await startHttpTransport(createMcpServer, {
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      stateless: true,
+      enableJsonResponse: true,
+    });
+  });
+
+  afterEach(async () => {
+    await handle?.close();
+    handle = undefined;
+    vi.restoreAllMocks();
+    resetClientForTests();
+    resetRateLimiterForTests();
+    clearEnv();
+  });
+
+  // `createMcpServer()` (one per stateless POST) may open child loggers of its
+  // own; the request logger is the last child bound to a corrId and a method.
+  const lastRequestLog = () =>
+    children.filter((c) => c.bindings.corrId !== undefined && c.bindings.method !== undefined).at(-1)!;
+  const settled = (log: FakeLogger) =>
+    vi.waitFor(() =>
+      expect([log.info, log.warn, log.error, log.debug].some((f) => f.mock.calls.length > 0)).toBe(true)
+    );
+
+  it("logs one info line per request with status and duration, path without its query string", async () => {
+    const res = await postWithHost(handle!.address.port, "/not-mcp?keywords=Jean%20Dupont", "127.0.0.1", "{}");
+    expect(res.status).toBe(404);
+    const { bindings, log } = lastRequestLog();
+    await settled(log);
+    expect(bindings).toMatchObject({ method: "POST", path: "/not-mcp" });
+    expect(bindings.corrId).toMatch(/^[0-9a-f]{8}$/);
+    expect(JSON.stringify(bindings)).not.toContain("Dupont");
+    expect(log.info).toHaveBeenCalledTimes(1);
+    const [fields, message] = log.info.mock.calls[0] as [Record<string, unknown>, string];
+    expect(message).toBe("http request");
+    expect(fields).toMatchObject({ status: 404 });
+    expect(typeof fields.durationMs).toBe("number");
+  });
+
+  it("a missing Bearer is a warn line carrying the reason", async () => {
+    const res = await postWithHost(handle!.address.port, "/mcp", "127.0.0.1", INIT_BODY);
+    expect(res.status).toBe(401);
+    const { log } = lastRequestLog();
+    await settled(log);
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn.mock.calls[0][0]).toMatchObject({
+      status: 401,
+      reason: expect.stringContaining("Missing Bearer token"),
+    });
+    expect(log.info).not.toHaveBeenCalled();
+  });
+
+  it("an oversized body is a warn line with its reason", async () => {
+    const res = await postWithHost(handle!.address.port, "/mcp", "127.0.0.1", "{}", {
+      ...AUTH_HEADER,
+      "Content-Length": String(MAX_BODY_BYTES + 1),
+    }).catch(() => ({ status: 413 }));
+    expect(res.status).toBe(413);
+    const { log } = lastRequestLog();
+    await settled(log);
+    expect(log.warn.mock.calls[0]?.[0]).toMatchObject({ status: 413, reason: "Request body too large" });
+  });
+
+  it("the liveness probe is logged at debug only", async () => {
+    const res = await fetch(`http://127.0.0.1:${handle!.address.port}/healthz`);
+    expect(res.status).toBe(200);
+    const { log } = lastRequestLog();
+    await settled(log);
+    expect(log.debug).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }), "http request");
+    expect(log.info).not.toHaveBeenCalled();
+  });
+
+  it("the transport's corrId reaches the tool log line and BoondManager as X-Request-Id", async () => {
+    const boondFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-length": "60" }),
+      json: () => Promise.resolve({ data: { id: "1", type: "candidate", attributes: { firstName: "Jean" } } }),
+    });
+    vi.stubGlobal("fetch", boondFetch);
+    const toolInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const res = await postWithHost(
+      handle!.address.port,
+      "/mcp",
+      "127.0.0.1",
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "tools/call",
+        params: { name: "boond_candidates_get", arguments: { id: "1" } },
+      }),
+      { ...AUTH_HEADER, Accept: "application/json, text/event-stream" }
+    );
+    expect(res.status).toBe(200);
+    expect(boondFetch).toHaveBeenCalledTimes(1);
+    const { bindings, log } = lastRequestLog();
+    await settled(log);
+    const corrId = bindings.corrId as string;
+    const sent = (boondFetch.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(sent["X-Request-Id"]).toBe(corrId);
+    expect(sent["Authorization"]).toBe("Bearer test-access-token");
+    const toolLine = toolInfo.mock.calls.find((c) => c[1] === "tool call");
+    expect(toolLine?.[0]).toMatchObject({ corrId, tool: "boond_candidates_get", ok: true });
+    expect(log.info).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }), "http request");
   });
 });

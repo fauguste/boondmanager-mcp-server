@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger, generateCorrelationId } from "../services/logger.js";
+import { runWithRequestContext } from "../services/request-context.js";
 import { apiRequest, BoondApiError } from "../services/boond-client.js";
 import { readBool, readCsv, readPositiveInt, readString, readUrl } from "../config/env.js";
 import { SERVER_VERSION } from "../server.js";
@@ -744,7 +745,45 @@ export async function startHttpTransport(
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const corrId = generateCorrelationId();
-    const reqLogger = logger.child({ corrId, method: req.method, path: req.url });
+    // Path only: the query string of a request is never logged (#236).
+    const path = req.url?.split("?")[0];
+    const reqLogger = logger.child({ corrId, method: req.method, path });
+    const startedAt = Date.now();
+    let rejection: string | undefined;
+
+    // Access log (#236): one line per request when the response is finished,
+    // or when the client went away before that. 401 / 403 / 413 (and the
+    // other rejections this handler writes itself) are `warn` with their
+    // reason; 5xx is `error`; the liveness probe stays at `debug` so a
+    // 10-second Kubernetes probe does not fill the log.
+    let accessLogged = false;
+    const writeAccessLog = (): void => {
+      if (accessLogged) return;
+      accessLogged = true;
+      const status = res.statusCode;
+      const fields = {
+        status,
+        durationMs: Date.now() - startedAt,
+        ...(rejection !== undefined ? { reason: rejection } : {}),
+        ...(res.writableFinished ? {} : { aborted: true }),
+      };
+      if (path === "/healthz") reqLogger.debug(fields, "http request");
+      else if (status >= 500) reqLogger.error(fields, "http request");
+      else if (rejection !== undefined || status === 401 || status === 403 || status === 413) {
+        reqLogger.warn(fields, "http request");
+      } else reqLogger.info(fields, "http request");
+    };
+    res.on("finish", writeAccessLog);
+    res.on("close", writeAccessLog);
+
+    const reject = (status: number, message: string, code?: number): void => {
+      rejection = message;
+      writeJsonRpcError(res, status, message, code);
+    };
+    const challenge = (status: number, message: string, error?: string): void => {
+      rejection = message;
+      writeOAuthChallenge(res, status, message, error);
+    };
 
     try {
       // Liveness probe — served before Host validation so Docker/Kubernetes
@@ -769,11 +808,11 @@ export async function startHttpTransport(
       if (allowedHosts.length > 0) {
         const hostname = extractHostname(req.headers.host);
         if (!hostname) {
-          writeJsonRpcError(res, 403, "Missing or invalid Host header");
+          reject(403, "Missing or invalid Host header");
           return;
         }
         if (!allowedHosts.includes(hostname)) {
-          writeJsonRpcError(res, 403, `Invalid Host: ${hostname}`);
+          reject(403, `Invalid Host: ${hostname}`);
           return;
         }
       }
@@ -791,7 +830,7 @@ export async function startHttpTransport(
         const originHeader = req.headers.origin;
         const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
         if (origin && !isOriginAllowed(originPolicy, origin)) {
-          writeJsonRpcError(res, 403, `Invalid Origin: ${origin}`);
+          reject(403, `Invalid Origin: ${origin}`);
           return;
         }
       }
@@ -806,7 +845,7 @@ export async function startHttpTransport(
         // reusable — and closing it early makes a client still uploading see
         // a reset instead of the 413 (undici's fetch rejects). The mid-stream
         // overflow below is different: its stream is left unread.
-        writeJsonRpcError(res, 413, "Request body too large");
+        reject(413, "Request body too large");
         return;
       }
 
@@ -829,7 +868,7 @@ export async function startHttpTransport(
       // Core MCP dispatch — shared between OAuth and static-auth paths.
       const dispatchMcpRequest = async (): Promise<void> => {
         if (options.stateless && req.method !== "POST") {
-          writeJsonRpcError(res, 405, "Only POST is supported in stateless mode");
+          reject(405, "Only POST is supported in stateless mode");
           return;
         }
 
@@ -842,7 +881,7 @@ export async function startHttpTransport(
         if (req.method === "POST") {
           const read = await readJsonBody(req);
           if (read.kind === "invalid") {
-            writeJsonRpcError(res, 400, "Parse error: Invalid JSON", JSON_RPC_PARSE_ERROR);
+            reject(400, "Parse error: Invalid JSON", JSON_RPC_PARSE_ERROR);
             return;
           }
           parsedBody = read.value;
@@ -883,20 +922,20 @@ export async function startHttpTransport(
             if (entry) {
               reqLogger.warn({ sessionId }, "Session ownership mismatch; answering as unknown session");
             }
-            writeJsonRpcError(res, 404, "Session not found", -32001);
+            reject(404, "Session not found", -32001);
             return;
           }
         }
 
         if (req.method !== "POST") {
-          writeJsonRpcError(res, 400, "Missing or invalid session ID");
+          reject(400, "Missing or invalid session ID");
           return;
         }
 
         // First request of a session must be `initialize`
         const body = parsedBody;
         if (!isInitializeRequest(body)) {
-          writeJsonRpcError(res, 400, "First request must be an MCP initialize message");
+          reject(400, "First request must be an MCP initialize message");
           return;
         }
 
@@ -909,7 +948,7 @@ export async function startHttpTransport(
               { sessionCount: sessions.size, maxSessions },
               "Session limit reached; rejecting new initialize"
             );
-            writeJsonRpcError(res, 503, "Server session limit reached; retry later");
+            reject(503, "Server session limit reached; retry later");
             return;
           }
         }
@@ -954,22 +993,20 @@ export async function startHttpTransport(
         // when one is configured (#230) — never with a BoondManager token.
         if (options.apiKey && !isApiKeyMatch(presentedApiKey(req), options.apiKey)) {
           res.setHeader("WWW-Authenticate", `Bearer realm="${resourceUrl}"`);
-          writeJsonRpcError(
-            res,
+          reject(
             401,
             "Missing or invalid API key. Send `Authorization: Bearer <MCP_HTTP_API_KEY>` or `X-Api-Key: <MCP_HTTP_API_KEY>`.",
             -32001
           );
           return;
         }
-        await dispatchMcpRequest();
+        await runWithRequestContext({ corrId }, dispatchMcpRequest);
       } else {
         // OAuth2 Bearer is mandatory on the MCP endpoint. The token is opaque
         // to us — we forward it to BoondManager, which is authoritative.
         const accessToken = extractBearerToken(req.headers["authorization"]);
         if (!accessToken) {
-          writeOAuthChallenge(
-            res,
+          challenge(
             401,
             "Missing Bearer token. Authenticate against BoondManager and include `Authorization: Bearer <access_token>`."
           );
@@ -977,8 +1014,7 @@ export async function startHttpTransport(
         }
         if (options.validateToken && (await validateAccessToken(accessToken)) === "invalid") {
           reqLogger.info("Bearer rejected by BoondManager; answering 401 invalid_token");
-          writeOAuthChallenge(
-            res,
+          challenge(
             401,
             "BoondManager rejected the access token (expired or revoked). Re-authorize and retry.",
             "invalid_token"
@@ -987,7 +1023,7 @@ export async function startHttpTransport(
         }
         // Wrap in AsyncLocalStorage so boond-client's oauthContextAuth can pull
         // the token out when issuing API calls.
-        await oauthContext.run({ accessToken }, dispatchMcpRequest);
+        await oauthContext.run({ accessToken }, () => runWithRequestContext({ corrId }, dispatchMcpRequest));
       }
     } catch (error) {
       if (error instanceof PayloadTooLargeError) {

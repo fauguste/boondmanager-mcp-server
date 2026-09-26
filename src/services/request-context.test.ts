@@ -2,10 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   RequestCancelledError,
   abortPromise,
+  currentCorrId,
+  currentRequestContext,
   currentRequestSignal,
+  parseTraceparent,
   requestSignalFrom,
+  runWithRequestContext,
   runWithRequestSignal,
   throwIfCancelled,
+  traceparentFrom,
   withoutRequestSignal,
 } from "./request-context.js";
 
@@ -69,5 +74,39 @@ describe("request context (#231)", () => {
     const p = abortPromise(controller.signal);
     controller.abort("stop");
     await expect(p).rejects.toBe("stop");
+  });
+});
+
+describe("correlation context (#236)", () => {
+  it("parses a valid W3C traceparent and rejects the rest", () => {
+    const valid = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    expect(parseTraceparent(valid)).toEqual({ header: valid, traceId: "4bf92f3577b34da6a3ce929d0e0e4736" });
+    expect(parseTraceparent(` ${valid} `)?.header).toBe(valid);
+    expect(parseTraceparent("00-00000000000000000000000000000000-00f067aa0ba902b7-01")).toBeUndefined();
+    expect(parseTraceparent("00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01")).toBeUndefined();
+    expect(parseTraceparent("garbage")).toBeUndefined();
+    expect(parseTraceparent(42)).toBeUndefined();
+    expect(parseTraceparent(undefined)).toBeUndefined();
+  });
+
+  it("reads traceparent from extra._meta only", () => {
+    const valid = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    expect(traceparentFrom({ _meta: { traceparent: valid } })?.traceId).toBe("4bf92f3577b34da6a3ce929d0e0e4736");
+    expect(traceparentFrom({ traceparent: valid })).toBeUndefined();
+    expect(traceparentFrom({ _meta: null })).toBeUndefined();
+    expect(traceparentFrom(null)).toBeUndefined();
+  });
+
+  it("withoutRequestSignal keeps the correlation id while dropping the signal", () => {
+    const controller = new AbortController();
+    runWithRequestContext({ signal: controller.signal, corrId: "c0ffee00", traceparent: "tp" }, () => {
+      expect(currentCorrId()).toBe("c0ffee00");
+      withoutRequestSignal(() => {
+        expect(currentRequestSignal()).toBeUndefined();
+        expect(currentCorrId()).toBe("c0ffee00");
+        expect(currentRequestContext()?.traceparent).toBe("tp");
+      });
+    });
+    expect(currentCorrId()).toBeUndefined();
   });
 });
