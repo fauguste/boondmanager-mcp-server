@@ -50,7 +50,7 @@ import { resolveAccessPolicy, isDomainAllowed, withPolicy, type AccessPolicy } f
 import {
   createRegistrationIndex,
   decorateRegistrations,
-  propagateRequestSignal,
+  instrumentHandlers,
   type RegistrationIndex,
 } from "./tools/registration-decorators.js";
 import { installProtocolIcons } from "./icons.js";
@@ -191,8 +191,9 @@ export const TOOL_REGISTRARS: ReadonlyArray<readonly [DomainName, (server: McpSe
  */
 export function registerAll(server: McpServer, policy: AccessPolicy, index?: RegistrationIndex): void {
   // Innermost wrapper: every handler registered below — tools, prompts,
-  // resources — runs with its `extra.signal` in the request context (#231).
-  const target = withPolicy(propagateRequestSignal(server), policy);
+  // resources — runs in a request context (`extra.signal` #231, corrId /
+  // traceparent #236) and every tool call is logged once.
+  const target = withPolicy(instrumentHandlers(server), policy);
 
   for (const [domain, register] of TOOL_REGISTRARS) {
     // `workflows` is the tool-form mirror of the MCP prompts (1:1). It is

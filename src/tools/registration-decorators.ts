@@ -3,7 +3,14 @@ import type { DomainName } from "../constants.js";
 import { withValidationFeedback } from "./validation-wrapper.js";
 import { withParameterDisclosure } from "./parameter-disclosure.js";
 import { withUsageGuidance } from "./usage-guidance.js";
-import { requestSignalFrom, runWithRequestSignal } from "../services/request-context.js";
+import {
+  currentCorrId,
+  requestSignalFrom,
+  runWithRequestContext,
+  traceparentFrom,
+  type RequestContext,
+} from "../services/request-context.js";
+import { generateCorrelationId, logger } from "../services/logger.js";
 
 /**
  * Per-domain registration decorations, applied centrally in
@@ -43,20 +50,49 @@ export function createRegistrationIndex(): RegistrationIndex {
 /** The SDK registration methods whose last argument is a request handler. */
 const HANDLER_REGISTRATIONS = new Set(["registerTool", "registerPrompt", "registerResource"]);
 
+/** Size of a tool result as the model receives it: text content plus the structured payload. */
+function resultChars(result: unknown): number {
+  if (typeof result !== "object" || result === null) return 0;
+  const { content, structuredContent } = result as { content?: unknown; structuredContent?: unknown };
+  let chars = 0;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      const text = (item as { text?: unknown })?.text;
+      if (typeof text === "string") chars += text.length;
+    }
+  }
+  if (structuredContent !== undefined) chars += JSON.stringify(structuredContent).length;
+  return chars;
+}
+
 /**
  * Wrap a server so every handler registered through it — tool, prompt or
- * resource — runs inside `runWithRequestSignal(extra.signal, …)` (issue #231).
+ * resource — runs inside a request context (issues #231, #236) and every tool
+ * call leaves one log line.
+ *
  * The handler is always the last argument of the registration call and
  * `extra` the last argument of the handler (`(args, extra)` for a tool with an
  * input schema, `(extra)` without, `(uri, variables, extra)` for a template).
- * `send()` reads the signal back from the AsyncLocalStorage, so the ~180
- * handlers and the client helpers keep their signatures.
+ * From `extra` the wrapper takes:
+ *
+ * - `signal` — so `send()` can abort the BoondManager call on
+ *   `notifications/cancelled`;
+ * - `_meta.traceparent` (SEP-414) — forwarded to BoondManager verbatim, and
+ *   its `trace-id` becomes the `corrId`; otherwise the id the HTTP transport
+ *   generated for the connection is kept, and on stdio a fresh one is made.
+ *   `_meta.baggage` is never read.
+ *
+ * `send()` reads the context back from the AsyncLocalStorage, so the ~180
+ * handlers and the client helpers keep their signatures. The tool log line —
+ * `{ corrId, tool, durationMs, ok, chars }` — is the single place ~185 tools
+ * are instrumented; a thrown handler is logged at `warn` and rethrown so the
+ * SDK still turns it into an `isError` result.
  *
  * Applied once, on the innermost server, in `server.ts::registerAll` — before
  * the per-domain decorations and the access policy — so that nothing
  * registered anywhere escapes it.
  */
-export function propagateRequestSignal(server: McpServer): McpServer {
+export function instrumentHandlers(server: McpServer): McpServer {
   return new Proxy(server, {
     get(target, prop) {
       const value = Reflect.get(target, prop, target) as unknown;
@@ -69,10 +105,49 @@ export function propagateRequestSignal(server: McpServer): McpServer {
         if (typeof handler !== "function") {
           return (value as (...a: unknown[]) => unknown).apply(target, args);
         }
-        const wrapped = (...handlerArgs: unknown[]) =>
-          runWithRequestSignal(requestSignalFrom(handlerArgs[handlerArgs.length - 1]), () =>
-            (handler as (...a: unknown[]) => unknown)(...handlerArgs)
-          );
+        const name = String(args[0]);
+        const isTool = prop === "registerTool";
+        const wrapped = (...handlerArgs: unknown[]) => {
+          const extra = handlerArgs[handlerArgs.length - 1];
+          const trace = traceparentFrom(extra);
+          const context: RequestContext = {
+            signal: requestSignalFrom(extra),
+            corrId: trace?.traceId ?? currentCorrId() ?? generateCorrelationId(),
+            traceparent: trace?.header,
+          };
+          return runWithRequestContext(context, () => {
+            const call = () => (handler as (...a: unknown[]) => unknown)(...handlerArgs);
+            if (!isTool) return call();
+            const startedAt = Date.now();
+            const done = (result: unknown) => {
+              const ok = typeof result === "object" && result !== null && !(result as { isError?: boolean }).isError;
+              logger.info(
+                {
+                  corrId: context.corrId,
+                  tool: name,
+                  durationMs: Date.now() - startedAt,
+                  ok,
+                  chars: resultChars(result),
+                },
+                "tool call"
+              );
+              return result;
+            };
+            const failed = (err: unknown) => {
+              logger.warn(
+                { corrId: context.corrId, tool: name, durationMs: Date.now() - startedAt, err },
+                "tool call threw"
+              );
+              throw err;
+            };
+            try {
+              const result = call();
+              return result instanceof Promise ? result.then(done, failed) : done(result);
+            } catch (err) {
+              return failed(err);
+            }
+          });
+        };
         return (value as (...a: unknown[]) => unknown).apply(target, [...args.slice(0, -1), wrapped]);
       };
     },
