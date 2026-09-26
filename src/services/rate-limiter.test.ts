@@ -105,9 +105,7 @@ describe("TokenBucket", () => {
     // Fire 4 acquires at once. The first 2 should resolve immediately, the
     // remaining 2 should each wait roughly 1s for a token refill.
     const order: number[] = [];
-    const promises = [0, 1, 2, 3].map((i) =>
-      b.acquire().then(() => order.push(i))
-    );
+    const promises = [0, 1, 2, 3].map((i) => b.acquire().then(() => order.push(i)));
 
     await flushMicrotasks();
     expect(order).toEqual([0, 1]);
@@ -138,5 +136,32 @@ describe("TokenBucket", () => {
     // 10 more seconds would refill 20, but capacity caps at 5.
     await clock.advance(10_000);
     expect(b.peek()).toBe(5);
+  });
+});
+
+describe("TokenBucket.acquire(signal) (#231)", () => {
+  it("rejects at once when the signal has already fired", async () => {
+    const clock = createFakeClock();
+    const b = new TokenBucket(1, 1, clock);
+    const controller = new AbortController();
+    controller.abort(new Error("gone"));
+    await expect(b.acquire(controller.signal)).rejects.toThrow("gone");
+    // The token was not consumed by the refused caller.
+    expect(b.peek()).toBe(1);
+  });
+
+  it("releases a caller waiting for a refill and lets the next one through", async () => {
+    const clock = createFakeClock();
+    const b = new TokenBucket(1, 1, clock);
+    await b.acquire();
+    const controller = new AbortController();
+    const waiting = b.acquire(controller.signal);
+    const behind = b.acquire();
+    await flushMicrotasks();
+    controller.abort(new Error("cancelled"));
+    await expect(waiting).rejects.toThrow("cancelled");
+    // The chain is not poisoned: the caller behind gets the next token.
+    await clock.advance(1000);
+    await expect(behind).resolves.toBeUndefined();
   });
 });

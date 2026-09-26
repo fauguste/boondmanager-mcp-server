@@ -1,4 +1,5 @@
 import { apiRequest } from "./boond-client.js";
+import { withoutRequestSignal } from "./request-context.js";
 import { readPositiveInt } from "../config/env.js";
 import { currentAuthIdentity } from "./oauth.js";
 import type { JsonApiResponse } from "../types.js";
@@ -106,9 +107,12 @@ export async function getDictionary(opts: GetDictionaryOptions = {}): Promise<Ca
 
   const request = (async () => {
     try {
-      const payload = await apiRequest("/application/dictionary", "GET", undefined, {
-        language,
-      });
+      // Shared between every caller awaiting this key (#226): the load runs
+      // outside the current request's cancellation scope, or one client
+      // cancelling would reject the dictionary for all the others (#231).
+      const payload = await withoutRequestSignal(() =>
+        apiRequest("/application/dictionary", "GET", undefined, { language })
+      );
       const entry: CacheEntry = { payload, fetchedAt: Date.now(), language };
       touch(key, entry);
       return entry;

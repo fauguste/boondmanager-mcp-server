@@ -488,3 +488,75 @@ describe("progress notifications (end to end)", () => {
     expect(sent).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `notifications/cancelled` end-to-end (#231): a real client aborts a
+ * `tools/call`; the SDK fires the handler's `extra.signal`; the decorator
+ * puts it in the request context; `send()` composes it into the `fetch`
+ * signal. The assertion is on the socket-level signal — the one thing that
+ * proves the cancellation reached BoondManager's connection and not just the
+ * MCP layer.
+ */
+describe("request cancellation reaches the BoondManager fetch (#231)", () => {
+  useDefaultServerSurface();
+
+  beforeEach(() => {
+    process.env.BOOND_API_TOKEN = "test-token";
+    process.env.BOOND_HTTP_RATE_LIMIT_RPS = "0";
+    process.env.BOOND_HTTP_MAX_RETRIES = "0";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.BOOND_API_TOKEN;
+    delete process.env.BOOND_HTTP_RATE_LIMIT_RPS;
+    delete process.env.BOOND_HTTP_MAX_RETRIES;
+  });
+
+  it("aborting a tools/call on the client aborts the fetch on the server", async () => {
+    const fetchMock = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { client, close } = await connectMcpClient();
+    try {
+      const controller = new AbortController();
+      const call = client.callTool({ name: "boond_candidates_get", arguments: { id: "1" } }, undefined, {
+        signal: controller.signal,
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const fetchSignal = (fetchMock.mock.calls[0][1] as RequestInit).signal!;
+      expect(fetchSignal.aborted).toBe(false);
+      controller.abort();
+      await expect(call).rejects.toThrow();
+      await vi.waitFor(() => expect(fetchSignal.aborted).toBe(true));
+    } finally {
+      await close();
+    }
+  });
+
+  it("a resource read is covered too", async () => {
+    const fetchMock = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { client, close } = await connectMcpClient();
+    try {
+      const controller = new AbortController();
+      const read = client.readResource({ uri: "boond://candidate/1" }, { signal: controller.signal });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const signals = fetchMock.mock.calls.map((c) => (c[1] as RequestInit).signal!);
+      controller.abort();
+      await expect(read).rejects.toThrow();
+      await vi.waitFor(() => expect(signals.every((s) => s.aborted)).toBe(true));
+    } finally {
+      await close();
+    }
+  });
+});

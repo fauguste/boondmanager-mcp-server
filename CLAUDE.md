@@ -579,6 +579,40 @@ It is not a substitute for Tasks and does not preempt that decision: progress is
 a call that stays open and says where it is; a task is a call that returns a
 handle immediately.
 
+## Cancellation (`notifications/cancelled`)
+
+Every handler receives `extra.signal`, an `AbortSignal` the SDK fires on
+`notifications/cancelled` or when the transport closes. Since issue #231 it
+reaches the socket: a cancelled `/actions` chunked search, reporting query or
+5 MiB download stops instead of running to completion on rate-limit tokens
+and BoondManager quota nobody will read.
+
+- **The signal travels in an `AsyncLocalStorage`**
+  (`src/services/request-context.ts`), not as a parameter: `propagateRequestSignal()`
+  (`src/tools/registration-decorators.ts`) is the innermost server wrapper in
+  `registerAll` and runs every tool, prompt and resource handler inside
+  `runWithRequestSignal(extra.signal, …)`; `send()` reads it back with
+  `currentRequestSignal()`. Same pattern as the OAuth token — ~180 handler
+  signatures and the client helpers are untouched. `SendOptions.signal` is an
+  explicit override for a caller that holds its own.
+- **Where it is checked**: before each attempt (`throwIfCancelled`), while
+  queued on the rate limiter (`TokenBucket.acquire(signal)` rejects at once
+  and does not poison the chain), during the fetch
+  (`AbortSignal.any([signal, AbortSignal.timeout(ms)])`, so the body stream of a
+  download aborts too), during a retry backoff (`sleep(ms, signal)`), and
+  therefore between two chunks of `apiSearch`.
+- **A cancellation is neither a timeout nor a retryable failure.** It surfaces
+  as `RequestCancelledError` (`name: "AbortError"`, message naming the endpoint)
+  and is never retried; an abort while the request's signal has *not* fired is
+  still the timeout path. Pinned in `http/cancellation.test.ts`.
+- **Shared work opts out.** The dictionary's in-flight load is awaited by every
+  caller of the same `(identity, language)` key (#226); it runs under
+  `withoutRequestSignal`, or one client cancelling would reject the dictionary
+  for all the others (`dictionary.test.ts`).
+- **End-to-end**: `src/server.test.ts` aborts a real `tools/call` and a real
+  `resources/read` through the in-memory client and asserts the `fetch`-level
+  signal is aborted — the MCP layer rejecting on its own proves nothing.
+
 ## Tool Naming Convention
 
 All tool names follow: `boond_{domain}_{operation}`
