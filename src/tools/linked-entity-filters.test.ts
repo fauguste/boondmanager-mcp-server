@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { KEYWORD_PREFIX_BY_FILTER, toKeywordReferences } from "./linked-entity-filters.js";
 import { apiRequest, apiSearch } from "../services/boond-client.js";
 import { registerAbsenceTools } from "./absences.js";
+import { registerTimesheetTools } from "./timesheets.js";
 import { registerActionTools } from "./actions.js";
 import { registerDeliveryTools } from "./deliveries.js";
 import { registerExpenseTools } from "./expenses.js";
@@ -76,25 +77,34 @@ const CASES: ReadonlyArray<{
     register: registerInvoiceTools,
     tool: "boond_invoices_search",
     path: "/invoices",
-    filters: { companyId: "CSOC", projectId: "PRJ" },
+    filters: { companyId: "CSOC", projectId: "PRJ", contactId: "CCON", orderId: "BDC" },
   },
   {
     register: registerOrderTools,
     tool: "boond_orders_search",
     path: "/orders",
-    filters: { companyId: "CSOC", projectId: "PRJ" },
+    filters: { companyId: "CSOC", projectId: "PRJ", contactId: "CCON" },
   },
   {
     register: registerDeliveryTools,
     tool: "boond_deliveries_search",
     path: "/deliveries-groupments",
-    filters: { projectId: "PRJ", companyId: "CSOC" },
+    filters: { projectId: "PRJ", companyId: "CSOC", resourceId: "COMP", opportunityId: "AO" },
   },
   {
     register: registerActionTools,
     tool: "boond_actions_search",
     path: "/actions",
-    filters: { candidateId: "CAND", resourceId: "COMP", contactId: "CCON", companyId: "CSOC" },
+    filters: {
+      candidateId: "CAND",
+      resourceId: "COMP",
+      contactId: "CCON",
+      companyId: "CSOC",
+      opportunityId: "AO",
+      projectId: "PRJ",
+      orderId: "BDC",
+      invoiceId: "FACT",
+    },
   },
   {
     register: registerPurchaseTools,
@@ -112,13 +122,20 @@ const CASES: ReadonlyArray<{
     register: registerPaymentTools,
     tool: "boond_payments_search",
     path: "/payments",
-    filters: { purchaseId: "ACH", companyId: "CSOC", projectId: "PRJ", resourceId: "COMP" },
+    filters: { purchaseId: "ACH", companyId: "CSOC", projectId: "PRJ", resourceId: "COMP", contactId: "CCON" },
   },
   {
     register: registerProviderInvoiceTools,
     tool: "boond_provider_invoices_search",
     path: "/provider-invoices",
     filters: { companyId: "CSOC", resourceId: "COMP" },
+  },
+  {
+    register: registerTimesheetTools,
+    tool: "boond_timesheets_search",
+    path: "/times-reports",
+    filters: { resourceId: "COMP" },
+    extra: { startMonth: "2026-09", endMonth: "2026-09" },
   },
   {
     register: registerAbsenceTools,
@@ -179,6 +196,7 @@ describe("linked-entity filters reach BoondManager as keywords references (#247)
         "boond_positionings_search",
         "boond_provider_invoices_search",
         "boond_purchases_search",
+        "boond_timesheets_search",
       ].sort()
     );
   });

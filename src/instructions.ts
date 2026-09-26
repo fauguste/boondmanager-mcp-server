@@ -27,9 +27,9 @@ export const SERVER_INSTRUCTIONS = `Accès aux données ERP/CRM BoondManager (AP
 
 Le schéma de chaque outil est la référence : **ne pas transposer un filtre d'un endpoint à un autre**. Les schémas sont \`.strict()\`, donc un nom inconnu est rejeté par une erreur de validation — mais ce rejet a deux causes possibles : mauvais nom de filtre, **ou** filtre non supporté par cet endpoint. Dans le second cas, ne pas réessayer avec des variantes : reprendre la recherche avec les filtres que le schéma expose (souvent \`keywords\` seul), ou filtrer côté client après lecture.
 
-## Périmètre (les 6 recherches principales + \`boond_reporting_*\`)
+## Périmètre (recherches métier + \`boond_reporting_*\`)
 
-Sur \`resources\`, \`candidates\`, \`contacts\`, \`companies\`, \`opportunities\`, \`projects\` et le reporting — pas sur les domaines de référence/administration :
+Sur les recherches métier (personnes, sociétés, opportunités, projets, actions, finance, activité) et le reporting — pas sur les domaines de référence / admin :
 
 - « mes données / mon équipe / mon agence » → \`perimeterDynamic\` : \`["data"]\` (mes données), \`["managers"]\` (mon N-1), \`["agencies"]\`, \`["poles"]\`, \`["businessUnits"]\`
 - « l'équipe de X » → \`perimeterManagers: [<id de X>]\`

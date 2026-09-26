@@ -4,7 +4,7 @@ import * as z4mini from "zod/v4-mini";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { withFilterHints, withValidationFeedback, isSearchTool } from "./validation-wrapper.js";
 import { decorateRegistrations, createRegistrationIndex } from "./registration-decorators.js";
-import { ResourceSearchSchema, CandidateSearchSchema, InvoiceSearchSchema, SearchSchema } from "../schemas/index.js";
+import { ResourceSearchSchema, CandidateSearchSchema, PurchaseSearchSchema, SearchSchema } from "../schemas/index.js";
 import { MAX_SEARCH_PAGE } from "../constants.js";
 
 /** Messages as the SDK would surface them: every issue message, newline-joined. */
@@ -39,7 +39,9 @@ describe("withFilterHints", () => {
    * typically drops the filter — and reports an unscoped list as a scoped one.
    */
   it("never names a replacement the endpoint does not accept", () => {
-    const msg = messagesOf(withFilterHints(InvoiceSearchSchema), { agencies: [3] });
+    // /purchases is not `searchable` in the RAML sense: no perimeter filters.
+    // (/invoices used to be the example here; it takes them since #248.)
+    const msg = messagesOf(withFilterHints(PurchaseSearchSchema), { agencies: [3] });
     expect(msg).toContain("agencies");
     expect(msg).not.toContain("perimeterAgencies");
     expect(msg).toContain("non supporté par cet endpoint");

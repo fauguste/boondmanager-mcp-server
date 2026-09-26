@@ -286,7 +286,7 @@ Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut
     schema: TimesheetSearchSchema,
     summaryFn: timesheetSummary,
     title: "Rechercher des feuilles de temps",
-    description: `Recherche des feuilles de temps (CRA mensuels) dans BoondManager.
+    description: `Recherche des feuilles de temps (CRA mensuels) dans BoondManager, par mois, ressource, état de validation (\`validationStates\` : waitingForValidation / validated / rejected) et périmètre (\`perimeter*\`).
 
 ⚠️ \`startMonth\` et \`endMonth\` (format YYYY-MM) sont requis par l'API — passer YYYY-MM-DD ou les omettre renvoie un 422.
 

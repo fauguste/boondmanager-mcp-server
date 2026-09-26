@@ -1055,3 +1055,74 @@ describe("fields projection availability", () => {
     expect(TimesheetSearchSchema.safeParse({ fields: ["term"] }).success).toBe(false);
   });
 });
+
+describe("finance / activity search filters (issue #248)", () => {
+  // Every filter below was verified live: `meta.totals.rows` shrinks when it
+  // is sent. The schemas are strict, so an accepted name here is a name the
+  // API honours — the whole point of #247 / #248.
+  it("invoices: states, closed, creditNote, period enum, perimeter and sorting", () => {
+    const parsed = InvoiceSearchSchema.parse({
+      states: [1, 3],
+      closed: false,
+      creditNote: false,
+      period: "expectedPayment",
+      startDate: "2026-01-01",
+      endDate: "2026-06-30",
+      perimeterDynamic: ["data"],
+      perimeterAgencies: [11],
+      sort: "expectedPaymentDate",
+      order: "asc",
+    });
+    expect(parsed.states).toEqual([1, 3]);
+    expect(InvoiceSearchSchema.safeParse({ period: "dueDate" }).success).toBe(false);
+    expect(InvoiceSearchSchema.safeParse({ invoiceStates: [1] }).success).toBe(false);
+  });
+
+  it("orders, actions, deliveries and payments expose their own state / type names", () => {
+    expect(OrderSearchSchema.safeParse({ states: [1], customerAgreement: true, period: "period" }).success).toBe(true);
+    expect(
+      ActionSearchSchema.safeParse({ actionTypes: [70], period: "created", periodDynamic: "thisWeek" }).success
+    ).toBe(true);
+    expect(
+      DeliverySearchSchema.safeParse({
+        deliveryStates: [0],
+        projectStates: [1],
+        period: "running",
+        transferType: "none",
+      }).success
+    ).toBe(true);
+    expect(PaymentSearchSchema.safeParse({ paymentStates: [1], purchaseTypes: [1], period: "expected" }).success).toBe(
+      true
+    );
+    // The generic name is rejected where the endpoint spells it differently.
+    expect(PaymentSearchSchema.safeParse({ states: [1] }).success).toBe(false);
+    expect(DeliverySearchSchema.safeParse({ states: [0] }).success).toBe(false);
+  });
+
+  it("timesheets and absences take validationStates as workflow strings, never ids", () => {
+    const months = { startMonth: "2026-08", endMonth: "2026-08" };
+    expect(
+      TimesheetSearchSchema.safeParse({ ...months, validationStates: ["waitingForValidation"], closed: false }).success
+    ).toBe(true);
+    expect(
+      AbsenceSearchSchema.safeParse({ ...months, validationStates: ["validated"], perimeterDynamic: ["managers"] })
+        .success
+    ).toBe(true);
+    expect(TimesheetSearchSchema.safeParse({ ...months, validationStates: [1] }).success).toBe(false);
+    expect(AbsenceSearchSchema.safeParse({ ...months, states: ["validated"] }).success).toBe(false);
+  });
+
+  it("perimeter filters carry the entity-id error on all seven endpoints", () => {
+    for (const schema of [
+      InvoiceSearchSchema,
+      OrderSearchSchema,
+      ActionSearchSchema,
+      DeliverySearchSchema,
+      PaymentSearchSchema,
+    ]) {
+      const result = schema.safeParse({ perimeterManagers: ["Jean Dupont"] });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues[0]?.message).toContain("boond_resources_search");
+    }
+  });
+});
