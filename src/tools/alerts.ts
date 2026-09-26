@@ -8,16 +8,17 @@ import { buildListStructured, SearchOutputSchema } from "./crud-factory.js";
 import { composeDescription } from "./description-builders.js";
 
 /**
- * The user's dashboard alerts (issue #255): what BoondManager itself computes
- * as needing attention (contract ends, probation ends, missing CRA, overdue
- * invoices, deliveries ending, opportunities without action…). Reading it is
- * the right first call for "what needs my attention today?", instead of
- * recomposing those rules with a dozen searches.
- *
- * `models.alert` (dictionary): `id`, `row`, `isAdministrator`, `isDaily`,
- * `isWeekly`, `params`, `module`, `state`, `indicator`. Not exercised live
- * (maintenance window while this was written): the summary prints every one
- * of those it finds and falls back to the generic summary otherwise.
+ * The user's dashboard alerts (issue #255). Observed live on 2026-09-26
+ * (issue #311): `GET /alerts` returns the **configuration** of the user's
+ * dashboard indicators, not computed occurrences — one row per indicator
+ * (`module`: actions | activityExpenses | resources…, `indicator`:
+ * `contractsEndedUpcoming`, `resourcesProbationaryDateUpcoming`,
+ * `timesReportsWithNoValidation`, `actionsUpcoming`…) with its `params`
+ * (`period` in days or `-1` = last month, `X` / `Y` = state or type ids,
+ * `perimeter` such as `dynamic_data`) and the daily / weekly report flags.
+ * There is no `/alerts/{id}` (404). So the list says *what* to watch and with
+ * which thresholds; the matching `*_search` gives the items — which is what
+ * the `attention_du_jour` prompt does.
  */
 export function alertSummary(alert: JsonApiResource): string {
   const a = alert.attributes ?? {};
@@ -27,8 +28,21 @@ export function alertSummary(alert: JsonApiResource): string {
   if (a.state !== undefined) parts.push(`État: ${renderAttributeValue(a.state)}`);
   const cadence = [a.isDaily ? "quotidien" : undefined, a.isWeekly ? "hebdomadaire" : undefined].filter(Boolean);
   if (cadence.length) parts.push(`Rapport: ${cadence.join(" + ")}`);
-  if (a.params !== undefined && a.params !== null && a.params !== "")
+  const params = a.params && typeof a.params === "object" ? (a.params as Record<string, unknown>) : undefined;
+  if (params) {
+    const bits: string[] = [];
+    if (params.period !== undefined) bits.push(`period=${String(params.period)}`);
+    for (const key of ["X", "Y", "Z"]) {
+      const v = params[key];
+      if (Array.isArray(v) && v.length > 0) bits.push(`${key}=[${v.map(String).join(",")}]`);
+    }
+    if (Array.isArray(params.perimeter) && params.perimeter.length > 0) {
+      bits.push(`perimeter=${params.perimeter.map(String).join(",")}`);
+    }
+    if (bits.length) parts.push(`Paramètres: ${bits.join(" ")}`);
+  } else if (a.params !== undefined && a.params !== null && a.params !== "") {
     parts.push(`Paramètres: ${renderAttributeValue(a.params)}`);
+  }
   for (const key of ["title", "name", "label", "count", "value"]) {
     if (a[key] !== undefined && a[key] !== null && a[key] !== "") parts.push(`${key}: ${renderAttributeValue(a[key])}`);
   }
@@ -42,15 +56,16 @@ export function registerAlertTools(server: McpServer): void {
       title: "Alertes du tableau de bord",
       description: composeDescription({
         purpose:
-          "Liste les alertes du tableau de bord de l'utilisateur, calculées par BoondManager : fins de contrat et de période d'essai, CRA manquants, factures en retard, prestations qui se terminent, opportunités sans action…",
-        when: "en premier, pour « qu'est-ce qui demande mon attention aujourd'hui ? » — avant de recomposer ces règles avec des recherches.",
+          "Liste les indicateurs d'alerte configurés sur le tableau de bord de l'utilisateur (fins de contrat, périodes d'essai, CRA / notes / absences non validés, actions à venir…) avec leurs seuils : période en jours, états visés, périmètre.",
+        when: "en premier, pour « qu'est-ce qui demande mon attention aujourd'hui ? » — la liste dit *quoi* surveiller et avec quels seuils ; l'outil `*_search` du module donne les éléments.",
         instead:
-          "la ressource `boond://alerts/me` (même contenu en JSON, lecture cacheable) ; les outils `*_search` du module concerné pour agir.",
+          "la ressource `boond://alerts/me` (même contenu en JSON) ; le prompt `attention_du_jour` enchaîne indicateur → recherche.",
         behaviour: [
-          "`GET /alerts` ne documente aucun filtre ni pagination : la liste est celle du tableau de bord de l'utilisateur authentifié.",
-          "Les attributs rendus (`module`, `indicator`, `state`, `params`, cadence de rapport) sont ceux de `models.alert` ; forme non éprouvée sur un tenant de test.",
+          "`GET /alerts` renvoie la **configuration** des indicateurs, pas des occurrences (vérifié le 2026-09-26) : une ligne par indicateur, `params.period` en jours (`-1` = mois précédent), `X` / `Y` = IDs d'états ou de types, `perimeter` (`dynamic_data` = mes données). Aucun filtre, aucune pagination, pas de `/alerts/{id}`.",
+          'Correspondances : `contractsEndedUpcoming` → `boond_contracts_search` `period: "ending"` ; `resourcesProbationaryDateUpcoming` → `period: "probationEnding"` ; `timesReportsWithNoValidation` / `expensesReportsWithNoValidation` / `absencesReportsWithNoValidation` → `boond_validations_search` (`documentTypes`, `waitingForValidation`) ; `actionsUpcoming` → `boond_actions_search` `period: "started"`.',
         ],
-        returns: "une ligne par alerte et `structuredContent.items[]`. Lecture seule.",
+        returns:
+          "une ligne par indicateur (`module`, `indicator`, paramètres, cadence de rapport) et `structuredContent.items[]`. Lecture seule.",
       }),
       inputSchema: AlertSearchSchema,
       outputSchema: SearchOutputSchema,

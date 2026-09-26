@@ -1290,8 +1290,8 @@ export const PROMPTS: PromptDefinition[] = [
     name: "attention_du_jour",
     title: "Qu'est-ce qui demande mon attention aujourd'hui ?",
     description:
-      "Lit les alertes du tableau de bord calculées par BoondManager (fins de contrat, périodes d'essai, CRA manquants, factures en retard, " +
-      "prestations qui se terminent, opportunités sans action…), les classe par urgence et propose l'outil qui traite chacune.",
+      "Lit les indicateurs d'alerte configurés sur le tableau de bord (fins de contrat, périodes d'essai, CRA / notes / absences non validés, " +
+      "actions à venir…), exécute la recherche correspondante avec les seuils configurés, et classe ce qui en sort par urgence.",
     argsSchema: {},
     domains: ["alerts", "application"],
     build: (_args, now = new Date()) => {
@@ -1300,11 +1300,16 @@ export const PROMPTS: PromptDefinition[] = [
         `Fais le point sur ce qui demande mon attention aujourd'hui (${today}).`,
         "",
         "Étapes :",
-        "1. Lire la ressource `boond://alerts/me` (pas d'appel d'outil) — à défaut `boond_alerts_search`. Ce sont les alertes calculées par BoondManager pour mon tableau de bord : ne pas les recomposer avec des recherches.",
-        "2. Grouper par module / indicateur (`module`, `indicator`, `params`), et classer : **urgent** (échéance dépassée ou sous 7 jours), **à traiter cette semaine**, **à surveiller**.",
-        '3. Pour chaque groupe, proposer l\'outil qui permet d\'agir, sans l\'appeler d\'emblée : contrats et périodes d\'essai → `boond_contracts_search` (`period: "ending"` / `"probationEnding"`) ; CRA et absences en attente → `boond_validations_search` puis `boond_validations_update` ; factures en retard → `boond_invoices_search` (`period: "expectedPayment"`, `states` impayés) ; prestations qui se terminent → `boond_deliveries_search` (`period: "running"`) ; opportunités sans action → `boond_opportunities_search` + `boond_actions_search`.',
-        "4. Restituer une liste courte, du plus urgent au moins urgent : alerte | ce qu'elle signifie | délai | action proposée (outil + filtres). Terminer par les trois choses à faire en premier.",
-        "5. Si la ressource est vide, le dire tel quel — un tableau de bord sans alerte est une information, pas un échec.",
+        "1. Lire la ressource `boond://alerts/me` (pas d'appel d'outil) — à défaut `boond_alerts_search`. Elle liste les **indicateurs configurés** sur mon tableau de bord, avec leurs seuils (`params.period` en jours, `-1` = mois précédent ; `X` / `Y` = IDs d'états ou de types ; `perimeter`, `dynamic_data` = mes données) — pas les occurrences.",
+        `2. Pour chaque indicateur, exécuter la recherche correspondante avec ses seuils (aujourd'hui = ${today}) :`,
+        '   - `contractsEndedUpcoming` → `boond_contracts_search` avec `perimeterDynamic: ["data"]`, `period: "ending"`, `startDate` = aujourd\'hui, `endDate` = aujourd\'hui + `period` jours ;',
+        '   - `resourcesProbationaryDateUpcoming` → idem avec `period: "probationEnding"` ;',
+        '   - `timesReportsWithNoValidation` / `expensesReportsWithNoValidation` / `absencesReportsWithNoValidation` → `boond_validations_search` avec `documentTypes` (`timesReport` / `expensesReport` / `absencesReport`), `validationStates: ["waitingForValidation"]`, `startMonth` / `endMonth` = mois précédent quand `period` vaut -1, `perimeterDynamic: ["data"]` ;',
+        "   - `actionsUpcoming` → `boond_actions_search` avec `period: \"started\"`, `startDate` = aujourd'hui, `endDate` = aujourd'hui + `period` jours, `actionTypes` = `X` si non vide ;",
+        "   - un indicateur sans correspondance (`resourcesWithFollowedDocuments`…) est listé tel quel, sans invention.",
+        "3. Classer ce qui en sort : **urgent** (échéance dépassée ou sous 7 jours), **à traiter cette semaine**, **à surveiller**.",
+        "4. Restituer une liste courte, du plus urgent au moins urgent : élément | indicateur | délai | action proposée (`boond_validations_update`, relance, renouvellement…). Terminer par les trois choses à faire en premier.",
+        "5. Un indicateur dont la recherche ne renvoie rien est un « rien à signaler », pas un échec.",
       ].join("\n");
     },
   },

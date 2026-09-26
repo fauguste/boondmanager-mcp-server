@@ -771,22 +771,23 @@ describe("registerAllPrompts", () => {
     });
   });
 
-  describe("attention_du_jour (#255)", () => {
-    it("reads the alerts resource first, groups by urgency and maps each module to its tool", () => {
+  describe("attention_du_jour (#255, semantics fixed by #311)", () => {
+    it("reads the configured indicators first, then runs the matching search with the configured thresholds", () => {
       const text = PROMPTS.find((p) => p.name === "attention_du_jour")!.build({}, new Date(2026, 8, 26));
       expect(text).toContain("(2026-09-26)");
       expect(text.indexOf("boond://alerts/me")).toBeLessThan(text.indexOf("boond_alerts_search"));
-      expect(text).toContain("ne pas les recomposer");
+      expect(text).toContain("indicateurs configurés");
       for (const tool of [
         "boond_contracts_search",
+        "boond_validations_search",
         "boond_validations_update",
-        "boond_invoices_search",
-        "boond_deliveries_search",
-        "boond_opportunities_search",
+        "boond_actions_search",
       ]) {
         expect(text).toContain(tool);
       }
-      expect(text).toContain("sans alerte est une information");
+      expect(text).toContain("contractsEndedUpcoming");
+      expect(text).toContain('period: "probationEnding"');
+      expect(text).toContain("rien à signaler");
     });
   });
 

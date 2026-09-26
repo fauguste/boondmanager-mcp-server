@@ -18,6 +18,14 @@ describe("parseContentDispositionFilename", () => {
     expect(parseContentDispositionFilename("attachment; filename*=UTF-8''CV%20Dupont.pdf")).toBe("CV Dupont.pdf");
   });
 
+  it("re-decodes UTF-8 bytes that fetch read as Latin-1, and normalises to NFC (#311)", () => {
+    // "Frédéric" in NFD UTF-8, byte-mapped to Latin-1 — what BoondManager's header looks like through fetch.
+    const mojibake = Buffer.from("Contrat n°2 Fre\u0301de\u0301ric.pdf", "utf8").toString("latin1");
+    expect(parseContentDispositionFilename(`attachment; filename="${mojibake}"`)).toBe("Contrat n°2 Frédéric.pdf");
+    // A genuine Latin-1 name that is not valid UTF-8 is kept as is.
+    expect(parseContentDispositionFilename('attachment; filename="r\u00e9sum\u00e9.pdf"')).toBe("résumé.pdf");
+  });
+
   it("returns undefined when absent", () => {
     expect(parseContentDispositionFilename(null)).toBeUndefined();
     expect(parseContentDispositionFilename("inline")).toBeUndefined();

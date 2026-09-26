@@ -29,8 +29,20 @@ export function isImageMime(mime: string): boolean {
 export function isPdfMime(mime: string): boolean {
   return mime.toLowerCase() === "application/pdf";
 }
-export function isDocxMime(mime: string, filename?: string): boolean {
-  return mime.toLowerCase() === DOCX_MIME || (mime === "application/octet-stream" && /\.docx$/i.test(filename ?? ""));
+/**
+ * Is this a DOCX? BoondManager serves `.docx` resumes as `application/msword`
+ * (observed live on 2026-09-26, issue #311) — the legacy Word mime — so the
+ * mime alone misses them. Accept the real mime, a `.docx` extension on any
+ * generic mime, or the zip signature (`PK\x03\x04`) on a Word / octet-stream
+ * mime: an OLE `.doc` never starts with it, a `.docx` always does.
+ */
+export function isDocxMime(mime: string, filename?: string, data?: Buffer): boolean {
+  const lower = mime.toLowerCase();
+  if (lower === DOCX_MIME) return true;
+  const generic = lower === "application/octet-stream" || lower === "application/msword";
+  if (!generic) return false;
+  if (/\.docx$/i.test(filename ?? "")) return true;
+  return data !== undefined && data.length >= 4 && data.readUInt32LE(0) === 0x04034b50;
 }
 
 export async function extractPdfText(data: Buffer): Promise<ExtractedText> {
