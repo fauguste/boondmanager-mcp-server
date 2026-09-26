@@ -37,5 +37,6 @@ export { registerPlanningAbsenceTools } from "./planning-absences.js";
 export { registerInactivityTools } from "./inactivities.js";
 export { registerFormTools } from "./forms.js";
 export { registerGroupmentTools } from "./groupments.js";
+export { registerAlertTools } from "./alerts.js";
 export { registerDocumentTools } from "./documents.js";
 export { registerWorkflowTools } from "./workflows.js";

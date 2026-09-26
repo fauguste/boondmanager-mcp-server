@@ -162,6 +162,7 @@ export const DOMAIN_ICONS: Readonly<Record<DomainName, Icon[]>> = {
   inactivities: [CLOCK],
   forms: [CHECK],
   groupments: [BRIEFCASE],
+  alerts: [BELL],
   documents: [DOCUMENT],
   workflows: [LIST],
 };

@@ -54,7 +54,6 @@ function readProjectDomains() {
  */
 const EXTRA_DOMAINS = [
   "apps",
-  "alerts",
   "subscriptions",
   "marketplace",
   "deliveries",

@@ -52,6 +52,7 @@ describe("registerAllPrompts", () => {
         "purge_rgpd_candidats",
         "preparation_facturation",
         "ingest_communication",
+        "attention_du_jour",
       ])
     );
   });
@@ -767,6 +768,25 @@ describe("registerAllPrompts", () => {
         const prompt = PROMPTS.find((p) => p.name === name)!;
         expect(prompt.domains, name).toEqual(expect.arrayContaining(domains));
       }
+    });
+  });
+
+  describe("attention_du_jour (#255)", () => {
+    it("reads the alerts resource first, groups by urgency and maps each module to its tool", () => {
+      const text = PROMPTS.find((p) => p.name === "attention_du_jour")!.build({}, new Date(2026, 8, 26));
+      expect(text).toContain("(2026-09-26)");
+      expect(text.indexOf("boond://alerts/me")).toBeLessThan(text.indexOf("boond_alerts_search"));
+      expect(text).toContain("ne pas les recomposer");
+      for (const tool of [
+        "boond_contracts_search",
+        "boond_validations_update",
+        "boond_invoices_search",
+        "boond_deliveries_search",
+        "boond_opportunities_search",
+      ]) {
+        expect(text).toContain(tool);
+      }
+      expect(text).toContain("sans alerte est une information");
     });
   });
 
