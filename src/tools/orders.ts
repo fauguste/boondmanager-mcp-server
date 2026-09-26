@@ -62,10 +62,7 @@ export function registerOrderTools(server: McpServer): void {
     schema: OrderSearchSchema,
     description: `Recherche des bons de commande dans BoondManager avec filtres par société et projet.
 
-Args:
-  - keywords (string, optional): Termes de recherche
-  - companyId, projectId (string, optional): Filtrer par entité liée
-  - page, pageSize: Pagination
+\`companyId\` / \`projectId\` sont convertis en références \`keywords\` (CSOC<id> / PRJ<id>) : l'API n'a pas de paramètre dédié.
 
 Returns: Liste des bons de commande correspondants.`,
   });

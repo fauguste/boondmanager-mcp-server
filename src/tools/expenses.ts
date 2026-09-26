@@ -165,11 +165,7 @@ export function registerExpenseTools(server: McpServer): void {
     schema: ExpenseSearchSchema,
     description: `Recherche des notes de frais dans BoondManager avec filtres par ressource, projet et période.
 
-Args:
-  - keywords (string, optional): Termes de recherche
-  - resourceId, projectId (string, optional): Filtrer par entité liée — convertis en références keywords COMP<id> / PRJ<id> (l'API n'a pas de paramètre dédié)
-  - startDate, endDate (string, optional): Période (YYYY-MM-DD)
-  - page, pageSize: Pagination
+\`resourceId\` / \`projectId\` sont convertis en références \`keywords\` (COMP<id> / PRJ<id>) : l'API n'a pas de paramètre dédié.
 
 Returns: Liste des notes de frais correspondantes.`,
   });
@@ -182,11 +178,6 @@ Returns: Liste des notes de frais correspondantes.`,
       description: `Retourne les référentiels nécessaires pour saisir une note de frais pour une ressource et un mois donnés : agence, devise et taux de change agence, **types de frais** (\`reference\` + libellé + taux de TVA), barèmes kilométriques, et couples projet / prestation imputables.
 
 À appeler AVANT \`boond_expenses_create\` : les types de frais sont définis **par agence** et ne figurent pas dans \`boond_application_dictionary\`. Les ids \`projectId\` et \`deliveryId\` sont obligatoires sur chaque ligne et l'API refuse un couple qu'elle ne juge pas imputable sur ce mois.
-
-Args:
-  - resourceId (string): ID de la ressource
-  - term (string): Mois ciblé (YYYY-MM)
-  - agencyId (string, optional): Forcer l'agence
 
 Returns: Les références à recopier dans \`boond_expenses_create\`.`,
       inputSchema: ExpenseDefaultSchema,

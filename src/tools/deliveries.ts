@@ -85,13 +85,9 @@ export function registerDeliveryTools(server: McpServer): void {
     "boond_deliveries_search",
     {
       title: "Rechercher des livraisons / CRA",
-      description: `Recherche des livraisons (comptes rendus d'activite) dans BoondManager avec filtres par projet, societe et periode.
+      description: `Recherche des livraisons (comptes rendus d'activité) dans BoondManager avec filtres par projet, société et période.
 
-Args:
-  - keywords (string, optional): Termes de recherche
-  - projectId, companyId (string, optional): Filtrer par entite liee — convertis en references keywords PRJ<id> / CSOC<id> (l'API n'a pas de parametre dedie)
-  - startDate, endDate (string, optional): Periode (YYYY-MM-DD)
-  - page, pageSize: Pagination
+\`projectId\` / \`companyId\` sont convertis en références \`keywords\` (PRJ<id> / CSOC<id>) : l'API n'a pas de paramètre dédié.
 
 Returns: Liste des livraisons correspondantes.`,
       inputSchema: DeliverySearchSchema,
