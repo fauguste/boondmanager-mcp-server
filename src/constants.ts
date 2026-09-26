@@ -61,6 +61,12 @@ export const MAX_SEARCH_PAGE = 100;
 // anything beyond this is refused with a clear message instead of silently
 // flooding the conversation.
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+/**
+ * Ceiling for a document returned as MCP `image` content (issue #263). Hosts
+ * hand `image` content to the model's vision input, so the bytes land in the
+ * context as-is: 2 MiB is a scanned receipt or a photo of a CV, not a poster.
+ */
+export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 // Hard ceiling on the body of an entity resource template
 // (`boond://candidate/{id}`). Unlike a tool, a resource has no `pageSize` and

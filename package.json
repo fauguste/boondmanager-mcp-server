@@ -64,6 +64,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "pino": "^10.3.1",
+    "unpdf": "^1.8.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {

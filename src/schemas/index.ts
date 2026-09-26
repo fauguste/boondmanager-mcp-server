@@ -543,6 +543,14 @@ export const IdSchema = z
 // the id still can't smuggle a path segment, `..`, `?` or `#` into the API
 // path. Letters are allowed in both cases because Boond derives the suffix
 // from camelCase parent types (`administrativeFile`).
+/** `mode` of `boond_documents_get` (issue #263): extracted text by default, the raw bytes on demand. */
+export const DocumentGetModeSchema = z
+  .enum(["text", "raw"])
+  .default("text")
+  .describe(
+    "text (défaut) : PDF et DOCX renvoyés en texte extrait côté serveur, images en contenu `image` ; raw : le fichier tel quel en ressource embarquée (base64)."
+  );
+
 export const DocumentIdSchema = z
   .object({
     id: z
@@ -554,6 +562,9 @@ export const DocumentIdSchema = z
       .describe("Identifiant du document, tel qu'exposé par les relations d'entités (ex. 123_resume)"),
   })
   .strict();
+
+export const DocumentGetSchema = DocumentIdSchema.extend({ mode: DocumentGetModeSchema }).strict();
+export type DocumentGetInput = z.infer<typeof DocumentGetSchema>;
 
 // ID + tab param schema
 export const IdTabSchema = z
