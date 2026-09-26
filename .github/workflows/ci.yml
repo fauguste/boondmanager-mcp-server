@@ -32,6 +32,19 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Format check
+        # Prettier is version-locked, one runtime is enough. Fails on any file
+        # `npm run format` would rewrite (issue #244: five files had drifted
+        # because nothing in CI ever ran this).
+        if: matrix.node-version == 22
+        run: npm run format:check
+
+      - name: Audit production dependencies
+        # Dev-only advisories are noise for a published server; a high/critical
+        # advisory on a runtime dependency blocks the merge.
+        if: matrix.node-version == 22
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Type check
         run: npm run typecheck
 
@@ -117,3 +130,105 @@ jobs:
         with:
           name: coverage-report
           path: coverage/
+
+  docker-build:
+    name: Docker image builds
+    # The Dockerfile used to be exercised only by the release workflow, so a PR
+    # could break the image (a moved file, a dropped dependency) and nobody saw
+    # it until the tag. Build without pushing, single platform: the multi-arch
+    # matrix and the registries stay in release.yml.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Build (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: boondmanager-mcp-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke the image (/healthz)
+        run: |
+          docker run -d --name mcp -p 3000:3000 boondmanager-mcp-server:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3000/healthz; then echo; docker rm -f mcp; exit 0; fi
+            sleep 1
+          done
+          echo "::error::/healthz never answered"; docker logs mcp; docker rm -f mcp; exit 1
+
+  tools-list-size:
+    name: tools/list payload size
+    # Every byte of `tools/list` is paid on every turn of every conversation.
+    # The unit tests cap the icons' share; this job measures the whole payload
+    # as a real stdio client receives it, fails above MAX_TOOLS_LIST_KIB, and
+    # posts the delta against the base branch on the PR so growth is a visible
+    # line-item of the review rather than a surprise at release time.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # Raise this consciously, in the PR that crosses it, with the reason in
+      # its description. 382 KiB on 2026-09-26 (185 tools).
+      MAX_TOOLS_LIST_KIB: 480
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Build and measure this revision
+        run: |
+          npm ci
+          npm run build
+          node scripts/measure-tools-list.mjs --json > /tmp/head.json
+          node scripts/measure-tools-list.mjs --max-kib "$MAX_TOOLS_LIST_KIB"
+
+      - name: Build and measure the base branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git worktree add /tmp/base "origin/${{ github.base_ref }}"
+          cd /tmp/base
+          npm ci
+          npm run build
+          # The measurement script of THIS revision, so a change to the script
+          # itself cannot skew the comparison.
+          node "$GITHUB_WORKSPACE/scripts/measure-tools-list.mjs" --json > /tmp/base.json || echo '{}' > /tmp/base.json
+
+      - name: Render the comparison
+        run: |
+          if [ -s /tmp/base.json ] && [ "$(cat /tmp/base.json)" != "{}" ]; then
+            node scripts/measure-tools-list.mjs --compare /tmp/base.json --markdown | tee /tmp/comment.md
+          else
+            node scripts/measure-tools-list.mjs --markdown | tee /tmp/comment.md
+          fi
+          cat /tmp/comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on the PR (sticky)
+        # Forks get a read-only token: the summary above still carries the
+        # figures, the comment is best-effort.
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          MARKER='<!-- tools-list-size -->'
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -n1)
+          if [ -n "$EXISTING" ]; then
+            gh api --method PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" -F body=@/tmp/comment.md >/dev/null
+          else
+            gh pr comment "$PR" --body-file /tmp/comment.md
+          fi

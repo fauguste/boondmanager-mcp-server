@@ -1,0 +1,64 @@
+name: Smoke test (live BoondManager)
+
+# Read-only checks against a real tenant, through the real server. This is the
+# only automated test that can see what the unit tests cannot: a filter the API
+# silently ignores (#247), a required parameter the schema forgot (#244 found
+# `startMonth`/`endMonth` on /absences-reports this way), a route answering its
+# app shell instead of JSON (#186).
+#
+# Gated on the BOOND_SANDBOX_* secrets: absent (forks, a checkout without the
+# sandbox), the job reports "skipped" and stays green. Never runs on PRs — a
+# secret must not be reachable from an untrusted branch.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, 05:20 UTC on weekdays — after BoondManager's own maintenance
+    # window and before the API monitor (Mondays 09:00 UTC).
+    - cron: "20 5 * * 1-5"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: search / get / filters on the sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BOOND_USER_TOKEN: ${{ secrets.BOOND_SANDBOX_USER_TOKEN }}
+      BOOND_CLIENT_TOKEN: ${{ secrets.BOOND_SANDBOX_CLIENT_TOKEN }}
+      BOOND_CLIENT_KEY: ${{ secrets.BOOND_SANDBOX_CLIENT_KEY }}
+      # Optional: a sandbox on another host (defaults to the production API URL).
+      BOOND_BASE_URL: ${{ secrets.BOOND_SANDBOX_BASE_URL }}
+      BOOND_DISABLE_UPDATE_CHECK: "1"
+    steps:
+      - name: Check the sandbox secrets are configured
+        id: gate
+        run: |
+          if [ -z "$BOOND_USER_TOKEN" ] || [ -z "$BOOND_CLIENT_TOKEN" ] || [ -z "$BOOND_CLIENT_KEY" ]; then
+            echo "BOOND_SANDBOX_* secrets are not configured — skipping (see CLAUDE.md § CI/CD)." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.configured == 'true'
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.configured == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install and build
+        if: steps.gate.outputs.configured == 'true'
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run the smoke test
+        if: steps.gate.outputs.configured == 'true'
+        run: node scripts/smoke-live.mjs

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAbsenceTools } from "./absences.js";
 import { apiRequest } from "../services/boond-client.js";
+import { AbsenceSearchSchema } from "../schemas/index.js";
 
 vi.mock("../services/boond-client.js", () => ({
   apiRequest: vi.fn().mockResolvedValue({ data: { id: "31", type: "absencesreport", attributes: {} } }),
@@ -227,5 +228,21 @@ describe("absence handlers (#245)", () => {
     expect(apiRequest).toHaveBeenCalledWith("/absences-reports/31", "PUT", {
       data: { type: "absencesreport", id: "31", attributes: { note: "corrigé" } },
     });
+  });
+});
+
+describe("AbsenceSearchSchema", () => {
+  // `GET /absences-reports` answers 422 `1017 - Missing required attribute`
+  // without both months (caught live by scripts/smoke-live.mjs, issue #244);
+  // the schema used to declare them optional, so the tool's most natural
+  // call — no arguments — always failed.
+  it("requires startMonth and endMonth in YYYY-MM", () => {
+    const missing = AbsenceSearchSchema.safeParse({});
+    expect(missing.success).toBe(false);
+    const paths = missing.success ? [] : missing.error.issues.map((i) => i.path.join("."));
+    expect(paths).toEqual(expect.arrayContaining(["startMonth", "endMonth"]));
+
+    expect(AbsenceSearchSchema.safeParse({ startMonth: "2026-9", endMonth: "2026-09" }).success).toBe(false);
+    expect(AbsenceSearchSchema.safeParse({ startMonth: "2026-09", endMonth: "2026-09" }).success).toBe(true);
   });
 });

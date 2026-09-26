@@ -620,9 +620,14 @@ describe("AbsenceUpdateSchema", () => {
 });
 
 describe("AbsenceSearchSchema", () => {
-  it("should accept empty search with defaults", () => {
-    const result = AbsenceSearchSchema.parse({});
+  // startMonth / endMonth are required by GET /absences-reports (issue #244).
+  it("should apply pagination defaults once both months are given", () => {
+    const result = AbsenceSearchSchema.parse({ startMonth: "2026-09", endMonth: "2026-09" });
     expect(result.page).toBe(1);
+  });
+
+  it("should reject an empty search (the API answers 422 without both months)", () => {
+    expect(AbsenceSearchSchema.safeParse({}).success).toBe(false);
   });
 });
 
@@ -1022,7 +1027,7 @@ describe("fields projection availability", () => {
     ["InvoiceSearchSchema", InvoiceSearchSchema, {}],
     ["OrderSearchSchema", OrderSearchSchema, {}],
     ["DeliverySearchSchema", DeliverySearchSchema, {}],
-    ["AbsenceSearchSchema", AbsenceSearchSchema, {}],
+    ["AbsenceSearchSchema", AbsenceSearchSchema, { startMonth: "2026-01", endMonth: "2026-03" }],
     ["ExpenseSearchSchema", ExpenseSearchSchema, {}],
     ["PositioningSearchSchema", PositioningSearchSchema, {}],
     ["PaymentSearchSchema", PaymentSearchSchema, {}],

@@ -1549,6 +1549,28 @@ read-only, confirmation *kept* for deletes. Pinned in
 ## CI/CD
 
 - **CI** (`.github/workflows/ci.yml`): Runs on push/PR to main. Matrix: Node 22 + 24 + 26 (Node 20 dropped — EOL 2026-04-30). Steps: install, lint, typecheck, test:coverage, build, **MCPB validate** (Node 22 only), **TOOLS.md drift check** (Node 22 only), **Claude Code plugin drift check** (Node 22 only), **version consistency** across `package.json` / `manifest.json` / `server.json` / `gemini-extension.json` / `plugin.json` / `marketplace.json` / the plugin's `@X.Y.Z` npm pin / **both pins inside `server.json.packages[]`** (the npm `version` and the `v X.Y.Z` in the mcpb URL), coverage upload.
+  Since issue #244, also on Node 22: **`format:check`** (five files had
+  drifted because nothing ran it), **`npm audit --omit=dev --audit-level=high`**
+  (runtime advisories only), plus two separate jobs — **`docker-build`**
+  (buildx, no push, then a `/healthz` probe of the started container; before,
+  the image was only built at release time) and **`tools-list-size`**
+  (`scripts/measure-tools-list.mjs` spawns `dist/index.js` over stdio and
+  measures the real `tools/list` bytes; fails above `MAX_TOOLS_LIST_KIB`
+  (480, 382 KiB on 2026-09-26), builds the base branch and posts a sticky
+  `<!-- tools-list-size -->` comment with the delta on same-repo PRs). Raise
+  the ceiling in the PR that crosses it, with the reason in its description.
+- **Smoke test (live)** (`.github/workflows/smoke-live.yml` +
+  `scripts/smoke-live.mjs`): `workflow_dispatch` + nightly on weekdays, gated
+  on the `BOOND_SANDBOX_*` secrets (absent → the job says "skipped" and stays
+  green; never runs on PRs). **Read-only**: `current-user`, one `*_search` per
+  domain with `pageSize: 1` (required months / dates / `resourceId` filled
+  from context, other required args → skipped and listed), one `*_get`, and
+  the #247 assertion that a `companyId` filter *reduces* `meta.totals.rows`
+  on `/invoices` and `/orders`. Locally: `set -a; source .env; set +a; node
+  scripts/smoke-live.mjs`. It is the only test that sees what the RAML does
+  not say — its first run found that `GET /absences-reports` **requires**
+  `startMonth` / `endMonth` (422 otherwise) while the schema declared them
+  optional.
 - **Release** (`.github/workflows/release.yml`): Triggered on `v*` tags. Publishes to:
   - **npm** with `--provenance --access public`
   - **GitHub Releases** with `.mcpb` bundle attached; release body extracted from the matching `## [X.Y.Z]` section of `CHANGELOG.md`
@@ -1567,6 +1589,7 @@ read-only, confirmation *kept* for deletes. Pinned in
 |--------|---------|---------|
 | `DOCKERHUB_USERNAME` | `release.yml`, `docker-publish.yml` | Docker Hub user/org that owns the published repo |
 | `DOCKERHUB_TOKEN` | `release.yml`, `docker-publish.yml` | Docker Hub access token (Account Settings → Security) |
+| `BOOND_SANDBOX_USER_TOKEN` / `BOOND_SANDBOX_CLIENT_TOKEN` / `BOOND_SANDBOX_CLIENT_KEY` | `smoke-live.yml` | Optional. JWT components of a **sandbox** tenant for the read-only live smoke test; absent = job skipped. `BOOND_SANDBOX_BASE_URL` optional too. |
 
 `GITHUB_TOKEN` is auto-provided by GitHub Actions and covers GHCR, GitHub Releases, and CodeQL — no extra setup. The MCP Registry uses GitHub OIDC (no secret).
 

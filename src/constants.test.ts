@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_BASE_URL, CHARACTER_LIMIT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, API_PATHS, ENTITY_TABS } from "./constants.js";
+import {
+  DEFAULT_BASE_URL,
+  CHARACTER_LIMIT,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  API_PATHS,
+  ENTITY_TABS,
+} from "./constants.js";
 
 describe("constants", () => {
   it("DEFAULT_BASE_URL should be a valid URL", () => {
