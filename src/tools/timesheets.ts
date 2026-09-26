@@ -3,28 +3,18 @@ import {
   ResourceTimesheetSchema,
   TimesheetCreateSchema,
   TimesheetDefaultSchema,
-  TimesheetGetSchema,
   TimesheetSearchSchema,
   TimesheetUpdateSchema,
 } from "../schemas/index.js";
-import type {
-  ResourceTimesheetInput,
-  TimesheetCreateInput,
-  TimesheetDefaultInput,
-  TimesheetLineInput,
-  TimesheetSearchInput,
-  TimesheetGetInput,
-  TimesheetUpdateInput,
-} from "../schemas/index.js";
+import type { ResourceTimesheetInput, TimesheetDefaultInput, TimesheetLineInput } from "../schemas/index.js";
+import { apiRequest, formatListResponse } from "../services/boond-client.js";
 import {
-  apiRequest,
-  apiSearch,
-  buildSearchQuery,
-  formatDetailResponse,
-  formatListResponse,
-} from "../services/boond-client.js";
-import { progressReporterFrom } from "../services/progress.js";
-import { buildJsonApiBody, MutationOutputSchema, entityRef } from "./crud-factory.js";
+  buildJsonApiBody,
+  registerCreateTool,
+  registerGetTool,
+  registerSearchTool,
+  registerUpdateTool,
+} from "./crud-factory.js";
 import type { JsonApiResource, JsonApiResponse } from "../types.js";
 import { composeDescription } from "./description-builders.js";
 
@@ -190,6 +180,13 @@ export function timesheetSummary(item: JsonApiResource): string {
   return parts.join(" | ");
 }
 
+const OPTS = {
+  entityName: "feuille de temps",
+  entityNamePlural: "feuilles de temps",
+  apiPath: "/times-reports",
+  prefix: "boond_timesheets",
+};
+
 export function registerTimesheetTools(server: McpServer): void {
   server.registerTool(
     "boond_timesheets_default",
@@ -223,82 +220,36 @@ export function registerTimesheetTools(server: McpServer): void {
     }
   );
 
-  server.registerTool(
-    "boond_timesheets_create",
-    {
-      title: "Créer une feuille de temps",
-      description: composeDescription({
-        purpose: "Crée la feuille de temps (CRA) d'un mois pour une ressource, avec ses lignes jour par jour.",
-        when: "pour ouvrir le CRA d'un couple (ressource, mois) qui n'existe pas encore, après `boond_timesheets_default`.",
-        instead:
-          "`boond_timesheets_search` (`startMonth`/`endMonth` + `resourceId`) d'abord : l'API ne déduplique pas, deux CRA peuvent coexister sur le même mois ; `boond_timesheets_update` si le CRA existe déjà.",
-        behaviour: [
-          "Un CRA est un conteneur mensuel (`term` + `resource`) ; les lignes vont dans `regularTimes[]` (production et absences) et `exceptionalTimes[]` — chaque ligne = un jour, une durée, un type d'unité d'œuvre, et pour la production un couple `projectId` / `deliveryId` imputable.",
-          "`state` n'est pas un champ d'écriture : il est piloté par le workflow de validation (`boond_validations_search`).",
-          "Écriture non idempotente. Modèle d'écriture établi en lecture depuis l'API (forme des CRA existants et de `/times-reports/default`), pas encore éprouvé en écriture sur un tenant de test — voir CLAUDE.md.",
-        ],
-        returns: "confirmation, ID créé (`structuredContent.id`) et fiche du CRA.",
-      }),
-      inputSchema: TimesheetCreateSchema,
-      outputSchema: MutationOutputSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params: TimesheetCreateInput) => {
-      const body = buildTimesheetBody(params as Record<string, unknown>);
-      const response = await apiRequest("/times-reports", "POST", body);
-      const text = formatDetailResponse(response);
-      const entity = Array.isArray(response.data) ? response.data[0] : response.data;
-      return {
-        content: [
-          { type: "text" as const, text: `✅ Feuille de temps créée avec succès.\nID: ${entity?.id}\n\n${text}` },
-        ],
-        structuredContent: entityRef(response),
-      };
-    }
-  );
+  registerCreateTool(server, OPTS, TimesheetCreateSchema, buildTimesheetBody, {
+    title: "Créer une feuille de temps",
+    description: composeDescription({
+      purpose: "Crée la feuille de temps (CRA) d'un mois pour une ressource, avec ses lignes jour par jour.",
+      when: "pour ouvrir le CRA d'un couple (ressource, mois) qui n'existe pas encore, après `boond_timesheets_default`.",
+      instead:
+        "`boond_timesheets_search` (`startMonth`/`endMonth` + `resourceId`) d'abord : l'API ne déduplique pas, deux CRA peuvent coexister sur le même mois ; `boond_timesheets_update` si le CRA existe déjà.",
+      behaviour: [
+        "Un CRA est un conteneur mensuel (`term` + `resource`) ; les lignes vont dans `regularTimes[]` (production et absences) et `exceptionalTimes[]` — chaque ligne = un jour, une durée, un type d'unité d'œuvre, et pour la production un couple `projectId` / `deliveryId` imputable.",
+        "`state` n'est pas un champ d'écriture : il est piloté par le workflow de validation (`boond_validations_search`).",
+        "Écriture non idempotente. Modèle d'écriture établi en lecture depuis l'API (forme des CRA existants et de `/times-reports/default`), pas encore éprouvé en écriture sur un tenant de test — voir CLAUDE.md.",
+      ],
+      returns: "confirmation, ID créé (`structuredContent.id`) et fiche du CRA.",
+    }),
+  });
 
-  server.registerTool(
-    "boond_timesheets_update",
-    {
-      title: "Modifier une feuille de temps",
-      description: composeDescription({
-        purpose: "Met à jour un CRA existant : commentaires, clôture, ou remplacement complet de ses lignes.",
-        when: "pour compléter ou corriger le CRA d'un mois déjà ouvert (trouvé via `boond_timesheets_search`).",
-        instead: "`boond_timesheets_create` si aucun CRA n'existe encore pour ce couple (ressource, mois).",
-        behaviour: [
-          "Mise à jour partielle sur les champs simples, MAIS `regularTimes` / `exceptionalTimes` **remplacent le tableau entier** : relire le CRA (`boond_timesheets_get`), fusionner, renvoyer la liste complète — envoyer une seule ligne efface le mois.",
-          "`state` n'est pas un champ d'écriture (workflow de validation).",
-        ],
-        returns: "confirmation et fiche du CRA mis à jour.",
-      }),
-      inputSchema: TimesheetUpdateSchema,
-      outputSchema: MutationOutputSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params: TimesheetUpdateInput) => {
-      const body = buildTimesheetBody(params as Record<string, unknown>);
-      const response = await apiRequest(`/times-reports/${params.id}`, "PUT", body);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `✅ Feuille de temps #${params.id} mise à jour.\n\n${formatDetailResponse(response)}`,
-          },
-        ],
-        structuredContent: { id: params.id, ...entityRef(response) },
-      };
-    }
-  );
+  registerUpdateTool(server, OPTS, TimesheetUpdateSchema, buildTimesheetBody, {
+    method: "PUT",
+    title: "Modifier une feuille de temps",
+    description: composeDescription({
+      purpose: "Met à jour un CRA existant : commentaires, clôture, ou remplacement complet de ses lignes.",
+      when: "pour compléter ou corriger le CRA d'un mois déjà ouvert (trouvé via `boond_timesheets_search`).",
+      instead: "`boond_timesheets_create` si aucun CRA n'existe encore pour ce couple (ressource, mois).",
+      behaviour: [
+        "Mise à jour partielle sur les champs simples, MAIS `regularTimes` / `exceptionalTimes` **remplacent le tableau entier** : relire le CRA (`boond_timesheets_get`), fusionner, renvoyer la liste complète — envoyer une seule ligne efface le mois.",
+        "`state` n'est pas un champ d'écriture (workflow de validation).",
+      ],
+      returns: "confirmation et fiche du CRA mis à jour.",
+    }),
+  });
 
   // Get timesheets for a specific resource
   server.registerTool(
@@ -329,56 +280,24 @@ Returns: Liste des feuilles de temps de la ressource avec jours/heures et statut
     }
   );
 
-  // Search all timesheets
-  server.registerTool(
-    "boond_timesheets_search",
-    {
-      title: "Rechercher des feuilles de temps",
-      description: `Recherche des feuilles de temps (CRA mensuels) dans BoondManager.
+  // Search all timesheets — the factory hands `timesheetSummary` to the list
+  // formatter and to `structuredContent` alike (#243).
+  registerSearchTool(server, OPTS, {
+    schema: TimesheetSearchSchema,
+    summaryFn: timesheetSummary,
+    title: "Rechercher des feuilles de temps",
+    description: `Recherche des feuilles de temps (CRA mensuels) dans BoondManager.
 
 ⚠️ \`startMonth\` et \`endMonth\` (format YYYY-MM) sont requis par l'API — passer YYYY-MM-DD ou les omettre renvoie un 422.
 
 Returns: Liste des feuilles de temps correspondantes (une ligne par CRA : mois, période, statut, totaux).`,
-      inputSchema: TimesheetSearchSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
-    },
-    async (params: TimesheetSearchInput, extra: unknown) => {
-      const query = buildSearchQuery(params);
-      const response = await apiSearch("/times-reports", query, progressReporterFrom(extra));
-      const text = formatListResponse(response, "feuille de temps", params.fields, timesheetSummary);
-      return {
-        content: [{ type: "text" as const, text }],
-      };
-    }
-  );
+  });
 
-  // Get a specific timesheet by ID
-  server.registerTool(
-    "boond_timesheets_get",
-    {
-      title: "Détails d'une feuille de temps",
-      description: `Récupère les informations détaillées d'une feuille de temps (CRA mensuel) par son ID.
+  registerGetTool(server, OPTS, {
+    withTab: false,
+    title: "Détails d'une feuille de temps",
+    description: `Récupère les informations détaillées d'une feuille de temps (CRA mensuel) par son ID.
 
 Returns: Données JSON complètes de la feuille de temps (jours, heures, statut, détails).`,
-      inputSchema: TimesheetGetSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async (params: TimesheetGetInput) => {
-      const response = await apiRequest(`/times-reports/${params.id}`);
-      const text = formatDetailResponse(response);
-      return {
-        content: [{ type: "text" as const, text }],
-      };
-    }
-  );
+  });
 }

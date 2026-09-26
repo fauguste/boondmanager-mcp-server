@@ -1196,6 +1196,23 @@ export const DeliverySearchSchema = z
   })
   .strict();
 
+export const DeliveryCreateSchema = z
+  .object({
+    projectId: EntityIdSchema.describe("ID du projet"),
+    resourceId: EntityIdSchema.describe("ID de la ressource portée par la prestation"),
+    title: z.string().optional().describe("Titre de la prestation/livraison"),
+    typeOf: z.number().int().optional().describe("Type de prestation"),
+    state: z.number().int().optional().describe("État"),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
+    quantity: z.number().optional().describe("Nombre de jours / quantité"),
+    unitPrice: z.number().optional().describe("Prix journalier HT"),
+    averageDailyCost: z.number().optional().describe("Coût journalier moyen"),
+    forceAverageDailyPriceExcludingTax: z.boolean().optional().describe("Forcer le prix journalier HT"),
+    note: z.string().optional().describe("Notes, mappées vers informationComments"),
+  })
+  .strict();
+
 // ---- Absence schemas ----
 
 export const AbsenceCreateSchema = z
@@ -1479,6 +1496,96 @@ export const PaymentSearchSchema = z
     startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
     endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
     ...paginationShape,
+  })
+  .strict();
+
+export const PaymentCreateSchema = z
+  .object({
+    purchaseId: EntityIdSchema.describe("ID de l'achat réglé"),
+    paymentDate: z.string().optional().describe("Date du paiement (YYYY-MM-DD), mappée vers date"),
+    performedDate: z.string().optional().describe("Date de paiement effectif (YYYY-MM-DD)"),
+    expectedDate: z.string().optional().describe("Date de paiement attendu (YYYY-MM-DD)"),
+    startDate: z.string().optional().describe("Date de début couverte (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin couverte (YYYY-MM-DD)"),
+    amount: z.number().optional().describe("Montant HT du paiement, mappé vers amountExcludingTax"),
+    amountExcludingTax: z.number().optional().describe("Montant HT du paiement"),
+    state: z.number().int().optional().describe("État du paiement / achat"),
+    paymentMethod: z.number().int().optional().describe("Méthode de paiement"),
+    taxRates: z.array(z.number()).optional().describe("Taux de taxes Boond"),
+    reference: z.string().optional().describe("Référence bancaire ou règlement"),
+    note: z.string().optional().describe("Note interne, mappée vers informationComments"),
+  })
+  .strict();
+
+// ---- Purchase schemas (achats / sous-traitance) ----
+
+export const PurchaseSearchSchema = z
+  .object({
+    keywords: z.string().optional().describe("Mots-clés de recherche"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
+    ...paginationShape,
+  })
+  .strict();
+
+export const PurchaseCreateSchema = z
+  .object({
+    title: z.string().optional().describe("Titre de l'achat/sous-traitance"),
+    companyId: EntityIdSchema.optional().describe("ID de la société fournisseur"),
+    contactId: EntityIdSchema.optional().describe("ID du contact fournisseur"),
+    projectId: EntityIdSchema.optional().describe("ID du projet associé"),
+    state: z.number().int().optional().describe("État de l'achat"),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
+    note: z.string().optional().describe("Notes / commentaires"),
+  })
+  .strict();
+
+// ---- Provider invoice schemas (factures fournisseur) ----
+
+export const ProviderInvoiceSearchSchema = z
+  .object({
+    keywords: z.string().optional().describe("Mots-clés de recherche"),
+    companyId: EntityIdSchema.optional().describe("Filtrer par ID société fournisseur (référence keywords CSOC<id>)"),
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
+    ...paginationShape,
+  })
+  .strict();
+
+export const ProviderInvoiceCreateSchema = z
+  .object({
+    reference: z.string().min(1).describe("Référence de la facture fournisseur"),
+    resourceId: EntityIdSchema.describe("ID de la ressource portée par la facture fournisseur"),
+    companyId: EntityIdSchema.optional().describe("ID de la société fournisseur, mappé vers providerCompany"),
+    contactId: EntityIdSchema.optional().describe("ID du contact fournisseur, mappé vers providerContact"),
+    invoiceDate: z.string().optional().describe("Date de facture (YYYY-MM-DD)"),
+    startDate: z.string().min(1).describe("Date de début de période (YYYY-MM-DD)"),
+    endDate: z.string().min(1).describe("Date de fin de période (YYYY-MM-DD)"),
+    amountExcludingTax: z.number().optional().describe("Montant HT"),
+    amountIncludingTax: z.number().optional().describe("Montant TTC"),
+    currency: z.number().optional().describe("Devise Boond"),
+    exchangeRate: z.number().optional().describe("Taux de change"),
+    currencyAgency: z.number().optional().describe("Devise agence"),
+    exchangeRateAgency: z.number().optional().describe("Taux de change agence"),
+    state: z.number().int().optional().describe("État de la facture fournisseur"),
+  })
+  .strict();
+
+// ---- Contract schemas ----
+
+export const ContractCreateSchema = z
+  .object({
+    resourceId: EntityIdSchema.optional().describe("ID de la ressource associée"),
+    typeOf: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Type de contrat : ID entier du dictionnaire `setting.typeOf.contract` (CDI, CDD, freelance…), via `boond_application_dictionary`"
+      ),
+    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
+    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
+    note: z.string().optional().describe("Notes / commentaires"),
   })
   .strict();
 

@@ -4,13 +4,10 @@ import { createMockServer, registeredToolNames, toolCallback } from "./test-help
 import { registerDeliveryTools } from "./deliveries.js";
 import { apiRequest, apiSearch } from "../services/boond-client.js";
 
-vi.mock("../services/boond-client.js", () => ({
-  apiRequest: vi.fn().mockResolvedValue({ data: { id: "21", type: "delivery", attributes: {} } }),
-  apiSearch: vi.fn().mockResolvedValue({ data: [] }),
-  buildSearchQuery: vi.fn((params: Record<string, unknown>) => params),
-  formatListResponse: vi.fn().mockReturnValue(""),
-  formatDetailResponse: vi.fn().mockReturnValue(""),
-}));
+vi.mock("../services/boond-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/boond-client.js")>();
+  return { ...actual, apiRequest: vi.fn(), apiSearch: vi.fn() };
+});
 
 describe("registerDeliveryTools", () => {
   let server: McpServer;
@@ -19,6 +16,8 @@ describe("registerDeliveryTools", () => {
     server = createMockServer();
     vi.mocked(apiRequest).mockReset();
     vi.mocked(apiRequest).mockResolvedValue({ data: { id: "21", type: "delivery", attributes: {} } } as never);
+    vi.mocked(apiSearch).mockReset();
+    vi.mocked(apiSearch).mockResolvedValue({ data: [] } as never);
   });
 
   it("should register 3 delivery tools", () => {

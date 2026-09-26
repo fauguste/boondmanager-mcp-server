@@ -132,8 +132,8 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_deliveries_create` | Creer une prestation/livraison | write |
-| `boond_deliveries_get` | Details d'une livraison / CRA | read · idempotent |
+| `boond_deliveries_create` | Créer une prestation/livraison | write |
+| `boond_deliveries_get` | Détails d'une livraison / CRA | read · idempotent |
 | `boond_deliveries_search` | Rechercher des livraisons / CRA | read · idempotent · open-world |
 
 ### documents (3)
@@ -215,8 +215,8 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_payments_create` | Creer un paiement | write |
-| `boond_payments_get` | Details d'un paiement | read · idempotent |
+| `boond_payments_create` | Créer un paiement | write |
+| `boond_payments_get` | Détails d'un(e) paiement | read · idempotent |
 | `boond_payments_search` | Rechercher des paiements | read · idempotent · open-world |
 
 ### planning_absences (1)
@@ -273,8 +273,8 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 
 | Tool | Title | Hints |
 |---|---|---|
-| `boond_provider_invoices_create` | Creer une facture fournisseur | write |
-| `boond_provider_invoices_get` | Details d'une facture fournisseur | read · idempotent |
+| `boond_provider_invoices_create` | Créer une facture fournisseur | write |
+| `boond_provider_invoices_get` | Détails d'une facture fournisseur | read · idempotent |
 | `boond_provider_invoices_search` | Rechercher des factures fournisseur | read · idempotent · open-world |
 
 ### purchases (4)

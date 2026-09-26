@@ -4,10 +4,10 @@ import { registerContractTools } from "./contracts.js";
 import { toolCallback } from "./test-helpers.js";
 import { apiRequest } from "../services/boond-client.js";
 
-vi.mock("../services/boond-client.js", () => ({
-  apiRequest: vi.fn(),
-  formatDetailResponse: vi.fn().mockReturnValue(""),
-}));
+vi.mock("../services/boond-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../services/boond-client.js")>();
+  return { ...actual, apiRequest: vi.fn(), apiSearch: vi.fn() };
+});
 
 function createMockServer() {
   return {
