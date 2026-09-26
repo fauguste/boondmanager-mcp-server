@@ -7,6 +7,7 @@ import {
   ReferenceCreateSchema,
   ReferenceUpdateSchema,
   ReferenceIdSchema,
+  IdSchema,
 } from "../schemas/index.js";
 import type {
   ResourceTechnicalDataUpdateInput,
@@ -25,7 +26,9 @@ import {
 } from "./crud-factory.js";
 import { registerTabTools } from "./tab-tools.js";
 import type { TabDefinition } from "./tab-tools.js";
-import { apiRequest, formatDetailResponse } from "../services/boond-client.js";
+import { apiRequest, formatDetailResponse, formatListResponse } from "../services/boond-client.js";
+import { contractsOfResource, contractSummary } from "./contracts.js";
+import { composeDescription } from "./description-builders.js";
 
 const OPTS = {
   entityName: "ressource",
@@ -313,6 +316,40 @@ export function registerResourceTools(server: McpServer): void {
   registerDeleteTool(server, OPTS);
 
   registerTabTools(server, { ...OPTS, prefix: OPTS.prefix }, RESOURCE_TABS);
+
+  // Not a real tab (issue #253): `/resources/{id}/contracts` answers 404. The
+  // contracts live in the `included` of the administrative tab, which the tab
+  // renderer drops — so a caller used to need one `boond_contracts_get` per id.
+  server.registerTool(
+    "boond_resources_contracts",
+    {
+      title: "Contrats d'une ressource",
+      description: composeDescription({
+        purpose:
+          "Liste les contrats de travail d'une ressource (type, dates, période d'essai, motif de fin), par son ID.",
+        when: "pour connaître le contrat en cours, l'historique contractuel ou la fin de période d'essai d'un collaborateur.",
+        instead:
+          "`boond_contracts_search` pour balayer un périmètre entier (fins de contrat du mois…), `boond_contracts_get` pour la fiche complète d'un contrat.",
+        behaviour: [
+          "Lit `/resources/{id}/administrative` et en extrait les contrats inclus — il n'existe pas d'onglet `contracts` côté API.",
+        ],
+        returns:
+          "une ligne par contrat, du plus récent au plus ancien tel que BoondManager les renvoie, avec les IDs pour `boond_contracts_get`. Lecture seule.",
+      }),
+      inputSchema: IdSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async (params) => {
+      const contracts = await contractsOfResource(params.id);
+      const text = formatListResponse(
+        { data: contracts, meta: { totals: { rows: contracts.length } } },
+        "contrat",
+        undefined,
+        contractSummary
+      );
+      return { content: [{ type: "text" as const, text }] };
+    }
+  );
 
   server.registerTool(
     "boond_resources_technical_data_update",

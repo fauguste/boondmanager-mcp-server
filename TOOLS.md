@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**191 tools** across **38 domains** · **13 prompts** · **47 resources** · **6 resource templates**.
+**194 tools** across **38 domains** · **14 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -121,12 +121,13 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_contacts_search` | Rechercher des contacts | read · idempotent · open-world |
 | `boond_contacts_update` | Modifier un(e) contact | write · idempotent |
 
-### contracts (2)
+### contracts (3)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_contracts_create` | Créer un contrat | write |
 | `boond_contracts_get` | Détails d'un contrat | read · idempotent |
+| `boond_contracts_search` | Rechercher des contrats de travail | read · idempotent · open-world |
 
 ### deliveries (3)
 
@@ -302,7 +303,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_reporting_resources` | Reporting ressources | read · idempotent · open-world |
 | `boond_reporting_synthesis` | Reporting synthèse | read · idempotent · open-world |
 
-### resources (20)
+### resources (21)
 
 | Tool | Title | Hints |
 |---|---|---|
@@ -310,6 +311,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_resources_actions` | Actions liées à une ressource | read · idempotent |
 | `boond_resources_administrative` | Données administratives d'une ressource | read · idempotent |
 | `boond_resources_advantages` | Avantages d'une ressource | read · idempotent |
+| `boond_resources_contracts` | Contrats d'une ressource | read · idempotent |
 | `boond_resources_create` | Créer un(e) ressource | write |
 | `boond_resources_delete` | Supprimer un(e) ressource | delete |
 | `boond_resources_expenses_reports` | Notes de frais d'une ressource | read · idempotent |
@@ -372,10 +374,11 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_webhooks_get` | Détails d'un(e) webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
-### workflow (13)
+### workflow (14)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_workflow_alertes_contrats` | Fins de contrat et périodes d'essai à venir | read · idempotent |
 | `boond_workflow_candidats_pour_opportunite` | Candidats correspondant à une opportunité | read · idempotent |
 | `boond_workflow_cartographie_competences` | Cartographie des compétences d'un périmètre | read · idempotent |
 | `boond_workflow_cvs_a_mettre_a_jour` | Audit fraîcheur des CV / dossiers techniques | read · idempotent |
@@ -390,12 +393,13 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_workflow_synthese_equipe` | Synthèse d'une équipe | read · idempotent |
 | `boond_workflow_traiter_note_de_frais` | Traiter un justificatif en note de frais | read · idempotent |
 
-## Prompts (13)
+## Prompts (14)
 
 Pre-orchestrated workflows surfaced via the MCP prompts API.
 
 | Prompt | Title | Args |
 |---|---|---|
+| `alertes_contrats` | Fins de contrat et périodes d'essai à venir | `horizon_jours?` `manager_id?` |
 | `candidats_pour_opportunite` | Candidats correspondant à une opportunité | `opportunity_id` |
 | `cartographie_competences` | Cartographie des compétences d'un périmètre | `manager_id?` `agency_id?` `top_n?` |
 | `cvs_a_mettre_a_jour` | Audit fraîcheur des CV / dossiers techniques | `seuil_mois?` `manager_id?` |

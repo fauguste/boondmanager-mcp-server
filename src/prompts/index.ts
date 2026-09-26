@@ -851,6 +851,65 @@ export const PROMPTS: PromptDefinition[] = [
   },
 
   {
+    name: "alertes_contrats",
+    title: "Fins de contrat et périodes d'essai à venir",
+    description:
+      "Liste les contrats de travail qui se terminent et les périodes d'essai qui expirent dans les prochains jours " +
+      "sur un périmètre, pour anticiper renouvellements, ruptures et entretiens de fin de PE.",
+    argsSchema: {
+      horizon_jours: z
+        .string()
+        .optional()
+        .describe("Nombre de jours à anticiper — entier (défaut: 45). Ex: '30' pour les échéances les plus proches."),
+      manager_id: z
+        .string()
+        .optional()
+        .describe(
+          "Manager pour restreindre à son équipe. " +
+            ID_OR_NAME_HINT_RESOURCE +
+            " Si absent, scope = mon équipe via `perimeterDynamic: ['managers']`."
+        ),
+    },
+    domains: ["contracts", "resources", "application"],
+    build: ({ horizon_jours, manager_id }, now = new Date()) => {
+      const parsedHorizon = Number.parseInt(horizon_jours ?? "", 10);
+      const horizonDays = Number.isFinite(parsedHorizon) && parsedHorizon > 0 ? parsedHorizon : 45;
+      const startDate = toIsoDate(now);
+      const endDate = toIsoDate(addDays(now, horizonDays));
+      let preamble = "";
+      let scope: string;
+      if (manager_id) {
+        const r = resolveEntity(manager_id, "resource", "<MANAGER_ID>");
+        preamble = r.preamble;
+        scope = `\`perimeterManagers: [${r.idForFilter}]\``;
+      } else {
+        scope = "`perimeterDynamic: ['managers']`";
+      }
+      const lines: string[] = [
+        `Liste les fins de contrat et les fins de période d'essai des ${horizonDays} prochains jours.`,
+        "",
+      ];
+      if (preamble) lines.push(preamble);
+      lines.push(
+        `Périmètre : ${scope}. Fenêtre (calculée côté serveur) : ${startDate} → ${endDate}, à utiliser telle quelle.`,
+        "",
+        "Étapes :",
+        "1. Lire `boond://dictionary/typeOf/contracts` (pas d'appel d'outil) pour traduire `typeOf` (CDI, CDD, freelance…), et `boond://dictionary/states/probations` pour `probationState`.",
+        "2. Appeler `boond_contracts_search` — recherche composée, une requête par ressource, donc `pageSize: 100` et paginer si `structuredContent.count` atteint 100 :",
+        `   - ${scope}, \`resourceStates\` limités aux états « actif » (\`boond://dictionary/states/resources\`)`,
+        `   - \`period: "ending"\`, \`startDate: "${startDate}"\`, \`endDate: "${endDate}"\` → les contrats qui se terminent dans la fenêtre`,
+        '3. Rappeler `boond_contracts_search` avec les mêmes filtres et `period: "probationEnding"` → les périodes d\'essai (initiale ou renouvelée) qui expirent dans la fenêtre.',
+        "4. Pour un contrat de l'étape 2 dont le type est CDD / mission : vérifier via `boond_resources_contracts` qu'aucun contrat suivant n'existe déjà (renouvellement saisi).",
+        "5. Restituer deux tableaux triés par échéance croissante :",
+        "   - **Fins de contrat** : ressource | type | début | fin | jours restants | contrat suivant déjà saisi (oui/non) | motif de fin s'il est renseigné",
+        "   - **Fins de période d'essai** : ressource | type | fin de PE (initiale / renouvelée) | jours restants | état de la PE",
+        "6. Mettre en évidence les échéances à moins de 15 jours, et conclure par les actions à engager (entretien de fin de PE, proposition de renouvellement, préavis)."
+      );
+      return lines.join("\n");
+    },
+  },
+
+  {
     name: "saisir_cra",
     title: "Saisir ou compléter un CRA",
     description:

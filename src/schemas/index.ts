@@ -1395,6 +1395,36 @@ export const AbsenceSearchSchema = z
   })
   .strict();
 
+// ---- Contract search (issue #253) ----
+// There is no collection GET on `/contracts` (WAF 403 page, the RAML only
+// documents `post`) and no `/resources/{id}/contracts` tab (404) — probed live
+// on 2026-09-26. A resource's contracts are only reachable through
+// `/resources/{id}/administrative` (`included` of type `contract`). This schema
+// therefore drives a *composed* search: the resource filters select the
+// resources to scan, the contract filters are applied server-side to what
+// their administrative tabs return.
+export const ContractSearchSchema = z
+  .object({
+    resourceId: EntityIdSchema.optional().describe(
+      "ID d'une ressource : ne lit que ses contrats (aucune recherche de ressources)."
+    ),
+    keywords: z.string().optional().describe("Mots-clés de la recherche de ressources (nom, prénom…)."),
+    resourceStates: intArray("IDs d'états de ressource à parcourir — `boond://dictionary/states/resources`."),
+    resourceTypes: resourceTypesField,
+    ...perimeterShape,
+    contractTypes: intArray("IDs de types de contrat à retenir — `boond://dictionary/typeOf/contracts` (CDI, CDD…)."),
+    period: z
+      .enum(["running", "ending", "starting", "probationEnding"])
+      .optional()
+      .describe(
+        "Fenêtre `startDate` / `endDate` appliquée côté serveur : running (contrat en cours sur la fenêtre), ending (fin de contrat dans la fenêtre), starting (début dans la fenêtre), probationEnding (fin de période d'essai — `probationEndDate` ou `renewalProbationEndDate` — dans la fenêtre)."
+      ),
+    startDate: startDateField,
+    endDate: endDateField,
+    ...paginationShape,
+  })
+  .strict();
+
 // ---- Expense schemas (Notes de frais) ----
 
 /**
@@ -2102,3 +2132,4 @@ export type ExpenseLineInput = z.infer<typeof ExpenseLineSchema>;
 export type ExpenseCreateInput = z.infer<typeof ExpenseCreateSchema>;
 export type ExpenseUpdateInput = z.infer<typeof ExpenseUpdateSchema>;
 export type ExpenseDefaultInput = z.infer<typeof ExpenseDefaultSchema>;
+export type ContractSearchInput = z.infer<typeof ContractSearchSchema>;
