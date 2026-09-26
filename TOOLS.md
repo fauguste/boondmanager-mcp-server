@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**191 tools** across **38 domains** · **13 prompts** · **22 resources** · **6 resource templates**.
+**191 tools** across **38 domains** · **13 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -410,33 +410,58 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `synthese_equipe` | Synthèse d'une équipe | `manager_id?` `periode?` |
 | `traiter_note_de_frais` | Traiter un justificatif en note de frais | `resource_id?` `project_id?` `term?` `contexte?` |
 
-## Resources (22)
+## Resources (47)
 
 Reference data exposed as MCP resources.
 
 | URI | Title |
 |---|---|
 | `boond://application/current-user` | Utilisateur courant |
+| `boond://application/current-user/rights` | Droits et périmètre de l'utilisateur |
+| `boond://dictionary/actions/candidates` | Types d'action — candidats |
+| `boond://dictionary/actions/contacts` | Types d'action — contacts |
+| `boond://dictionary/actions/invoices` | Types d'action — factures |
+| `boond://dictionary/actions/opportunities` | Types d'action — opportunités |
+| `boond://dictionary/actions/orders` | Types d'action — bons de commande |
+| `boond://dictionary/actions/projects` | Types d'action — projets |
+| `boond://dictionary/actions/resources` | Types d'action — ressources |
 | `boond://dictionary/activityAreas` | Secteurs d'activité |
+| `boond://dictionary/contractEndReasons` | Motifs de fin de contrat |
 | `boond://dictionary/countries` | Pays |
 | `boond://dictionary/currencies` | Devises |
 | `boond://dictionary/experiences` | Niveaux d'expérience |
 | `boond://dictionary/expertiseAreas` | Domaines d'expertise |
 | `boond://dictionary/languages` | Langues |
 | `boond://dictionary/mobilityAreas` | Mobilités |
+| `boond://dictionary/origins` | Origines opportunités |
 | `boond://dictionary/overrides` | Libellés personnalisés (overrides) |
+| `boond://dictionary/paymentMethods` | Modes de paiement |
+| `boond://dictionary/paymentTerms` | Conditions de paiement |
+| `boond://dictionary/sources` | Sources candidats |
 | `boond://dictionary/states/candidates` | États candidats |
 | `boond://dictionary/states/companies` | États sociétés |
 | `boond://dictionary/states/contacts` | États contacts |
+| `boond://dictionary/states/deliveries` | États prestations |
 | `boond://dictionary/states/invoices` | États factures |
 | `boond://dictionary/states/opportunities` | États opportunités |
 | `boond://dictionary/states/orders` | États bons de commande |
+| `boond://dictionary/states/payments` | États paiements |
 | `boond://dictionary/states/positionings` | États positionnements |
+| `boond://dictionary/states/probations` | États périodes d'essai |
+| `boond://dictionary/states/products` | États produits |
 | `boond://dictionary/states/projects` | États projets |
+| `boond://dictionary/states/provider-invoices` | États factures fournisseurs |
+| `boond://dictionary/states/purchases` | États achats |
+| `boond://dictionary/states/quotations` | États devis |
 | `boond://dictionary/states/resources` | États ressources |
+| `boond://dictionary/taxRates` | Taux de TVA |
 | `boond://dictionary/tools` | Outils / Technos |
+| `boond://dictionary/typeOf/activities` | Types d'activité |
 | `boond://dictionary/typeOf/contacts` | Types contacts |
+| `boond://dictionary/typeOf/contracts` | Types contrats |
+| `boond://dictionary/typeOf/deliveries` | Types prestations |
 | `boond://dictionary/typeOf/projects` | Types projets |
+| `boond://dictionary/typeOf/purchases` | Types achats |
 | `boond://dictionary/typeOf/resources` | Types ressources |
 
 ## Resource templates (6)

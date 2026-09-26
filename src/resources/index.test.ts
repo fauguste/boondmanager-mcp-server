@@ -33,7 +33,8 @@ describe("registerAllResources", () => {
     const dicts = REGISTERED_RESOURCES.filter((r) => r.name.startsWith("dictionary/"));
     expect(dicts.length).toBeGreaterThan(10);
     for (const r of dicts) {
-      expect(r.uri).toMatch(/^boond:\/\/dictionary\/[a-zA-Z]+(\/[a-zA-Z]+)?$/);
+      // Hyphens: `states/provider-invoices` mirrors the `provider-invoices` domain name.
+      expect(r.uri).toMatch(/^boond:\/\/dictionary\/[a-zA-Z-]+(\/[a-zA-Z-]+)?$/);
     }
   });
 
@@ -63,6 +64,32 @@ describe("registerAllResources", () => {
         "typeOf/resources",
         "typeOf/contacts",
         "typeOf/projects",
+        // Issue #261 — finance / delivery states, contract types, per-entity
+        // action types, origins and the finance settings.
+        "states/deliveries",
+        "states/payments",
+        "states/purchases",
+        "states/provider-invoices",
+        "states/products",
+        "states/quotations",
+        "states/probations",
+        "typeOf/contracts",
+        "typeOf/deliveries",
+        "typeOf/purchases",
+        "typeOf/activities",
+        "actions/candidates",
+        "actions/contacts",
+        "actions/resources",
+        "actions/opportunities",
+        "actions/projects",
+        "actions/invoices",
+        "actions/orders",
+        "sources",
+        "origins",
+        "paymentMethods",
+        "paymentTerms",
+        "taxRates",
+        "contractEndReasons",
         "tools",
         "expertiseAreas",
         "countries",
@@ -158,6 +185,68 @@ describe("registerAllResources", () => {
     const body = JSON.parse(result.contents[0].text);
     expect(body).toHaveProperty("error");
     expect(body.error).toMatch(/setting\.tool/);
+  });
+
+  it("exposes the current-user rights view (issue #261)", () => {
+    expect(REGISTERED_RESOURCES.map((r) => r.uri)).toContain("boond://application/current-user/rights");
+  });
+
+  it("current-user/rights read callback condenses advancedRights and the included agencies / poles", async () => {
+    const apiSpy = vi.spyOn(boondClient, "apiRequest").mockResolvedValue({
+      data: {
+        id: "18081",
+        type: "currentuser",
+        attributes: {
+          login: "f@example.com",
+          level: "manager",
+          isOwner: false,
+          narrowPerimeter: false,
+          advancedRights: {
+            resources: {
+              entity: {
+                authorizations: { creation: true, deletion: false },
+                fields: [{ name: "mainManager", writeAccess: { always: true } }],
+              },
+              search: { perimeter: { allAgencies: true, myAgencies: false, agencies: [], managers: ["12"] } },
+            },
+            notifications: { isEnabled: true, search: { perimeter: { allGroup: true } } },
+            version: "1",
+          },
+        },
+      },
+      included: [
+        { id: "645", type: "customer", attributes: { name: "SILAMIR" } },
+        { id: "1", type: "agency", attributes: { name: "Paris" } },
+        { id: "7", type: "pole", attributes: { name: "Data" } },
+        { id: "1002", type: "app", attributes: { name: "Quotations" } },
+      ],
+    });
+    registerAllResources(server);
+    const call = vi.mocked(server.registerResource).mock.calls.find((c) => c[0] === "application/current-user/rights");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cb = call![3] as any;
+    const result = await cb(new URL("boond://application/current-user/rights"));
+    expect(apiSpy).toHaveBeenCalledWith("/application/current-user");
+    const body = JSON.parse(result.contents[0].text);
+    expect(body).toEqual({
+      id: "18081",
+      login: "f@example.com",
+      level: "manager",
+      isOwner: false,
+      narrowPerimeter: false,
+      customer: { id: "645", name: "SILAMIR" },
+      agencies: [{ id: "1", name: "Paris" }],
+      poles: [{ id: "7", name: "Data" }],
+      businessUnits: [],
+      apps: ["Quotations"],
+      rights: {
+        // field-level detail dropped, false perimeter flags and empty lists dropped
+        resources: { creation: true, deletion: false, perimeter: { allAgencies: true, managers: ["12"] } },
+        notifications: { isEnabled: true, perimeter: { allGroup: true } },
+      },
+    });
+    // No field-level detail leaks through.
+    expect(result.contents[0].text).not.toContain("writeAccess");
   });
 
   it("current-user read callback hits /application/current-user", async () => {

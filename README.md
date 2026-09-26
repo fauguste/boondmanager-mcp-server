@@ -133,8 +133,12 @@ Le serveur expose les dictionnaires de reference Boond comme **ressources MCP** 
 | URI | Contenu |
 |-----|---------|
 | `boond://application/current-user` | Profil de l'utilisateur courant (id, agence, permissions) |
-| `boond://dictionary/states/{entity}` | Etats par entite : `resources`, `candidates`, `contacts`, `companies`, `opportunities`, `projects`, `invoices`, `orders`, `positionings`, `absences` |
-| `boond://dictionary/typeOf/{entity}` | Types par entite : `resources`, `candidates`, `contacts`, `projects`, `actions`, `absences` |
+| `boond://dictionary/states/{entity}` | Etats par entite : `resources`, `candidates`, `contacts`, `companies`, `opportunities`, `projects`, `invoices`, `orders`, `positionings`, `deliveries`, `payments`, `purchases`, `provider-invoices`, `products`, `quotations`, `probations` |
+| `boond://dictionary/typeOf/{entity}` | Types par entite : `resources`, `contacts`, `projects`, `contracts`, `deliveries`, `purchases`, `activities` |
+| `boond://dictionary/actions/{entity}` | Types d'action par entite de rattachement : `candidates`, `contacts`, `resources`, `opportunities`, `projects`, `invoices`, `orders` (le `typeOf` de `boond_actions_create`) |
+| `boond://dictionary/{sources,origins}` | Sources de candidature, origines d'opportunite |
+| `boond://dictionary/{paymentMethods,paymentTerms,taxRates,contractEndReasons}` | Parametres finance / RH utilises par les ecritures |
+| `boond://application/current-user/rights` | Niveau, agences / poles / BU, apps et droits par entite de l'utilisateur (vue condensee de `current-user`) |
 | `boond://dictionary/countries` | Liste des pays |
 | `boond://dictionary/currencies` | Liste des devises |
 | `boond://dictionary/languages` | Liste des langues |

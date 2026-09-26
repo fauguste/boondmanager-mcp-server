@@ -43,14 +43,14 @@ Vocabulaire des préfixes de \`keywords\` : \`CSOC<id>\` (société), \`CCON<id>
 
 **Chaque endpoint n'en accepte qu'un sous-ensemble, énuméré dans la description de l'outil.** \`keywords\` étant du texte libre, un préfixe non supporté n'est pas rejeté : il part en recherche plein texte et renvoie 0 résultat. Une page vide après un préfixe hors liste ne veut donc pas dire « aucune entité liée » — vérifier la description de l'outil avant de conclure.
 
-\`keywordsType\` (recherches \`resources\`, \`candidates\`, \`contacts\`, \`companies\` uniquement) restreint \`keywords\` à un champ ; les valeurs admises diffèrent par endpoint (\`lastName\`/\`fullName\`/\`titleSkills\`… sur les personnes, \`name\`/\`phones\`/\`emails\` sur les sociétés) — lire l'énumération du schéma. Sans lui, la recherche porte sur le champ par défaut de l'endpoint (CV ou texte intégral).
+\`keywordsType\` (recherches \`resources\`, \`candidates\`, \`contacts\`, \`companies\` uniquement) restreint \`keywords\` à un champ ; les valeurs admises diffèrent par endpoint (\`lastName\`/\`fullName\`/\`titleSkills\`… sur les personnes, \`name\`/\`phones\`/\`emails\` sur les sociétés) — lire l'énumération du schéma. Sans lui, la recherche porte sur le champ par défaut de l'endpoint (CV / texte intégral).
 
 ## Économie de contexte
 
 - \`pageSize\` : défaut 30, maximum 500. \`page\` est plafonné à 100 : au-delà, affiner les filtres plutôt que paginer.
-- \`fields: ["title", "updateDate", …]\` remplace le résumé d'une ligne par les seuls attributs demandés — à utiliser dès qu'une page de résultats est large. Disponible sur les outils de recherche, sauf \`boond_timesheets_search\` et \`boond_reporting_*\`.
-- Fiche complète d'une entité connue : lire la ressource \`boond://{candidate|resource|contact|company|opportunity|project}/<id>\` (fiche + informations + compétences en une lecture) plutôt que d'enchaîner \`_get\` puis les outils d'onglet.
+- \`fields: ["title", "updateDate", …]\` remplace le résumé d'une ligne par les seuls attributs demandés — à utiliser sur les pages larges. Sur les outils de recherche, sauf \`boond_timesheets_search\` et \`boond_reporting_*\`.
+- Fiche complète d'une entité connue : lire la ressource \`boond://{candidate|resource|contact|company|opportunity|project}/<id>\` (fiche + informations + compétences) plutôt que \`_get\` puis les onglets.
 
 ## États et types
 
-Ces filtres attendent des identifiants **entiers** et leur nom est propre à l'endpoint : \`resourceStates\`, \`candidateStates\`, \`opportunityStates\`, \`projectStates\`, \`states\` + \`typesOf\` (contacts), \`states\` seul (sociétés — il n'y a pas de filtre de type sur \`/companies\`). Pour les traduire en libellés, lire les ressources \`boond://dictionary/*\` (states, typeOf, countries, currencies, languages) plutôt que d'appeler \`boond_application_dictionary\` : même contenu, sans consommer un appel d'outil.`;
+Ces filtres attendent des identifiants **entiers** et leur nom est propre à l'endpoint : \`resourceStates\`, \`candidateStates\`, \`opportunityStates\`, \`projectStates\`, \`states\` + \`typesOf\` (contacts), \`states\` seul (sociétés — il n'y a pas de filtre de type sur \`/companies\`). Pour les traduire en libellés, lire \`boond://dictionary/*\` (\`states/<entité>\`, \`typeOf/<entité>\`, \`actions/<entité>\` = \`typeOf\` d'action, \`sources\`, \`origins\`…) plutôt que \`boond_application_dictionary\` : même contenu, sans appel d'outil. \`boond://application/current-user/rights\` : agences, pôles, droits par entité (avant d'écrire ou de filtrer par \`perimeter*\`).`;
