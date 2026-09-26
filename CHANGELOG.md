@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_Rien pour l'instant._
+
+## [2.17.0] - 2026-09-26
+
+Clôture de l'**audit technique et fonctionnel v2.16.0** (#265, 40 tickets) : les 21 tickets encore ouverts au matin du 26 septembre ont été livrés en une PR chacun (#291 → #312), CI verte à chaque merge. Le catalogue passe de **185 à 235 outils, 13 à 24 prompts, 22 à 48 ressources, 38 à 42 domaines** ; `tools/list` de 382 à ~500 Kio (plafond CI relevé à 560 Kio, leviers `BOOND_MCP_PROFILE` / `BOOND_MCP_ICONS=0` inchangés). Aucun nom d'outil existant ne change ; deux schémas deviennent plus stricts (`boond_absences_search` exige `startMonth` / `endMonth`, `period` devient une énumération sur sept recherches) et `boond_documents_get` renvoie par défaut le texte extrait (`mode: "raw"` pour l'ancien comportement).
+
+**Ce qui est vérifié et ce qui ne l'est pas.** Les lectures ont été rejouées sur le tenant de production le jour même (smoke test 39/39, filtres de #248 mesurés sur `meta.totals.rows`, sondes de forme des routes d'écriture). Les nouveaux **corps d'écriture** — validations, drapeaux, todolists, avantages, inactivités, formulaires, regroupements, `update` des entités finance — sont déduits de la RAML et des modèles du dictionnaire et n'ont pas été exercés (tenant de production) ; chaque description le dit, et #311 liste ce qu'il reste à éprouver sur un tenant de test. Nouvelle dépendance runtime : `unpdf` (extraction de texte des PDF, 2 Mo, sans binaire natif) ; `pino-pretty` sort des dépendances de production.
+
 ### Added
 
 - **Alertes du tableau de bord : `boond_alerts_search`, ressource `boond://alerts/me`, prompt `attention_du_jour`** ([#255](https://github.com/silamir/boondmanager-mcp-server/issues/255)). BoondManager calcule déjà les alertes du tableau de bord (fins de contrat et de période d'essai, CRA manquants, factures en retard, prestations qui se terminent, opportunités sans action) et aucun outil ne les exposait : les prompts recomposaient ces règles à coups de recherches. Nouveau domaine `alerts` (dans les cinq profils) : `boond_alerts_search` (`GET /alerts` — la RAML ne documente aucun paramètre, seule la projection `fields` côté client est offerte), la ressource `boond://alerts/me` (même liste en JSON, gated par le domaine, bornée à `MAX_RESOURCE_BYTES`) et le prompt `attention_du_jour` (+ miroir) qui lit la ressource, classe par urgence et propose l'outil qui traite chaque module. Rendu d'après `models.alert` (`module`, `indicator`, `state`, `params`, rapport quotidien / hebdomadaire), **non éprouvé** en maintenance — dit dans la description. Catalogue : 235 outils, 24 prompts, 48 ressources, 42 domaines.
