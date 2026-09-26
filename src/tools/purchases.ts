@@ -9,7 +9,23 @@ import {
 } from "./crud-factory.js";
 import { composeDescription } from "./description-builders.js";
 
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
+
 const OPTS = { entityName: "achat", entityNamePlural: "achats", apiPath: "/purchases", prefix: "boond_purchases" };
+
+// `ENTITY_TABS.purchases` — `/purchases/{id}/information` verified live on
+// 2026-09-26 (issue #258); `/actions` answers 404 on this entity.
+const PURCHASE_TABS: TabDefinition[] = [
+  {
+    name: "information",
+    tab: "information",
+    title: "Informations complètes d'un achat/sous-traitance",
+    subject: "les informations complètes",
+    content: "période, quantité, montants, taux de TVA, conditions de paiement, ressource, projet et prestation liés",
+    returns: "Fiche complète de l'achat (relations ressource, agence, projet, prestation incluses).",
+  },
+];
 
 /** `/purchases` payload: the three optional ids become relationships. */
 export function buildPurchaseBody(params: Record<string, unknown>): unknown {
@@ -65,4 +81,6 @@ Returns: Liste des achats correspondants.`,
       returns: "`{ id, deleted, reason? }` — vérifier `deleted`, qui vaut `false` en cas de refus utilisateur.",
     }),
   });
+
+  registerTabTools(server, OPTS, PURCHASE_TABS);
 }

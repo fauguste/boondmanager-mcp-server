@@ -9,6 +9,8 @@ import {
   registerDeleteTool,
 } from "./crud-factory.js";
 import { defaultDeleteDescription } from "./description-builders.js";
+import { registerTabTools } from "./tab-tools.js";
+import type { TabDefinition } from "./tab-tools.js";
 
 const OPTS = {
   entityName: "bon de commande",
@@ -16,6 +18,38 @@ const OPTS = {
   apiPath: "/orders",
   prefix: "boond_orders",
 };
+
+// `ENTITY_TABS.orders` — verified live on 2026-09-26 (issue #258).
+const ORDER_TABS: TabDefinition[] = [
+  {
+    name: "information",
+    tab: "information",
+    title: "Informations complètes d'un bon de commande",
+    subject: "les informations complètes",
+    content: "période, conditions de paiement, références acheteur, prestations et projet liés",
+    returns: "Fiche complète du bon de commande (relations société, contact, projet, prestations incluses).",
+  },
+  {
+    name: "actions",
+    tab: "actions",
+    title: "Actions liées à un bon de commande",
+    subject: "les actions",
+    content: "envois, relances, notes",
+    returns: "Liste des actions rattachées au bon de commande.",
+  },
+  {
+    name: "invoices",
+    tab: "invoices",
+    title: "Factures d'un bon de commande",
+    subject: "les factures émises",
+    content: "référence, période, état, montants HT/TTC",
+    returns:
+      "Liste des factures rattachées au bon de commande, précédée des totaux calculés par BoondManager : commandé HT, facturé HT/TTC, reste à facturer (`deltaInvoicedExcludingTax`) et répartition par état.",
+    behaviour: [
+      "C'est l'entrée de la préparation de facturation : `deltaInvoicedExcludingTax` > 0 signifie qu'il reste à facturer sur la commande.",
+    ],
+  },
+];
 
 /** Maps convenience inputs and schedule shortcuts to the Boond JSON:API body. */
 function buildOrderBody(params: Record<string, unknown>): unknown {
@@ -82,4 +116,6 @@ Returns: Liste des bons de commande correspondants.`,
       prefix: "boond_orders",
     }),
   });
+
+  registerTabTools(server, OPTS, ORDER_TABS);
 }

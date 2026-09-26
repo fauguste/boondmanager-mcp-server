@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**185 tools** across **38 domains** · **13 prompts** · **22 resources** · **6 resource templates**.
+**191 tools** across **38 domains** · **13 prompts** · **22 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -162,13 +162,15 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_flags_get` | Détails d'un(e) drapeau | read · idempotent |
 | `boond_flags_search` | Rechercher des drapeaux | read · idempotent · open-world |
 
-### invoices (5)
+### invoices (7)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_invoices_actions` | Actions liées à une facture | read · idempotent |
 | `boond_invoices_create` | Créer un(e) facture | write |
 | `boond_invoices_delete` | Supprimer une facture | delete |
 | `boond_invoices_get` | Détails d'un(e) facture | read · idempotent |
+| `boond_invoices_information` | Informations complètes d'une facture | read · idempotent |
 | `boond_invoices_search` | Rechercher des factures | read · idempotent · open-world |
 | `boond_invoices_update` | Modifier un(e) facture | write · idempotent |
 
@@ -201,13 +203,16 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_opportunities_simulation` | Simulation financière d'une opportunité | read · idempotent |
 | `boond_opportunities_update` | Modifier un(e) opportunité | write · idempotent |
 
-### orders (5)
+### orders (8)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_orders_actions` | Actions liées à un bon de commande | read · idempotent |
 | `boond_orders_create` | Créer un(e) bon de commande | write |
 | `boond_orders_delete` | Supprimer un bon de commande | delete |
 | `boond_orders_get` | Détails d'un(e) bon de commande | read · idempotent |
+| `boond_orders_information` | Informations complètes d'un bon de commande | read · idempotent |
+| `boond_orders_invoices` | Factures d'un bon de commande | read · idempotent |
 | `boond_orders_search` | Rechercher des bons de commande | read · idempotent · open-world |
 | `boond_orders_update` | Modifier un(e) bon de commande | write · idempotent |
 
@@ -277,13 +282,14 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_provider_invoices_get` | Détails d'une facture fournisseur | read · idempotent |
 | `boond_provider_invoices_search` | Rechercher des factures fournisseur | read · idempotent · open-world |
 
-### purchases (4)
+### purchases (5)
 
 | Tool | Title | Hints |
 |---|---|---|
 | `boond_purchases_create` | Créer un achat/sous-traitance | write |
 | `boond_purchases_delete` | Supprimer un achat/sous-traitance | delete |
 | `boond_purchases_get` | Détails d'un achat/sous-traitance | read · idempotent |
+| `boond_purchases_information` | Informations complètes d'un achat/sous-traitance | read · idempotent |
 | `boond_purchases_search` | Rechercher des achats/sous-traitance | read · idempotent · open-world |
 
 ### reporting (5)

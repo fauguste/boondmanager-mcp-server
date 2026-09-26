@@ -6,7 +6,7 @@ import { tabDescription } from "./description-builders.js";
 import type { EntityWording } from "./description-builders.js";
 
 /**
- * The 42 entity-tab tools (`boond_candidates_technical_data`,
+ * The 48 entity-tab tools (`boond_candidates_technical_data`,
  * `boond_companies_invoices`, …) were six byte-identical registration loops in
  * six domain files, each with its own copy of the `TabDefinition` interface and
  * its own hand-typed description ending in a redundant `Args: - id (string)`

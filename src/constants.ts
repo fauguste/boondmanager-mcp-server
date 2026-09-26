@@ -223,6 +223,12 @@ export const ENTITY_TABS = {
     "purchases",
     "productivity",
   ] as const,
-  invoices: ["information", "actions", "billable-items"] as const,
+  // `billable-items` was listed here but never wired (#258): probed live on
+  // 2026-09-26, `GET /invoices/{id}/billable-items` answers 403 "Potential
+  // missing contractual feature(s): labs, appsNoCode" — a feature-gated route,
+  // absent from the RAML. Not exposed until a tenant is seen answering 200.
+  invoices: ["information", "actions"] as const,
   orders: ["information", "actions", "invoices"] as const,
+  // `/purchases/{id}/actions` and `/billable-items` answer 404 (same probe).
+  purchases: ["information"] as const,
 } as const;
