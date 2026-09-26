@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**212 tools** across **39 domains** · **22 prompts** · **47 resources** · **6 resource templates**.
+**213 tools** across **39 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -389,7 +389,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_webhooks_get` | Détails d'un(e) webhook | read · idempotent |
 | `boond_webhooks_search` | Rechercher des webhooks | read · idempotent · open-world |
 
-### workflow (22)
+### workflow (23)
 
 | Tool | Title | Hints |
 |---|---|---|
@@ -401,6 +401,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_workflow_factures_a_relancer` | Factures impayées à relancer | read · idempotent |
 | `boond_workflow_fiche_consultant` | Fiche complète d'un collaborateur | read · idempotent |
 | `boond_workflow_fin_de_mission` | Anticipation des fins de mission | read · idempotent |
+| `boond_workflow_ingest_communication` | Ingérer un e-mail ou un compte rendu dans le CRM | read · idempotent |
 | `boond_workflow_marge_projet` | Marge d'un projet : simulé vs réalisé | read · idempotent |
 | `boond_workflow_pipeline_commercial` | Pipeline commercial sur une période | read · idempotent |
 | `boond_workflow_preparation_entretien` | Préparer un entretien candidat | read · idempotent |
@@ -416,7 +417,7 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_workflow_synthese_equipe` | Synthèse d'une équipe | read · idempotent |
 | `boond_workflow_traiter_note_de_frais` | Traiter un justificatif en note de frais | read · idempotent |
 
-## Prompts (22)
+## Prompts (23)
 
 Pre-orchestrated workflows surfaced via the MCP prompts API.
 
@@ -430,6 +431,7 @@ Pre-orchestrated workflows surfaced via the MCP prompts API.
 | `factures_a_relancer` | Factures impayées à relancer | `society_id?` |
 | `fiche_consultant` | Fiche complète d'un collaborateur | `resource_id` |
 | `fin_de_mission` | Anticipation des fins de mission | `horizon_jours?` `manager_id?` |
+| `ingest_communication` | Ingérer un e-mail ou un compte rendu dans le CRM | `contenu?` `type_action?` `opportunite_id?` |
 | `marge_projet` | Marge d'un projet : simulé vs réalisé | `project_id` `periode?` |
 | `pipeline_commercial` | Pipeline commercial sur une période | `date_debut` `date_fin` `manager_id?` |
 | `preparation_entretien` | Préparer un entretien candidat | `candidate_id` `opportunity_id?` |
