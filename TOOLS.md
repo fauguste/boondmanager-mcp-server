@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**202 tools** across **38 domains** · **14 prompts** · **47 resources** · **6 resource templates**.
+**203 tools** across **39 domains** · **14 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -158,6 +158,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_expenses_get` | Détails d'un(e) note de frais | read · idempotent |
 | `boond_expenses_search` | Rechercher des notes de frais | read · idempotent · open-world |
 | `boond_expenses_update` | Modifier un(e) note de frais | write · idempotent |
+
+### find (1)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_find` | Résoudre un nom ou un e-mail en ID | read · idempotent |
 
 ### flags (2)
 

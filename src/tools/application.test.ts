@@ -19,9 +19,9 @@ describe("registerApplicationTools", () => {
     dictionaryService.resetDictionaryCacheForTests();
   });
 
-  it("should register 2 application tools", () => {
+  it("should register 3 application tools (dictionary, current-user, find)", () => {
     registerApplicationTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(2);
+    expect(server.registerTool).toHaveBeenCalledTimes(3);
   });
 
   it("should register dictionary tool", () => {

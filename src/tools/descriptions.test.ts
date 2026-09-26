@@ -419,8 +419,11 @@ describe("tool/prompt/resource description lengths", () => {
   });
 
   it("registers a realistic number of tools (sanity check)", () => {
+    // 203 since #262 (185 at the 2026-09-25 audit + tabs #258, contracts #253,
+    // updates #252, find #262). The ceiling guards against a runaway
+    // registrar, not against the catalogue growing on purpose.
     expect(tools.length).toBeGreaterThan(150);
-    expect(tools.length).toBeLessThan(200);
+    expect(tools.length).toBeLessThan(260);
   });
 
   it("registers a few prompts (sanity check)", () => {
