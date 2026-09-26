@@ -1445,6 +1445,26 @@ export const ContractSearchSchema = z
   })
   .strict();
 
+// ---- Validation decision (issue #251) ----
+// `PUT /validations/{id}` with the workflow state the RAML enumerates on
+// `validationStates` (`validated` | `rejected`). No RAML documents the write;
+// the route follows the pattern of every other single-entity PUT and has NOT
+// been exercised (production tenant) — see CLAUDE.md → *Validations*.
+export const ValidationDecisionSchema = z
+  .object({
+    id: EntityIdSchema.describe(
+      "ID de la validation (ligne de `boond_validations_search`), pas celui du CRA / de la note / de l'absence."
+    ),
+    decision: z
+      .enum(["validate", "reject"])
+      .describe(
+        "validate → `validated` ; reject → `rejected` (confirmation demandée à l'utilisateur si le client la supporte)."
+      ),
+    reason: z.string().optional().describe("Motif, recommandé sur un refus — transmis dans `reason`."),
+  })
+  .strict();
+export type ValidationDecisionInput = z.infer<typeof ValidationDecisionSchema>;
+
 // ---- Expense schemas (Notes de frais) ----
 
 /**
