@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**215 tools** across **40 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
+**223 tools** across **41 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -37,10 +37,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_actions_search` | Rechercher des actions | read · idempotent · open-world |
 | `boond_actions_update` | Modifier une action | write · idempotent |
 
-### advantages (2)
+### advantages (4)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_advantages_create` | Créer un avantage | write |
+| `boond_advantages_default` | Référentiels d'un avantage | read · idempotent |
 | `boond_advantages_get` | Détails d'un avantage | read · idempotent |
 | `boond_advantages_search` | Rechercher des avantages | read · idempotent · open-world |
 
@@ -166,10 +168,14 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 |---|---|---|
 | `boond_find` | Résoudre un nom ou un e-mail en ID | read · idempotent |
 
-### flags (2)
+### flags (6)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_flags_attach` | Poser un drapeau sur un enregistrement | write · idempotent |
+| `boond_flags_attached` | Drapeaux posés sur un enregistrement | read · idempotent |
+| `boond_flags_create` | Créer un drapeau | write |
+| `boond_flags_detach` | Retirer un drapeau d'un enregistrement | write · idempotent |
 | `boond_flags_get` | Détails d'un(e) drapeau | read · idempotent |
 | `boond_flags_search` | Rechercher des drapeaux | read · idempotent · open-world |
 
@@ -357,6 +363,12 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_roles_get` | Détails d'un(e) rôle | read · idempotent |
 | `boond_roles_search` | Rechercher des rôles | read · idempotent · open-world |
 
+### tasks (1)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_tasks_get` | Tâches d'un enregistrement | read · idempotent |
+
 ### threads (2)
 
 | Tool | Title | Hints |
@@ -374,10 +386,11 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_timesheets_search` | Rechercher des feuilles de temps | read · idempotent · open-world |
 | `boond_timesheets_update` | Modifier une feuille de temps | write · idempotent |
 
-### todolists (2)
+### todolists (3)
 
 | Tool | Title | Hints |
 |---|---|---|
+| `boond_todolists_create` | Créer une todolist | write |
 | `boond_todolists_get` | Détails d'un(e) todolist | read · idempotent |
 | `boond_todolists_search` | Rechercher des todolists | read · idempotent · open-world |
 

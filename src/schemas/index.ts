@@ -1959,6 +1959,138 @@ export const AdvantageSearchSchema = z
   })
   .strict();
 
+// ---- Flags, attached flags, tasks, todolists, advantages writes (issue #254) ----
+
+/** Entities that carry `attachedFlags.raml` (11) — the query-parameter name of `DELETE /attached-flags` is the entity's singular. */
+export const ATTACHED_FLAG_ENTITIES = [
+  "candidate",
+  "resource",
+  "contact",
+  "company",
+  "opportunity",
+  "project",
+  "order",
+  "product",
+  "purchase",
+  "action",
+  "positioning",
+  "invoice",
+] as const;
+export type AttachedFlagEntity = (typeof ATTACHED_FLAG_ENTITIES)[number];
+
+/** Entities that carry `tasks.raml` (14). */
+export const TASK_ENTITIES = [
+  "candidate",
+  "resource",
+  "contact",
+  "company",
+  "opportunity",
+  "project",
+  "order",
+  "product",
+  "purchase",
+  "positioning",
+  "invoice",
+  "contract",
+  "delivery",
+  "payment",
+] as const;
+export type TaskEntity = (typeof TASK_ENTITIES)[number];
+
+export const FlagCreateSchema = z
+  .object({
+    name: z.string().min(1).describe("Libellé du drapeau (ex. « vivier Java Q4 »)."),
+    mainManagerId: EntityIdSchema.optional().describe(
+      "ID de la ressource responsable du drapeau — l'utilisateur courant si omis."
+    ),
+  })
+  .strict();
+
+export const AttachedFlagsListSchema = z
+  .object({
+    entity: z.enum(ATTACHED_FLAG_ENTITIES).describe("Type de l'enregistrement."),
+    id: EntityIdSchema.describe("ID numérique de l'enregistrement."),
+  })
+  .strict();
+
+export const AttachedFlagSchema = AttachedFlagsListSchema.extend({
+  flagId: EntityIdSchema.describe("ID du drapeau (`boond_flags_search`)."),
+}).strict();
+export type AttachedFlagInput = z.infer<typeof AttachedFlagSchema>;
+
+export const TasksGetSchema = z
+  .object({
+    entity: z.enum(TASK_ENTITIES).describe("Type de l'enregistrement."),
+    id: EntityIdSchema.describe("ID numérique de l'enregistrement."),
+  })
+  .strict();
+export type TasksGetInput = z.infer<typeof TasksGetSchema>;
+
+const TodolistTaskSchema = z
+  .object({
+    description: z.string().min(1).describe("Intitulé de la tâche."),
+    row: z.number().int().min(0).optional().describe("Ordre d'affichage."),
+    state: z.number().int().optional().describe("État (0 = à faire par défaut)."),
+  })
+  .strict();
+
+// POST /todolists from `models.todolist` (title, state, profile, profileTypesOf,
+// profileStates, agencies, tasks) — the RAML documents no body; not exercised.
+export const TodolistCreateSchema = z
+  .object({
+    title: z.string().min(1).describe("Titre de la todolist."),
+    profile: z
+      .string()
+      .optional()
+      .describe("Fiche sur laquelle la liste s'applique (ex. candidate, resource, opportunity…)."),
+    profileTypesOf: z.array(z.number().int()).optional().describe("Types de fiche concernés (IDs de dictionnaire)."),
+    profileStates: z.array(z.number().int()).optional().describe("États de fiche concernés (IDs de dictionnaire)."),
+    agencyIds: z.array(EntityIdSchema).optional().describe("Agences concernées (IDs)."),
+    tasks: z.array(TodolistTaskSchema).min(1).describe("Tâches de la liste, dans l'ordre."),
+  })
+  .strict();
+export type TodolistCreateInput = z.infer<typeof TodolistCreateSchema>;
+
+/** `GET /advantages/default?resource=&contract=&project=&delivery=` (RAML `advantages/default.raml`). */
+export const AdvantageDefaultSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe("ID de la ressource bénéficiaire."),
+    contractId: EntityIdSchema.optional().describe("ID du contrat de rattachement."),
+    projectId: EntityIdSchema.optional().describe("ID du projet (avantage refacturable)."),
+    deliveryId: EntityIdSchema.optional().describe("ID de la prestation."),
+  })
+  .strict();
+export type AdvantageDefaultInput = z.infer<typeof AdvantageDefaultSchema>;
+
+// POST /advantages from `models.advantage`; the RAML documents no body — not exercised.
+export const AdvantageCreateSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe("ID de la ressource bénéficiaire (relation `resource`, requise)."),
+    advantageType: z
+      .union([z.number().int(), z.string().min(1)])
+      .describe(
+        "Type d'avantage : `reference` ou `<reference>_<agencyId>` tel que publié par `boond_advantages_default` (`advantageTypes`)."
+      ),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe("Date de l'avantage (YYYY-MM-DD)."),
+    returnDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe("Date de restitution (véhicule, matériel)."),
+    quantity: z.number().optional().describe("Quantité (ex. nombre de tickets)."),
+    participationAmount: z.number().optional().describe("Participation salarié."),
+    employeeAmount: z.number().optional().describe("Montant versé au salarié."),
+    agencyAmount: z.number().optional().describe("Charges / coefficient de charge côté agence."),
+    contractId: EntityIdSchema.optional().describe("ID du contrat de rattachement."),
+    projectId: EntityIdSchema.optional().describe("ID du projet à refacturer."),
+    deliveryId: EntityIdSchema.optional().describe("ID de la prestation."),
+    note: z.string().optional().describe("Commentaires (`informationComments`)."),
+  })
+  .strict();
+
 // ---- Application schemas ----
 
 // ---- Validation schemas ----
