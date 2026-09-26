@@ -41,6 +41,7 @@ describe("registerAllPrompts", () => {
         "cvs_a_mettre_a_jour",
         "recherche_profil_competences",
         "traiter_note_de_frais",
+        "alertes_contrats",
       ])
     );
   });
@@ -286,6 +287,13 @@ describe("registerAllPrompts", () => {
       },
       {
         name: "fin_de_mission",
+        args: { manager_id: "Claire Petit" },
+        expectTool: "boond_resources_search",
+        expectQuoted: "Claire Petit",
+        expectPlaceholder: "<MANAGER_ID>",
+      },
+      {
+        name: "alertes_contrats",
         args: { manager_id: "Claire Petit" },
         expectTool: "boond_resources_search",
         expectQuoted: "Claire Petit",
@@ -565,6 +573,28 @@ describe("registerAllPrompts", () => {
     it("build() defaults `now` to the wall clock", () => {
       const text = PROMPTS.find((p) => p.name === "factures_a_relancer")!.build({});
       expect(text).toMatch(/aujourd'hui = \d{4}-\d{2}-\d{2}/);
+    });
+  });
+
+  describe("alertes_contrats (#253)", () => {
+    const NOW = new Date(2026, 8, 26);
+    const build = (args: Record<string, string | undefined>) =>
+      PROMPTS.find((p) => p.name === "alertes_contrats")!.build(args, NOW);
+
+    it("drives the composed contract search on both windows with server-side dates", () => {
+      const text = build({ horizon_jours: "30" });
+      expect(text).toContain("30 prochains jours");
+      expect(text).toContain('period: "ending"');
+      expect(text).toContain('period: "probationEnding"');
+      expect(text).toContain('startDate: "2026-09-26"');
+      expect(text).toContain('endDate: "2026-10-26"');
+      expect(text).toContain("boond://dictionary/typeOf/contracts");
+      expect(text).toContain("boond_resources_contracts");
+      expect(text).toContain("perimeterDynamic: ['managers']");
+    });
+
+    it("defaults the horizon to 45 days on a non-integer", () => {
+      expect(build({ horizon_jours: "bientôt" })).toContain("45 prochains jours");
     });
   });
 

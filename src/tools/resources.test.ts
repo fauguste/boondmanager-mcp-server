@@ -24,9 +24,15 @@ describe("registerResourceTools", () => {
     vi.restoreAllMocks();
   });
 
-  it("should register CRUD tools + 10 tab tools + 4 DT-write tools = 19 total", () => {
+  it("should register CRUD tools + 10 tab tools + contracts + 4 DT-write tools = 20 total", () => {
     registerResourceTools(server);
-    expect(server.registerTool).toHaveBeenCalledTimes(19);
+    expect(server.registerTool).toHaveBeenCalledTimes(20);
+  });
+
+  it("should register the virtual contracts tab (issue #253)", () => {
+    registerResourceTools(server);
+    const names = vi.mocked(server.registerTool).mock.calls.map((c) => c[0]);
+    expect(names).toContain("boond_resources_contracts");
   });
 
   it("should register all CRUD tools", () => {

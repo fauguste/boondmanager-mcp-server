@@ -4,6 +4,7 @@ import { formatListResponse } from "../services/boond-client.js";
 import { registerAbsenceTools } from "./absences.js";
 import { registerActionTools } from "./actions.js";
 import { registerAdvantageTools } from "./advantages.js";
+import { registerContractTools } from "./contracts.js";
 import { registerInvoiceTools } from "./invoices.js";
 import { registerNotificationTools } from "./notifications.js";
 import { registerPlanningAbsenceTools } from "./planning-absences.js";
@@ -41,6 +42,7 @@ const HAND_ROLLED_SEARCH_TOOLS: ReadonlyArray<{
   { register: registerAbsenceTools, tool: "boond_absences_search", entityName: "absence" },
   { register: registerActionTools, tool: "boond_actions_search", entityName: "action" },
   { register: registerAdvantageTools, tool: "boond_advantages_search", entityName: "avantage" },
+  { register: registerContractTools, tool: "boond_contracts_search", entityName: "contrat", ownSummary: true },
   { register: registerInvoiceTools, tool: "boond_invoices_search", entityName: "facture" },
   { register: registerNotificationTools, tool: "boond_notifications_search", entityName: "notification" },
   {
@@ -89,6 +91,6 @@ describe("fields projection forwarding (hand-rolled search tools)", () => {
     // through its own formatters.
     // deliveries, payments, provider-invoices, purchases and timesheets moved
     // to the crud-factory in #238 and left this table.
-    expect(HAND_ROLLED_SEARCH_TOOLS).toHaveLength(8);
+    expect(HAND_ROLLED_SEARCH_TOOLS).toHaveLength(9);
   });
 });
