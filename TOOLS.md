@@ -3,7 +3,7 @@
 > Auto-generated from the server registrations. Do not edit by hand.
 > Regenerate with `npm run docs:tools` (CI fails if this file is stale).
 
-**223 tools** across **41 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
+**233 tools** across **44 domains** · **23 prompts** · **47 resources** · **6 resource templates**.
 
 Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destructiveHint), `idempotent` (idempotentHint), `open-world` (openWorldHint, e.g. paginated keyword search).
 
@@ -178,6 +178,31 @@ Hint legend: `read` (readOnlyHint), `write` (creates/updates), `delete` (destruc
 | `boond_flags_detach` | Retirer un drapeau d'un enregistrement | write · idempotent |
 | `boond_flags_get` | Détails d'un(e) drapeau | read · idempotent |
 | `boond_flags_search` | Rechercher des drapeaux | read · idempotent · open-world |
+
+### forms (3)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_forms_create` | Créer un formulaire | write |
+| `boond_forms_default` | Référentiels d'un formulaire | read · idempotent |
+| `boond_forms_get` | Détails d'un formulaire | read · idempotent |
+
+### groupments (4)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_groupments_create` | Créer un regroupement de prestations | write |
+| `boond_groupments_default` | Référentiels d'un regroupement de prestations | read · idempotent |
+| `boond_groupments_get` | Détails d'un regroupement de prestations | read · idempotent |
+| `boond_groupments_update` | Modifier un regroupement de prestations | write · idempotent |
+
+### inactivities (3)
+
+| Tool | Title | Hints |
+|---|---|---|
+| `boond_inactivities_create` | Créer une période d'inactivité | write |
+| `boond_inactivities_default` | Référentiels d'une période d'inactivité | read · idempotent |
+| `boond_inactivities_get` | Détails d'une période d'inactivité | read · idempotent |
 
 ### invoices (7)
 

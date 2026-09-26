@@ -55,15 +55,24 @@ function readProjectDomains() {
 const EXTRA_DOMAINS = [
   "apps",
   "alerts",
-  "forms",
-  "groupments",
-  "inactivities",
   "subscriptions",
   "marketplace",
   "deliveries",
   "settings",
   "shares",
   "devices",
+  // Issue #256 — routes the audit hypothesised; a run settles their existence
+  // instead of coding blind. `targets` and `attachedFlags` already answer 200
+  // on the doc site (2026-09-26); the others 404 today and would surface here
+  // the day they appear.
+  "quotations",
+  "kilometricExpenses",
+  "targets",
+  "workflows",
+  "warnings",
+  "savedSearches",
+  "tasks",
+  "attachedFlags",
 ];
 
 /** Well-known per-domain RAML file names (camelCase, as served). */

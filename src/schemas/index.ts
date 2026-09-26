@@ -1994,6 +1994,7 @@ export const TASK_ENTITIES = [
   "contract",
   "delivery",
   "payment",
+  "form",
 ] as const;
 export type TaskEntity = (typeof TASK_ENTITIES)[number];
 
@@ -2088,6 +2089,98 @@ export const AdvantageCreateSchema = z
     projectId: EntityIdSchema.optional().describe("ID du projet à refacturer."),
     deliveryId: EntityIdSchema.optional().describe("ID de la prestation."),
     note: z.string().optional().describe("Commentaires (`informationComments`)."),
+  })
+  .strict();
+
+// ---- Inactivities, forms, groupments (issue #256) ----
+// All three collections document `post` only (no list GET), plus `default`
+// and `rights`; bodies come from `models.*` in the dictionary and were not
+// exercised (production tenant). Detail reads follow the `/{collection}/{id}`
+// pattern of every other entity.
+
+const isoDate = (doc: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .describe(doc);
+
+export const InactivityDefaultSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe("ID de la ressource (requis par `GET /inactivities/default`)."),
+  })
+  .strict();
+export type InactivityDefaultInput = z.infer<typeof InactivityDefaultSchema>;
+
+export const InactivityCreateSchema = z
+  .object({
+    resourceId: EntityIdSchema.describe(
+      "ID de la ressource en intercontrat / inactivité (relation `resource`, requise)."
+    ),
+    title: z.string().optional().describe("Intitulé (ex. « Intercontrat », « Formation interne »)."),
+    inactivityType: z
+      .union([z.number().int(), z.string().min(1)])
+      .optional()
+      .describe("Type d'inactivité tel que publié par `boond_inactivities_default`."),
+    startDate: isoDate("Date de début (YYYY-MM-DD)."),
+    endDate: isoDate("Date de fin (YYYY-MM-DD)."),
+    numberOfDaysInvoicedOrQuantity: z.number().optional().describe("Nombre de jours de la période."),
+    averageDailyCost: z.number().optional().describe("Coût journalier moyen retenu."),
+    contractId: EntityIdSchema.optional().describe("ID du contrat de rattachement."),
+    note: z.string().optional().describe("Commentaires (`informationComments`)."),
+  })
+  .strict();
+
+export const FormDefaultSchema = z
+  .object({
+    templateId: EntityIdSchema.describe("ID du modèle de formulaire (`template`)."),
+    resourceId: EntityIdSchema.describe("ID de l'entité visée par le formulaire (`resource`)."),
+  })
+  .strict();
+export type FormDefaultInput = z.infer<typeof FormDefaultSchema>;
+
+export const FormCreateSchema = z
+  .object({
+    templateId: EntityIdSchema.describe("ID du modèle de formulaire (relation `template`, requise)."),
+    resourceId: EntityIdSchema.optional().describe("Ressource visée (relation `dependsOn`, type resource)."),
+    candidateId: EntityIdSchema.optional().describe("Candidat visé (relation `dependsOn`, type candidate)."),
+    validatorId: EntityIdSchema.optional().describe("Ressource qui validera le formulaire (`validator`)."),
+    recipientId: EntityIdSchema.optional().describe("Ressource destinataire (`recipient`)."),
+    validateDate: isoDate("Date de validation souhaitée (YYYY-MM-DD).").optional(),
+    remindDate: isoDate("Date de rappel (YYYY-MM-DD).").optional(),
+  })
+  .strict();
+
+export const GroupmentDefaultSchema = z
+  .object({
+    projectId: EntityIdSchema.describe("ID du projet (requis par `GET /groupments/default`)."),
+  })
+  .strict();
+export type GroupmentDefaultInput = z.infer<typeof GroupmentDefaultSchema>;
+
+const groupmentWritableShape = {
+  title: z.string().optional().describe("Titre du regroupement."),
+  startDate: isoDate("Date de début (YYYY-MM-DD).").optional(),
+  endDate: isoDate("Date de fin (YYYY-MM-DD).").optional(),
+  averageDailyPriceExcludingTax: z.number().optional().describe("Prix journalier HT du regroupement."),
+  forceAverageDailyPriceExcludingTax: z.boolean().optional().describe("Forcer le prix journalier."),
+  averageDailyCost: z.number().optional().describe("Coût journalier moyen."),
+  numberOfDaysInvoicedOrQuantity: z.number().optional().describe("Jours / quantité facturés."),
+  numberOfDaysFree: z.number().optional().describe("Jours offerts."),
+  deliveryIds: z.array(EntityIdSchema).optional().describe("Prestations regroupées (relation `deliveries`)."),
+  note: z.string().optional().describe("Commentaires (`informationComments`)."),
+};
+
+export const GroupmentCreateSchema = z
+  .object({
+    projectId: EntityIdSchema.describe("ID du projet (relation `project`, requise)."),
+    ...groupmentWritableShape,
+  })
+  .strict();
+
+export const GroupmentUpdateSchema = z
+  .object({
+    id: EntityIdSchema.describe("ID du regroupement à modifier."),
+    ...groupmentWritableShape,
   })
   .strict();
 

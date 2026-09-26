@@ -28,6 +28,7 @@ const TASK_ENTITY_PATH: Record<TaskEntity, string> = {
   contract: "/contracts",
   delivery: "/deliveries",
   payment: "/payments",
+  form: "/forms",
 };
 
 /** `/todolists` payload (issue #254): `agencyIds` → `agencies` relationship, the rest as attributes (`models.todolist`). */

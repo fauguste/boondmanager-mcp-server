@@ -85,6 +85,7 @@ describe("registerTodolistTools", () => {
       safeParse: (v: unknown) => { success: boolean };
     };
     expect(schema.safeParse({ entity: "payment", id: "1" }).success).toBe(true);
+    expect(schema.safeParse({ entity: "form", id: "1" }).success).toBe(true);
     expect(schema.safeParse({ entity: "agency", id: "1" }).success).toBe(false);
   });
 });

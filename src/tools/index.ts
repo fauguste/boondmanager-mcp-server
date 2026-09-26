@@ -34,5 +34,8 @@ export { registerValidationTools } from "./validations.js";
 export { registerPoleTools } from "./poles.js";
 export { registerReportingTools } from "./reporting.js";
 export { registerPlanningAbsenceTools } from "./planning-absences.js";
+export { registerInactivityTools } from "./inactivities.js";
+export { registerFormTools } from "./forms.js";
+export { registerGroupmentTools } from "./groupments.js";
 export { registerDocumentTools } from "./documents.js";
 export { registerWorkflowTools } from "./workflows.js";
