@@ -11,6 +11,13 @@ import {
   ProjectSearchSchema,
   ResourceSearchSchema,
   SearchSchema,
+  InvoiceSearchSchema,
+  OrderSearchSchema,
+  ActionSearchSchema,
+  TimesheetSearchSchema,
+  AbsenceSearchSchema,
+  DeliverySearchSchema,
+  PaymentSearchSchema,
 } from "./schemas/index.js";
 
 /**
@@ -38,6 +45,15 @@ const PERIMETER_SEARCH_SCHEMAS = {
   companies: CompanySearchSchema,
   opportunities: OpportunitySearchSchema,
   projects: ProjectSearchSchema,
+  // Issue #248: the finance / activity searches declare the RAML trait
+  // `searchable` too (verified live: `perimeterDynamic=data` shrinks each list).
+  invoices: InvoiceSearchSchema,
+  orders: OrderSearchSchema,
+  actions: ActionSearchSchema,
+  timesheets: TimesheetSearchSchema,
+  absences: AbsenceSearchSchema,
+  deliveries: DeliverySearchSchema,
+  payments: PaymentSearchSchema,
 } as const;
 
 describe("SERVER_INSTRUCTIONS ↔ schema consistency", () => {
@@ -54,10 +70,11 @@ describe("SERVER_INSTRUCTIONS ↔ schema consistency", () => {
       ]) {
         expect(keys, `${domain} should accept ${filter}`).toContain(filter);
       }
-      // The instructions name these six by tool name; if one is renamed the
-      // sentence must be updated with it.
-      expect(SERVER_INSTRUCTIONS).toContain(`\`${domain}\``);
     }
+    // The instructions describe the perimeter-aware set by *kind* ("recherches
+    // métier") rather than by the thirteen tool names — the 4000-char budget
+    // does not fit the list, and the schemas are the reference anyway.
+    expect(SERVER_INSTRUCTIONS).toMatch(/recherches métier/);
 
     // The reference/admin domains fall back to the bare SearchSchema. Stating
     // the perimeter filters as universal is what made the model emit

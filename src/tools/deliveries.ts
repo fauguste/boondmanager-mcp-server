@@ -53,7 +53,7 @@ export function registerDeliveryTools(server: McpServer): void {
     {
       schema: DeliverySearchSchema,
       title: "Rechercher des livraisons / CRA",
-      description: `Recherche des livraisons (comptes rendus d'activité) dans BoondManager avec filtres par projet, société et période.
+      description: `Recherche des prestations / livraisons dans BoondManager par projet, société, ressource, état (\`deliveryStates\`, \`projectStates\`), période (\`period: "running"\` + dates pour les prestations en cours) et périmètre (\`perimeter*\`).
 
 \`projectId\` / \`companyId\` sont convertis en références \`keywords\` (PRJ<id> / CSOC<id>) : l'API n'a pas de paramètre dédié.
 

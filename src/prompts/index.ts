@@ -266,15 +266,17 @@ export const PROMPTS: PromptDefinition[] = [
         `Date de référence : aujourd'hui = ${today}.`,
         "",
         "Étapes :",
-        "1. Appeler `boond_invoices_search` :",
+        "1. Lire la ressource `boond://dictionary/states/invoices` (pas d'appel d'outil) et retenir les IDs des états **impayés** : tous les états sauf « payée » (et « annulée » / avoir s'ils existent).",
+        "2. Appeler `boond_invoices_search` **en filtrant côté API** :",
         filterLine,
+        "   - `states: [<IDs impayés de l'étape 1>]`",
         '   - `period: "expectedPayment"`, `endDate: "' +
           today +
           "\"` — échéance de paiement attendue avant aujourd'hui",
-        "   - `pageSize: 100`, `fields: ['reference', 'state', 'dueDate', 'amountExcludingTax', 'company']`",
+        "   - `creditNote: false`",
+        "   - `pageSize: 100`, `fields: ['reference', 'state', 'expectedPaymentDate', 'turnoverInvoicedExcludingTax', 'company']`",
         "   - **Paginer jusqu'au bout** : tant que `structuredContent.count` vaut 100, rappeler avec `page: 2`, `page: 3`… Ne pas s'arrêter à la première page.",
-        "2. Lire la ressource `boond://dictionary/states/invoices` (pas d'appel d'outil) pour identifier les IDs d'état « payée » / « partiellement payée » / etc.",
-        `3. Filtrer côté agent : ne conserver que les factures dont l'état n'est PAS « payée » ET dont la \`dueDate\` est strictement antérieure au ${today}.`,
+        `3. Contrôle : chaque facture rendue doit avoir un état de l'étape 1 et une \`expectedPaymentDate\` strictement antérieure au ${today} — sinon signaler l'écart plutôt que de trier à la main.`,
         "4. Pour chaque facture retenue, récupérer le détail via `boond_invoices_get` si nécessaire pour obtenir le contact/email de relance.",
         "5. Restituer un tableau groupé par société : société | nombre de factures impayées | total HT impayé | facture la plus ancienne (référence + jours de retard) | contact à relancer.",
         "6. Ajouter une ligne « Total » en bas."

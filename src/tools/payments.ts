@@ -40,7 +40,7 @@ export function registerPaymentTools(server: McpServer): void {
     schema: PaymentSearchSchema,
     description: composeDescription({
       purpose: "Recherche des paiements / règlements fournisseur dans BoondManager.",
-      when: "pour retrouver les règlements adossés à un achat, une société, un projet ou une ressource, ou ceux d'une période.",
+      when: "pour retrouver les règlements adossés à un achat, une société, un projet ou une ressource, ceux d'un état (`paymentStates`), d'une période (`period: \"expected\"` + dates) ou d'un périmètre (`perimeter*`).",
       instead:
         "`boond_purchases_search` pour les achats eux-mêmes, `boond_provider_invoices_search` pour les factures fournisseur.",
       behaviour: [

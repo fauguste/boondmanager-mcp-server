@@ -546,7 +546,7 @@ describe("registerAllPrompts", () => {
       expect(build("fin_de_mission", { horizon_jours: "bientôt" })).toContain("60 prochains jours");
     });
 
-    it("factures_a_relancer states today's date, reads the states resource, and paginates to the end", () => {
+    it("factures_a_relancer states today's date, reads the states resource, filters on the API and paginates to the end", () => {
       const text = build("factures_a_relancer", {});
       expect(text).toContain("aujourd'hui = 2026-09-23");
       expect(text).toContain('endDate: "2026-09-23"');
@@ -554,6 +554,12 @@ describe("registerAllPrompts", () => {
       expect(text).not.toContain("boond_application_dictionary");
       expect(text).toContain("Paginer jusqu'au bout");
       expect(text).toContain("antérieure au 2026-09-23");
+      // Issue #248: the unpaid states go to the API (`states`), the dictionary
+      // is read BEFORE the search, and no client-side sort is asked for.
+      expect(text.indexOf("boond://dictionary/states/invoices")).toBeLessThan(text.indexOf("boond_invoices_search"));
+      expect(text).toContain("`states: [<IDs impayés de l'étape 1>]`");
+      expect(text).toContain("`creditNote: false`");
+      expect(text).not.toContain("Filtrer côté agent");
     });
 
     it("build() defaults `now` to the wall clock", () => {

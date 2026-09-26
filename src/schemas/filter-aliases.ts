@@ -36,7 +36,21 @@ export interface FilterAlias {
  */
 export type SearchEndpoint = Extract<
   DomainName,
-  "resources" | "candidates" | "contacts" | "companies" | "opportunities" | "projects"
+  | "resources"
+  | "candidates"
+  | "contacts"
+  | "companies"
+  | "opportunities"
+  | "projects"
+  // Finance / activity searches (issue #248): their state filter is named
+  // after the entity too, and two of them use workflow strings.
+  | "invoices"
+  | "orders"
+  | "actions"
+  | "timesheets"
+  | "absences"
+  | "deliveries"
+  | "payments"
 >;
 
 const PERIMETER_DYNAMIC_NOTE = 'pour « mes données / mon équipe », `perimeterDynamic: ["data"|"managers"]`';
@@ -150,6 +164,103 @@ export const ENDPOINT_FILTER_ALIASES: Readonly<Record<SearchEndpoint, Readonly<R
     typeof: { correct: "projectTypes", hint: "IDs de types (entiers)", dictionary: TYPEOF_URI("projects") },
     types: { correct: "projectTypes", hint: "IDs de types (entiers)", dictionary: TYPEOF_URI("projects") },
     company: { correct: "companies", hint: "tableau d'IDs de sociétés, ex: `companies: [42]`" },
+  },
+  invoices: {
+    invoicestates: {
+      correct: "states",
+      hint: "sur /invoices le filtre s'appelle `states`",
+      dictionary: STATES_URI("invoices"),
+    },
+    typeof: { hint: "/invoices n'a pas de filtre de type — `creditNote: true|false` distingue avoirs et factures" },
+    types: { hint: "/invoices n'a pas de filtre de type — `creditNote: true|false` distingue avoirs et factures" },
+    company: { correct: "companies", hint: "tableau d'IDs de sociétés, ex: `companies: [42]`" },
+    duedate: { correct: "period", hint: '`period: "expectedPayment"` + `startDate` / `endDate` bornent l\'échéance' },
+    paid: {
+      correct: "states",
+      hint: "l'état « payée » est un ID de `boond://dictionary/states/invoices`",
+      dictionary: STATES_URI("invoices"),
+    },
+  },
+  orders: {
+    orderstates: {
+      correct: "states",
+      hint: "sur /orders le filtre s'appelle `states`",
+      dictionary: STATES_URI("orders"),
+    },
+    company: { correct: "companies", hint: "tableau d'IDs de sociétés, ex: `companies: [42]`" },
+  },
+  actions: {
+    typeof: {
+      correct: "actionTypes",
+      hint: "IDs de types d'action (entiers), déclarés par entité de rattachement",
+      dictionary: "boond://dictionary/actions/<entité>",
+    },
+    types: {
+      correct: "actionTypes",
+      hint: "IDs de types d'action (entiers)",
+      dictionary: "boond://dictionary/actions/<entité>",
+    },
+    typesof: {
+      correct: "actionTypes",
+      hint: "IDs de types d'action (entiers)",
+      dictionary: "boond://dictionary/actions/<entité>",
+    },
+    date: { correct: "period", hint: '`period: "started"` + `startDate` / `endDate`, ou `periodDynamic: "thisWeek"`' },
+  },
+  timesheets: {
+    states: {
+      correct: "validationStates",
+      hint: "chaînes du workflow : waitingForValidation | validated | rejected (pas d'ID)",
+    },
+    timesreportstates: {
+      correct: "validationStates",
+      hint: "chaînes du workflow : waitingForValidation | validated | rejected",
+    },
+    validationstate: {
+      correct: "validationStates",
+      hint: "tableau de chaînes : waitingForValidation | validated | rejected",
+    },
+    month: { correct: "startMonth", hint: "`startMonth` et `endMonth` (YYYY-MM) sont tous deux requis" },
+    term: { correct: "startMonth", hint: "`startMonth` et `endMonth` (YYYY-MM) sont tous deux requis" },
+  },
+  absences: {
+    states: {
+      correct: "validationStates",
+      hint: "chaînes du workflow : waitingForValidation | validated | rejected (pas d'ID)",
+    },
+    absencestates: {
+      correct: "validationStates",
+      hint: "chaînes du workflow : waitingForValidation | validated | rejected",
+    },
+    validationstate: {
+      correct: "validationStates",
+      hint: "tableau de chaînes : waitingForValidation | validated | rejected",
+    },
+    month: { correct: "startMonth", hint: "`startMonth` et `endMonth` (YYYY-MM) sont tous deux requis" },
+  },
+  deliveries: {
+    states: {
+      correct: "deliveryStates",
+      hint: "IDs d'états de prestation (entiers)",
+      dictionary: STATES_URI("deliveries"),
+    },
+    typeof: {
+      correct: "projectTypes",
+      hint: "pas de filtre de type de prestation sur la liste — `projectTypes` (IDs entiers)",
+      dictionary: TYPEOF_URI("projects"),
+    },
+    types: {
+      correct: "projectTypes",
+      hint: "pas de filtre de type de prestation sur la liste — `projectTypes` (IDs entiers)",
+      dictionary: TYPEOF_URI("projects"),
+    },
+    company: { correct: "companies", hint: "tableau d'IDs de sociétés, ex: `companies: [42]`" },
+  },
+  payments: {
+    states: { correct: "paymentStates", hint: "IDs d'états de paiement (entiers)", dictionary: STATES_URI("payments") },
+    typeof: { correct: "purchaseTypes", hint: "IDs de types d'achat (entiers)", dictionary: TYPEOF_URI("purchases") },
+    types: { correct: "purchaseTypes", hint: "IDs de types d'achat (entiers)", dictionary: TYPEOF_URI("purchases") },
+    invoiceid: { hint: "/payments ne connaît pas de référence FACT<id> — passer par `purchaseId` ou `companyId`" },
   },
 };
 

@@ -93,7 +93,7 @@ export function registerInvoiceTools(server: McpServer): void {
     "boond_invoices_search",
     {
       title: "Rechercher des factures",
-      description: `Liste et recherche les factures client, par société, projet, état ou période.
+      description: `Liste et recherche les factures client, par société, projet, état (\`states\`), période (\`period\` + dates, ou \`periodDynamic\`), périmètre (\`perimeter*\`) ou avoir / facture (\`creditNote\`).
 
 \`companyId\` / \`projectId\` sont convertis en références \`keywords\` (\`CSOC<id>\`, \`PRJ<id>\`) — l'API n'a pas de paramètre dédié et ignorerait un \`companyId\` brut.
 

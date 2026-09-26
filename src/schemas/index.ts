@@ -144,6 +144,56 @@ const endDateField = z
   .optional()
   .describe("Date de fin (YYYY-MM-DD), à utiliser avec `period`.");
 
+// ---- Shared filters of the finance / activity searches (issue #248) ----
+// `/invoices`, `/orders`, `/actions`, `/times-reports`, `/absences-reports`,
+// `/deliveries-groupments` and `/payments` all declare the RAML trait
+// `searchable`, so they take the six `perimeter*` filters — verified live on
+// 2026-09-26 (`perimeterDynamic=data` reduced every one of them). The
+// vocabulary below is per endpoint and was read from each `search.raml`.
+
+/** `periodDynamic` — the relative windows the RAML lists on every dated search (no `startDate` / `endDate` needed). */
+const periodDynamicField = z
+  .enum([
+    "today",
+    "yesterday",
+    "tomorrow",
+    "thisWeek",
+    "lastWeek",
+    "nextWeek",
+    "thisMonth",
+    "lastMonth",
+    "nextMonth",
+    "thisTrimester",
+    "lastTrimester",
+    "nextTrimester",
+    "thisSemester",
+    "lastSemester",
+    "nextSemester",
+    "thisYear",
+    "lastYear",
+    "nextYear",
+    "thisFiscalYear",
+    "lastFiscalYear",
+    "nextFiscalYear",
+    "untilToday",
+  ])
+  .optional()
+  .describe(
+    "Fenêtre relative appliquée à `period` (à la place de `startDate` / `endDate`) : today, thisWeek, thisMonth, lastMonth, thisYear, untilToday…"
+  );
+const flagsField = entityIdArray("IDs de drapeaux (flags) — `boond_flags_search`.");
+/** The validation workflow of a CRA / absence report is a string state, not a dictionary id (#250). */
+const validationStatesField = z
+  .array(z.enum(["waitingForValidation", "validated", "rejected"]))
+  .optional()
+  .describe("États du workflow de validation : waitingForValidation (à valider), validated, rejected.");
+const resourceTypesField = intArray("IDs de types de ressource — `boond://dictionary/typeOf/resources`.");
+const paymentMethodsField = intArray("IDs de modes de paiement — `boond://dictionary/paymentMethods`.");
+const projectTypesFilterField = intArray("IDs de types de projet — `boond://dictionary/typeOf/projects`.");
+const companiesFilterField = entityIdArray(
+  "IDs de sociétés (filtre API natif, équivalent de `companyId` pour plusieurs sociétés)."
+);
+
 // ---- Shared shapes (issue #240) ----
 // Composed by spread into the entity search schemas so a change to one field
 // (a `.describe()`, the page-ceiling message) propagates everywhere. Before,
@@ -858,6 +908,7 @@ export const OpportunityUpdateSchema = z
 
 // ---- Action schemas ----
 
+// Source: resources/actions/search.raml (filters verified live, issue #248).
 export const ActionSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
@@ -865,7 +916,23 @@ export const ActionSearchSchema = z
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
     contactId: EntityIdSchema.optional().describe("Filtrer par ID contact (référence keywords CCON<id>)"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
-    ...paginationShape,
+    opportunityId: EntityIdSchema.optional().describe("Filtrer par ID opportunité (référence keywords AO<id>)"),
+    projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
+    orderId: EntityIdSchema.optional().describe("Filtrer par ID bon de commande (référence keywords BDC<id>)"),
+    invoiceId: EntityIdSchema.optional().describe("Filtrer par ID facture (référence keywords FACT<id>)"),
+    actionTypes: intArray(
+      "IDs de types d'action — `boond://dictionary/actions/<entité>` (les types sont déclarés par entité de rattachement)."
+    ),
+    period: z
+      .enum(["started", "created", "updated"])
+      .optional()
+      .describe("Champ de date borné par `startDate` / `endDate` : started (date de l'action), created, updated."),
+    periodDynamic: periodDynamicField,
+    startDate: startDateField,
+    endDate: endDateField,
+    flags: flagsField,
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -952,7 +1019,12 @@ export const TimesheetSearchSchema = z
       .regex(/^\d{4}-\d{2}$/)
       .describe("Mois de fin au format YYYY-MM (ex: '2025-03'). Requis."),
     keywords: z.string().optional().describe("Mots-clés (préfixes 'TPS', 'COMP'...)."),
-    ...paginationShape,
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
+    resourceTypes: resourceTypesField,
+    validationStates: validationStatesField,
+    closed: z.boolean().optional().describe("true = CRA clôturés uniquement, false = non clôturés."),
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -1126,18 +1198,37 @@ export const InvoiceUpdateSchema = z
   })
   .strict();
 
+// Source: resources/invoices/search.raml (filters verified live, issue #248).
 export const InvoiceSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche (référence, société...)"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
     projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
-    startDate: z.string().optional().describe("Date de début de période (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin de période (YYYY-MM-DD)"),
-    period: z
-      .string()
+    contactId: EntityIdSchema.optional().describe("Filtrer par ID contact (référence keywords CCON<id>)"),
+    orderId: EntityIdSchema.optional().describe("Filtrer par ID bon de commande (référence keywords BDC<id>)"),
+    states: intArray(
+      "IDs d'états de facture — `boond://dictionary/states/invoices` (ex. impayées = tous les états sauf « payée »)."
+    ),
+    projectTypes: projectTypesFilterField,
+    paymentMethods: paymentMethodsField,
+    companies: companiesFilterField,
+    closed: z
+      .boolean()
       .optional()
-      .describe("Type de période (created, updated, expectedPayment, performedPayment, period)"),
-    ...paginationShape,
+      .describe("true = factures / avoirs clôturés uniquement, false = non clôturés uniquement."),
+    creditNote: z.boolean().optional().describe("true = avoirs uniquement, false = factures uniquement."),
+    period: z
+      .enum(["created", "updated", "expectedPayment", "performedPayment", "period"])
+      .optional()
+      .describe(
+        "Champ de date borné par `startDate` / `endDate` : created, updated, expectedPayment (échéance), performedPayment (règlement), period (période facturée, défaut)."
+      ),
+    periodDynamic: periodDynamicField,
+    startDate: startDateField,
+    endDate: endDateField,
+    flags: flagsField,
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -1174,25 +1265,67 @@ export const OrderUpdateSchema = z
   })
   .strict();
 
+// Source: resources/orders/search.raml (filters verified live, issue #248).
 export const OrderSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
     projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
-    ...paginationShape,
+    contactId: EntityIdSchema.optional().describe("Filtrer par ID contact (référence keywords CCON<id>)"),
+    states: intArray("IDs d'états de bon de commande — `boond://dictionary/states/orders`."),
+    projectTypes: projectTypesFilterField,
+    paymentMethods: paymentMethodsField,
+    companies: companiesFilterField,
+    customerAgreement: z.boolean().optional().describe("true = accord client reçu uniquement, false = sans accord."),
+    exceededOrderedTurnover: z
+      .boolean()
+      .optional()
+      .describe("true = commandes dont le facturé dépasse le montant commandé."),
+    period: z
+      .enum(["created", "updated", "period"])
+      .optional()
+      .describe("Champ de date borné par `startDate` / `endDate` : created, updated, period (période couverte)."),
+    periodDynamic: periodDynamicField,
+    startDate: startDateField,
+    endDate: endDateField,
+    flags: flagsField,
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 
 // ---- Delivery schemas (Livraisons / CRA) ----
 
+// Source: resources/deliveriesGroupments/search.raml — the list route of the
+// deliveries domain (filters verified live, issue #248).
 export const DeliverySearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
     projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
-    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    ...paginationShape,
+    resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
+    opportunityId: EntityIdSchema.optional().describe("Filtrer par ID opportunité (référence keywords AO<id>)"),
+    projectTypes: projectTypesFilterField,
+    projectStates: intArray("IDs d'états de projet — `boond://dictionary/states/projects`."),
+    deliveryStates: intArray("IDs d'états de prestation — `boond://dictionary/states/deliveries`."),
+    expertiseAreas: strArray("Domaines d'expertise — `boond://dictionary/expertiseAreas`."),
+    transferType: z
+      .enum(["master", "slave", "none", "notSlave", "notMaster", "missing"])
+      .optional()
+      .describe("Filtre sur les transferts de prestation (master / slave / none / notSlave / notMaster / missing)."),
+    period: z
+      .enum(["started", "updated", "stopped", "projectRunning", "running", "hasAdditionalDataOrPurchase"])
+      .optional()
+      .describe(
+        "Champ de date borné par `startDate` / `endDate` : started, stopped, updated, running (prestations en cours sur la fenêtre), projectRunning (projet en cours)."
+      ),
+    periodDynamic: periodDynamicField,
+    startDate: startDateField,
+    endDate: endDateField,
+    companies: companiesFilterField,
+    flags: flagsField,
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -1255,7 +1388,10 @@ export const AbsenceSearchSchema = z
       .string()
       .regex(/^\d{4}-\d{2}$/, "Format attendu : YYYY-MM")
       .describe("Mois de fin de période (YYYY-MM) — obligatoire pour l'API"),
-    ...paginationShape,
+    resourceTypes: resourceTypesField,
+    validationStates: validationStatesField,
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 
@@ -1495,6 +1631,7 @@ export const PositioningSearchSchema = z
 
 // ---- Payment schemas ----
 
+// Source: resources/payments/search.raml (filters verified live, issue #248).
 export const PaymentSearchSchema = z
   .object({
     keywords: z.string().optional().describe("Mots-clés de recherche"),
@@ -1502,9 +1639,30 @@ export const PaymentSearchSchema = z
     companyId: EntityIdSchema.optional().describe("Filtrer par ID société (référence keywords CSOC<id>)"),
     projectId: EntityIdSchema.optional().describe("Filtrer par ID projet (référence keywords PRJ<id>)"),
     resourceId: EntityIdSchema.optional().describe("Filtrer par ID ressource (référence keywords COMP<id>)"),
-    startDate: z.string().optional().describe("Date de début (YYYY-MM-DD)"),
-    endDate: z.string().optional().describe("Date de fin (YYYY-MM-DD)"),
-    ...paginationShape,
+    contactId: EntityIdSchema.optional().describe("Filtrer par ID contact (référence keywords CCON<id>)"),
+    paymentStates: intArray("IDs d'états de paiement — `boond://dictionary/states/payments`."),
+    paymentMethods: paymentMethodsField,
+    purchaseTypes: intArray("IDs de types d'achat — `boond://dictionary/typeOf/purchases`."),
+    subscriptionTypes: intArray(
+      "IDs de types d'abonnement (`setting.typeOf.subscription` via `boond_application_dictionary`)."
+    ),
+    period: z
+      .enum(["created", "updated", "createdPurchase", "subscription", "expected", "performed", "billing"])
+      .optional()
+      .describe(
+        "Champ de date borné par `startDate` / `endDate` : expected (échéance), performed (règlement effectif), created, updated, createdPurchase, subscription, billing."
+      ),
+    periodDynamic: periodDynamicField,
+    startDate: startDateField,
+    endDate: endDateField,
+    excludeProviderInvoice: z
+      .boolean()
+      .optional()
+      .describe("true = exclure les paiements adossés à une facture fournisseur."),
+    deliveryPurchases: z.boolean().optional().describe("true = paiements des achats liés à une prestation uniquement."),
+    flags: flagsField,
+    ...perimeterShape,
+    ...sortedPaginationShape,
   })
   .strict();
 

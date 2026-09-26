@@ -743,6 +743,27 @@ Common gotchas:
   is the one list that is *not* a collection search: `GET /advantages` does
   not exist (WAF 403 page), the route is `GET /resources/{id}/advantages`, so
   `resourceId` is required there
+- **Finance / activity searches take the same `perimeter*` filters** and
+  their own state vocabulary (issue #248, every filter verified live on
+  2026-09-26 by comparing `meta.totals.rows` with and without it):
+  - invoices: `states` (`boond://dictionary/states/invoices`), `closed`,
+    `creditNote`, `period: created|updated|expectedPayment|performedPayment|period`
+  - orders: `states`, `customerAgreement`, `exceededOrderedTurnover`,
+    `period: created|updated|period`
+  - actions: `actionTypes` (`boond://dictionary/actions/<entity>` — declared
+    per attached entity), `period: started|created|updated`
+  - timesheets / absences: `validationStates` — **strings**
+    `waitingForValidation|validated|rejected`, not ids (#250) —,
+    `resourceTypes`, `closed` (timesheets); `startMonth` + `endMonth` required
+  - deliveries (`/deliveries-groupments`): `deliveryStates`, `projectStates`,
+    `projectTypes`, `transferType`, `period: started|stopped|updated|running|projectRunning`
+  - payments: `paymentStates`, `paymentMethods`, `purchaseTypes`,
+    `period: expected|performed|created|updated|createdPurchase|subscription|billing`
+  - all seven: `periodDynamic` (`today`, `thisWeek`, `lastMonth`, `untilToday`…)
+    instead of `startDate` / `endDate`, `flags`, `sort` / `order`.
+  `ENDPOINT_FILTER_ALIASES` covers them too, so `states` on `/payments`
+  answers "use `paymentStates`" and `states` on `/times-reports` answers
+  "use `validationStates` (strings)".
 - **Period vocabulary differs per endpoint**: e.g. `running` (projects),
   `closingDate` (opportunities), `available`/`working` (resources). See
   the per-endpoint description in `src/schemas/index.ts`.

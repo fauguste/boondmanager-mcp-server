@@ -43,7 +43,7 @@ export function registerActionTools(server: McpServer): void {
     "boond_actions_search",
     {
       title: "Rechercher des actions",
-      description: `Recherche des actions (appels, emails, RDV, notes) dans BoondManager avec filtres optionnels par candidat, ressource, contact ou société.
+      description: `Recherche des actions (appels, emails, RDV, notes) dans BoondManager par entité rattachée (candidat, ressource, contact, société, opportunité, projet), type (\`actionTypes\`), période (\`period\` + dates ou \`periodDynamic\`) et périmètre (\`perimeter*\`).
 
 Les filtres \`candidateId\` / \`resourceId\` / \`contactId\` / \`companyId\` sont convertis en références \`keywords\` (CAND<id> / COMP<id> / CCON<id> / CSOC<id>) : l'API n'a pas de paramètre dédié.
 

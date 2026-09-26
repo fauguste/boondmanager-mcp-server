@@ -60,6 +60,29 @@ describe("resolveFilterAlias", () => {
   });
 });
 
+describe("finance / activity endpoints (issue #248)", () => {
+  it("resolves `states` to the endpoint's own name — ids or workflow strings", () => {
+    expect(resolveFilterAlias("states", "payments")?.correct).toBe("paymentStates");
+    expect(resolveFilterAlias("states", "deliveries")?.correct).toBe("deliveryStates");
+    expect(resolveFilterAlias("states", "timesheets")?.correct).toBe("validationStates");
+    expect(resolveFilterAlias("states", "absences")?.hint).toContain("waitingForValidation");
+    expect(resolveFilterAlias("invoiceStates", "invoices")?.correct).toBe("states");
+    expect(resolveFilterAlias("orderStates", "orders")?.correct).toBe("states");
+  });
+
+  it("resolves typeOf on /actions to actionTypes with the per-entity dictionary", () => {
+    const alias = resolveFilterAlias("typeOf", "actions");
+    expect(alias?.correct).toBe("actionTypes");
+    expect(alias?.dictionary).toContain("boond://dictionary/actions/");
+  });
+
+  it("says when a filter does not exist on the endpoint (invoice type, payment invoiceId)", () => {
+    expect(resolveFilterAlias("typeOf", "invoices")?.correct).toBeUndefined();
+    expect(resolveFilterAlias("typeOf", "invoices")?.hint).toContain("creditNote");
+    expect(resolveFilterAlias("invoiceId", "payments")?.correct).toBeUndefined();
+  });
+});
+
 describe("alias table hygiene", () => {
   it("keys are already normalised (lowercase, no separators) so lookups can't miss", () => {
     const tables = [GLOBAL_FILTER_ALIASES, ...Object.values(ENDPOINT_FILTER_ALIASES)];

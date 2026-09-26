@@ -17,7 +17,7 @@ export function registerAbsenceTools(server: McpServer): void {
     "boond_absences_search",
     {
       title: "Rechercher des demandes d'absence",
-      description: `Recherche des demandes d'absence dans BoondManager, par période (\`startMonth\` / \`endMonth\` en YYYY-MM) et par ressource.
+      description: `Recherche des demandes d'absence dans BoondManager, par période (\`startMonth\` / \`endMonth\` en YYYY-MM, requis), ressource, état de validation (\`validationStates\`) et périmètre (\`perimeter*\`).
 
 \`resourceId\` est converti en référence \`keywords\` COMP<id> : l'API n'a pas de paramètre dédié.
 
