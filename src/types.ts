@@ -36,8 +36,10 @@ export interface BoondConfig {
 }
 
 export interface SearchParams {
-  keywords?: string;
-  page?: number;
-  pageSize?: number;
+  // `| undefined` on purpose: the Zod-inferred search params carry it on every
+  // optional key, and exactOptionalPropertyTypes rejects passing them otherwise.
+  keywords?: string | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
   [key: string]: unknown;
 }

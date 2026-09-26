@@ -73,7 +73,7 @@ interface PlannedTime {
  * planning, which are the lines a filled CRA usually repeats.
  */
 export function formatTimesheetDefaults(response: JsonApiResponse): string {
-  const entity = (Array.isArray(response.data) ? response.data[0] : response.data) as JsonApiResource | undefined;
+  const entity = Array.isArray(response.data) ? response.data[0] : response.data;
   if (!entity) return "Aucune donnée par défaut retournée pour cette ressource / ce mois.";
   const attrs = entity.attributes ?? {};
   const included = response.included ?? [];

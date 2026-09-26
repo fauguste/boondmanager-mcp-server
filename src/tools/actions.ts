@@ -124,7 +124,7 @@ Returns: L'action créée avec son ID.`),
         { id: opportunityId, type: "opportunity" },
         { id: projectId, type: "project" },
       ];
-      const dependsOn = dependsOnCandidates.find((c) => c.id);
+      const dependsOn = dependsOnCandidates.flatMap((c) => (c.id ? [{ id: c.id, type: c.type }] : [])).at(0);
       if (!dependsOn) {
         return {
           isError: true,
@@ -159,12 +159,11 @@ Returns: L'action créée avec son ID.`),
         }
         attrs.typeOf = resolved;
       }
-      const body = buildJsonApiBody("action", attrs);
-      const relationships: Record<string, unknown> = {
-        dependsOn: { data: { id: dependsOn.id, type: dependsOn.type } },
+      const relationships: Record<string, { id: string; type: string } | undefined> = {
+        dependsOn: { id: dependsOn.id, type: dependsOn.type },
       };
       if (companyId && dependsOn.type === "contact") {
-        relationships.company = { data: { id: companyId, type: "company" } };
+        relationships.company = { id: companyId, type: "company" };
       }
       // Some action types (those bound to positionings in the Boond setup, e.g.
       // "RQ"-style interviews) are rejected with a 422 "1002 - Wrong or missing
@@ -172,9 +171,9 @@ Returns: L'action créée avec son ID.`),
       // relationship is sent. The official bodyPost.json schema does not
       // document it, but the API enforces it for those types.
       if (positioningId) {
-        relationships.positioning = { data: { id: positioningId, type: "positioning" } };
+        relationships.positioning = { id: positioningId, type: "positioning" };
       }
-      (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
+      const body = buildJsonApiBody("action", attrs, undefined, relationships);
       const response = await apiRequest("/actions", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {

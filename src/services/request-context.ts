@@ -49,7 +49,9 @@ export function currentRequestContext(): RequestContext | undefined {
 
 /** Run `fn` with `signal` as the current request's cancellation signal; the rest of the context is kept. */
 export function runWithRequestSignal<T>(signal: AbortSignal | undefined, fn: () => T): T {
-  return storage.run({ ...(storage.getStore() ?? {}), signal }, fn);
+  // Drop the enclosing signal rather than storing `undefined` under the key.
+  const { signal: _enclosing, ...rest } = storage.getStore() ?? {};
+  return storage.run(signal ? { ...rest, signal } : rest, fn);
 }
 
 /** Run `fn` with no cancellation signal, for work whose result other requests share. Correlation is kept. */
@@ -84,8 +86,9 @@ const TRACEPARENT_RE = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/;
 export function parseTraceparent(value: unknown): { header: string; traceId: string } | undefined {
   if (typeof value !== "string") return undefined;
   const match = TRACEPARENT_RE.exec(value.trim());
-  if (!match || /^0+$/.test(match[1])) return undefined;
-  return { header: match[0], traceId: match[1] };
+  const traceId = match?.[1];
+  if (!match || !traceId || /^0+$/.test(traceId)) return undefined;
+  return { header: match[0], traceId };
 }
 
 /** The `traceparent` the client put in the request's `_meta` (SEP-414), if valid. */

@@ -97,13 +97,15 @@ Returns: Liste des demandes d'absence correspondantes.`,
           workUnitType: { reference: workUnitTypeReference ?? 2 },
         },
       ];
-      const body = buildJsonApiBody("absencesreport", {
-        ...(note ? { informationComments: note } : {}),
-        absencesPeriods: periods,
-      });
-      (body as Record<string, Record<string, unknown>>).data.relationships = {
-        resource: { data: { id: resourceId, type: "resource" } },
-      };
+      const body = buildJsonApiBody(
+        "absencesreport",
+        {
+          ...(note ? { informationComments: note } : {}),
+          absencesPeriods: periods,
+        },
+        undefined,
+        { resource: { id: resourceId, type: "resource" } }
+      );
       const response = await apiRequest("/absences-reports", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {

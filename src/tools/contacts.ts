@@ -90,13 +90,9 @@ export function registerContactTools(server: McpServer): void {
 
   registerCreateTool(server, OPTS, ContactCreateSchema, (params) => {
     const { companyId, ...attrs } = params;
-    const body = buildJsonApiBody("contact", attrs);
-    if (companyId) {
-      (body as Record<string, Record<string, unknown>>).data.relationships = {
-        company: { data: { id: companyId as string, type: "company" } },
-      };
-    }
-    return body;
+    return buildJsonApiBody("contact", attrs, undefined, {
+      company: typeof companyId === "string" ? { id: companyId, type: "company" } : undefined,
+    });
   });
 
   // Updates go through PUT /contacts/{id}/information — the base resource

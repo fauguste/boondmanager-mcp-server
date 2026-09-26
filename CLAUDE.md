@@ -1640,10 +1640,18 @@ Two traps this configuration must keep clear of, both of which produce the
   ~700 of them for no defect. Don't add a rule to that override to silence a
   finding in `src/`; fix the site.
 - `tsconfig.json` carries `noImplicitOverride`, `noImplicitReturns`,
-  `noFallthroughCasesInSwitch` and `verbatimModuleSyntax` (zero cost when
-  enabled). `noUncheckedIndexedAccess` (25 errors) and
-  `exactOptionalPropertyTypes` (13) are tracked in
-  [issue #289](https://github.com/silamir/boondmanager-mcp-server/issues/289).
+  `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` (zero cost when
+  enabled, #245) and, since issue #289, `noUncheckedIndexedAccess` and
+  `exactOptionalPropertyTypes`. Conventions they impose: an indexed access
+  (`arr[i]`, `record[key]`, a regex capture group) is narrowed with a guard or
+  a `?? default`, never a `!`; an optional property is *omitted* rather than
+  set to `undefined` (`...(x !== undefined ? { x } : {})`, or
+  `optional(key, value)` in `transports/http.ts`); the Zod-inferred search
+  params carry `| undefined` on every optional key, so `SearchParams` declares
+  it too. One deliberate cast remains: `asTransport()` in `transports/http.ts`,
+  because SDK 1.30 types `Transport.onclose` and the
+  `StreamableHTTPServerTransport` accessor differently — delete it when the SDK
+  aligns them.
 - `@typescript-eslint/no-unused-vars` with `argsIgnorePattern: "^_"`
 - `@typescript-eslint/no-explicit-any` as warning
 - No semicolons preference not enforced (current code uses semicolons)

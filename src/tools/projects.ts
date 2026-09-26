@@ -100,15 +100,11 @@ export function registerProjectTools(server: McpServer): void {
   registerCreateTool(server, OPTS, ProjectCreateSchema, (params) => {
     const { companyId, contactId, opportunityId, name, ...attrs } = params;
     const apiAttrs = { ...attrs, ...(name ? { title: name } : {}) };
-    const body = buildJsonApiBody("project", apiAttrs);
-    const relationships: Record<string, unknown> = {};
-    if (companyId) relationships.company = { data: { id: companyId, type: "company" } };
-    if (contactId) relationships.contact = { data: { id: contactId, type: "contact" } };
-    if (opportunityId) relationships.opportunity = { data: { id: opportunityId, type: "opportunity" } };
-    if (Object.keys(relationships).length > 0) {
-      (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
-    }
-    return body;
+    return buildJsonApiBody("project", apiAttrs, undefined, {
+      company: typeof companyId === "string" ? { id: companyId, type: "company" } : undefined,
+      contact: typeof contactId === "string" ? { id: contactId, type: "contact" } : undefined,
+      opportunity: typeof opportunityId === "string" ? { id: opportunityId, type: "opportunity" } : undefined,
+    });
   });
 
   // Updates go through PUT /projects/{id}/information — the base resource

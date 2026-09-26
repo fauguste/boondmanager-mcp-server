@@ -282,6 +282,7 @@ export async function readEntityAggregate(
   const errors: Record<string, string> = {};
   template.tabs.forEach((tab, i) => {
     const result = tabResults[i];
+    if (!result) return;
     if (result.status === "fulfilled") aggregate.sections[tab] = projectTab(result.value);
     else errors[tab] = errorMessage(result.reason);
   });

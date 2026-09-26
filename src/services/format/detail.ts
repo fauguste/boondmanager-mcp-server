@@ -24,7 +24,7 @@ export function projectEntity(
     id: entity.id,
     type: entity.type,
     attributes: entity.attributes,
-    relationships: entity.relationships,
+    ...(entity.relationships !== undefined ? { relationships: entity.relationships } : {}),
   };
 }
 

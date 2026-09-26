@@ -15,18 +15,24 @@ function parseSemverCore(v: string): [number, number, number] | null {
   const core = v.split(/[-+]/)[0] ?? "";
   const parts = core.split(".");
   if (parts.length !== 3) return null;
-  const nums = parts.map((p) => Number(p));
-  if (nums.some((n) => !Number.isInteger(n) || n < 0)) return null;
-  return [nums[0], nums[1], nums[2]];
+  const [major, minor, patch] = parts.map((p) => Number(p));
+  if (major === undefined || minor === undefined || patch === undefined) return null;
+  if ([major, minor, patch].some((n) => !Number.isInteger(n) || n < 0)) return null;
+  return [major, minor, patch];
 }
 
 function isNewer(latest: string, current: string): boolean {
   const a = parseSemverCore(latest);
   const b = parseSemverCore(current);
   if (!a || !b) return false;
-  for (let i = 0; i < 3; i++) {
-    if (a[i] > b[i]) return true;
-    if (a[i] < b[i]) return false;
+  const pairs: [number, number][] = [
+    [a[0], b[0]],
+    [a[1], b[1]],
+    [a[2], b[2]],
+  ];
+  for (const [x, y] of pairs) {
+    if (x > y) return true;
+    if (x < y) return false;
   }
   return false;
 }

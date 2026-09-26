@@ -19,7 +19,10 @@ export default tseslint.config(
       },
     },
     rules: {
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      // `ignoreRestSiblings`: `const { signal: _omitted, ...rest } = store` is the
+      // idiom for dropping a key without writing `undefined` under it
+      // (exactOptionalPropertyTypes, issue #289).
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", ignoreRestSiblings: true }],
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",

@@ -92,15 +92,12 @@ Returns: Liste des positionnements correspondants.`,
     },
     async (params) => {
       const { candidateId, resourceId, projectId, opportunityId, ...attrs } = params;
-      const body = buildJsonApiBody("positioning", attrs);
-      const relationships: Record<string, unknown> = {};
-      if (candidateId) relationships.dependsOn = { data: { id: candidateId, type: "candidate" } };
-      if (resourceId) relationships.dependsOn = { data: { id: resourceId, type: "resource" } };
-      if (projectId) relationships.project = { data: { id: projectId, type: "project" } };
-      if (opportunityId) relationships.opportunity = { data: { id: opportunityId, type: "opportunity" } };
-      if (Object.keys(relationships).length > 0) {
-        (body as Record<string, Record<string, unknown>>).data.relationships = relationships;
-      }
+      const relationships: Record<string, { id: string; type: string } | undefined> = {};
+      if (candidateId) relationships.dependsOn = { id: candidateId, type: "candidate" };
+      if (resourceId) relationships.dependsOn = { id: resourceId, type: "resource" };
+      if (projectId) relationships.project = { id: projectId, type: "project" };
+      if (opportunityId) relationships.opportunity = { id: opportunityId, type: "opportunity" };
+      const body = buildJsonApiBody("positioning", attrs, undefined, relationships);
       const response = await apiRequest("/positionings", "POST", body);
       const entity = Array.isArray(response.data) ? response.data[0] : response.data;
       return {
