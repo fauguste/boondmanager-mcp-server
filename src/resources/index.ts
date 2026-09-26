@@ -154,6 +154,170 @@ const DICTIONARIES: DictionaryEntry[] = [
     title: "Mobilités",
     description: "Zones de mobilité géographique.",
   },
+  // states/* on the finance / delivery entities (issue #261) — paths verified
+  // against the live `/application/dictionary` on 2026-09-26. Deliberately
+  // absent because the API publishes no such table: `states/contracts` (a
+  // contract has no state), `states/validations` (the validation state of a
+  // CRA / expense / absence report is a workflow *string* —
+  // `waitingForValidation`, `validated`, `refused` —, see #250) and the absence
+  // types (work-unit types, only on `/absences-reports/default`, #257).
+  {
+    slug: "states/deliveries",
+    path: "setting.state.delivery",
+    title: "États prestations",
+    description: "Libellés des états de prestation (mission / delivery).",
+  },
+  {
+    slug: "states/payments",
+    path: "setting.state.payment",
+    title: "États paiements",
+    description: "Libellés des états de paiement (confirmé, en attente, rejeté...).",
+  },
+  {
+    slug: "states/purchases",
+    path: "setting.state.purchase",
+    title: "États achats",
+    description: "Libellés des états d'achat / sous-traitance.",
+  },
+  {
+    slug: "states/provider-invoices",
+    path: "setting.state.providerinvoice",
+    title: "États factures fournisseurs",
+    description: "Libellés des états de facture fournisseur (brouillon, à valider, validée, payée...).",
+  },
+  {
+    slug: "states/products",
+    path: "setting.state.product",
+    title: "États produits",
+    description: "Libellés des états de produit.",
+  },
+  {
+    slug: "states/quotations",
+    path: "setting.state.quotation",
+    title: "États devis",
+    description: "Libellés des états de devis (création, transmis au client, accepté...).",
+  },
+  {
+    slug: "states/probations",
+    path: "setting.state.probation",
+    title: "États périodes d'essai",
+    description: "Libellés des états de période d'essai d'un contrat (en cours, validée, rompue...).",
+  },
+  // typeOf/* — `typeOf/candidates`, `typeOf/opportunities` and
+  // `typeOf/companies` do not exist in the dictionary (verified 2026-09-26).
+  {
+    slug: "typeOf/contracts",
+    path: "setting.typeOf.contract",
+    title: "Types contrats",
+    description: "Types de contrat de travail (CDI, CDD, freelance, stage...).",
+  },
+  {
+    slug: "typeOf/deliveries",
+    path: "setting.typeOf.delivery",
+    title: "Types prestations",
+    description: "Types de prestation (nouvelle, renouvellement...).",
+  },
+  {
+    slug: "typeOf/purchases",
+    path: "setting.typeOf.purchase",
+    title: "Types achats",
+    description: "Types d'achat / sous-traitance.",
+  },
+  {
+    slug: "typeOf/activities",
+    path: "setting.typeOf.activity",
+    title: "Types d'activité",
+    description: "Types d'activité d'une ligne de CRA ou de frais (production, absence, interne...) — `activityType`.",
+  },
+  // actions/* — the action types are declared PER attached entity
+  // (`setting.action.<entity>`); `boond_actions_create` needs the id that
+  // matches the entity the action is attached to.
+  {
+    slug: "actions/candidates",
+    path: "setting.action.candidate",
+    title: "Types d'action — candidats",
+    description:
+      "Types d'action rattachables à un candidat (note, rappel, entretien...) : `typeOf` de `boond_actions_create` avec `candidateId`.",
+  },
+  {
+    slug: "actions/contacts",
+    path: "setting.action.contact",
+    title: "Types d'action — contacts",
+    description: "Types d'action rattachables à un contact : `typeOf` de `boond_actions_create` avec `contactId`.",
+  },
+  {
+    slug: "actions/resources",
+    path: "setting.action.resource",
+    title: "Types d'action — ressources",
+    description: "Types d'action rattachables à une ressource : `typeOf` de `boond_actions_create` avec `resourceId`.",
+  },
+  {
+    slug: "actions/opportunities",
+    path: "setting.action.opportunity",
+    title: "Types d'action — opportunités",
+    description:
+      "Types d'action rattachables à une opportunité : `typeOf` de `boond_actions_create` avec `opportunityId`.",
+  },
+  {
+    slug: "actions/projects",
+    path: "setting.action.project",
+    title: "Types d'action — projets",
+    description: "Types d'action rattachables à un projet : `typeOf` de `boond_actions_create` avec `projectId`.",
+  },
+  {
+    slug: "actions/invoices",
+    path: "setting.action.invoice",
+    title: "Types d'action — factures",
+    description:
+      "Types d'action rattachables à une facture (envoi, relance, note) — lus dans `boond_invoices_actions`.",
+  },
+  {
+    slug: "actions/orders",
+    path: "setting.action.order",
+    title: "Types d'action — bons de commande",
+    description: "Types d'action rattachables à un bon de commande — lus dans `boond_orders_actions`.",
+  },
+  // Origins / sources
+  {
+    slug: "sources",
+    path: "setting.source",
+    title: "Sources candidats",
+    description: "Sources de candidature (job boards, cooptation, cabinet...) — `source` d'un candidat.",
+  },
+  {
+    slug: "origins",
+    path: "setting.origin",
+    title: "Origines opportunités",
+    description:
+      "Origines d'une opportunité commerciale (prospection, apporteur d'affaires, appel d'offres...) — `origin`.",
+  },
+  // Finance settings used by invoice / order / purchase writes
+  {
+    slug: "paymentMethods",
+    path: "setting.paymentMethod",
+    title: "Modes de paiement",
+    description:
+      "Modes de paiement (virement, prélèvement, chèque...) — `paymentMethod` des factures, commandes et achats.",
+  },
+  {
+    slug: "paymentTerms",
+    path: "setting.paymentTerm",
+    title: "Conditions de paiement",
+    description:
+      "Conditions de paiement (`x` jours, fin de mois `y`) — `paymentTerm` des factures, commandes et achats.",
+  },
+  {
+    slug: "taxRates",
+    path: "setting.taxRate",
+    title: "Taux de TVA",
+    description: "Taux de TVA configurés (`rate` en %, `code`) — `taxRate` des factures, achats et lignes de frais.",
+  },
+  {
+    slug: "contractEndReasons",
+    path: "setting.contractEndReason",
+    title: "Motifs de fin de contrat",
+    description: "Motifs de fin de contrat (démission, rupture conventionnelle...) — `endReason` d'un contrat.",
+  },
   // Global lookups
   { slug: "countries", path: "country", title: "Pays", description: "Liste des pays (codes ISO + libellés)." },
   { slug: "currencies", path: "setting.currency", title: "Devises", description: "Liste des devises supportées." },
@@ -169,6 +333,8 @@ const DICTIONARIES: DictionaryEntry[] = [
 const DICTIONARY_URI_PREFIX = "boond://dictionary/";
 /** URI of the cached identity resource. */
 const CURRENT_USER_URI = "boond://application/current-user";
+/** URI of the derived rights / perimeter view of the same payload (issue #261). */
+const CURRENT_USER_RIGHTS_URI = "boond://application/current-user/rights";
 /** URI of the static dictionary-overrides resource (no API call behind it). */
 const OVERRIDES_URI = "boond://dictionary/overrides";
 
@@ -185,7 +351,86 @@ export const REGISTERED_RESOURCES = [
   })),
   { name: "dictionary/overrides", uri: OVERRIDES_URI, title: "Libellés personnalisés (overrides)" },
   { name: "application/current-user", uri: CURRENT_USER_URI, title: "Utilisateur courant" },
+  {
+    name: "application/current-user/rights",
+    uri: CURRENT_USER_RIGHTS_URI,
+    title: "Droits et périmètre de l'utilisateur",
+  },
 ];
+
+interface Included {
+  id?: string;
+  type?: string;
+  attributes?: Record<string, unknown>;
+}
+
+/**
+ * `advancedRights.<entity>` in `/application/current-user` is a deep object
+ * (field-level write access, group-level read access, search perimeter). This
+ * keeps what a caller needs before writing or scoping a search: whether the
+ * entity is enabled, whether it may be created / deleted, and the perimeter
+ * flags that are *on* (plus explicit id lists). Everything else is dropped —
+ * the raw payload stays on `boond://application/current-user`.
+ */
+export function summariseRights(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, unknown> = {};
+  for (const [entity, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const v = value as {
+      isEnabled?: unknown;
+      entity?: { authorizations?: Record<string, unknown> };
+      search?: { perimeter?: Record<string, unknown> };
+    };
+    const summary: Record<string, unknown> = {};
+    if (typeof v.isEnabled === "boolean") summary.isEnabled = v.isEnabled;
+    const auth = v.entity?.authorizations;
+    if (auth && typeof auth === "object") {
+      for (const [key, flag] of Object.entries(auth)) if (typeof flag === "boolean") summary[key] = flag;
+    }
+    const perimeter = v.search?.perimeter;
+    if (perimeter && typeof perimeter === "object") {
+      const active: Record<string, unknown> = {};
+      for (const [key, flag] of Object.entries(perimeter)) {
+        if (flag === true) active[key] = true;
+        else if (Array.isArray(flag) && flag.length > 0) active[key] = flag;
+      }
+      if (Object.keys(active).length > 0) summary.perimeter = active;
+    }
+    if (Object.keys(summary).length > 0) out[entity] = summary;
+  }
+  return out;
+}
+
+/** The body of `boond://application/current-user/rights`, derived from the raw current-user payload. */
+export function buildCurrentUserRights(response: { data?: unknown; included?: unknown }): Record<string, unknown> {
+  const data = (Array.isArray(response.data) ? response.data[0] : response.data) as Included | undefined;
+  const attributes = data?.attributes ?? {};
+  const included = (Array.isArray(response.included) ? response.included : []) as Included[];
+  const named = (type: string) =>
+    included
+      .filter((item) => item.type === type)
+      .map((item) => ({ id: item.id, name: item.attributes?.name ?? item.attributes?.title ?? null }));
+  const apps = included
+    .filter((item) => item.type === "app")
+    .map((item) => item.attributes?.name)
+    .filter((name): name is string => typeof name === "string");
+  return {
+    id: data?.id,
+    login: attributes.login,
+    level: attributes.level,
+    isOwner: attributes.isOwner,
+    narrowPerimeter: attributes.narrowPerimeter,
+    language: attributes.language,
+    timezone: attributes.timezone,
+    customer: named("customer")[0] ?? null,
+    agencies: named("agency"),
+    poles: named("pole"),
+    businessUnits: named("businessunit"),
+    apps,
+    rights: summariseRights(attributes.advancedRights),
+  };
+}
 
 /**
  * Autocomplete the `{id}` of an entity template through the domain's own search
@@ -359,6 +604,35 @@ export function registerAllResources(server: McpServer, policy?: AccessPolicy): 
             uri: CURRENT_USER_URI,
             mimeType: "application/json",
             text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Derived view of the same payload (issue #261): what the caller may do and
+  // see, without the ~100 KB of field-level detail. Prompts used to rebuild
+  // "my agencies / my N-1" from current-user + a resources search.
+  server.registerResource(
+    "application/current-user/rights",
+    CURRENT_USER_RIGHTS_URI,
+    {
+      title: "Droits et périmètre de l'utilisateur",
+      description:
+        "Vue condensée des droits de l'utilisateur authentifié : niveau, agences / pôles / BU, apps installées, et par entité (resources, candidates, invoices...) " +
+        "les autorisations creation / deletion et les flags de périmètre de recherche actifs (allAgencies, myManagers, managers[]...). " +
+        "À lire avant une écriture ou un filtre `perimeter*` ; le payload brut reste sur boond://application/current-user.",
+      mimeType: "application/json",
+      icons: identityIcons(),
+    },
+    async () => {
+      const response = await apiRequest("/application/current-user");
+      return {
+        contents: [
+          {
+            uri: CURRENT_USER_RIGHTS_URI,
+            mimeType: "application/json",
+            text: JSON.stringify(buildCurrentUserRights(response), null, 2),
           },
         ],
       };

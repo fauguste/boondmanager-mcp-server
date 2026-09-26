@@ -437,7 +437,10 @@ describe("tool/prompt/resource description lengths", () => {
   });
 
   it("registers a few resources (sanity check)", () => {
+    // 47 since #261 (24 dictionaries + current-user/rights). Resources are
+    // listed on demand, not on every turn, so the cap here is loose — it
+    // guards against a runaway generator, not against a curated table.
     expect(resources.length).toBeGreaterThanOrEqual(15);
-    expect(resources.length).toBeLessThan(30);
+    expect(resources.length).toBeLessThan(80);
   });
 });
